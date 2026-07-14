@@ -121,6 +121,13 @@
             "iconUrl": "https://static.cdnsolutions.media/xh-desktop/images/favicon/favicon-v2-256x256.ico"
         },
         {
+            "id": "njav",
+            "name": "NJAV",
+            "version": "1.0.0",
+            "scriptUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/njav_plugin.js",
+            "iconUrl": "https://www.njav.com/favicon.ico"
+        },
+        {
             "id": "otruyen",
             "name": "OTruyen",
             "version": "1.0.2",
