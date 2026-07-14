@@ -12,7 +12,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "njav",
         "name": "NJAV",
-        "version": "1.0.5",
+        "version": "1.1.0",
         "baseUrl": "https://www.njav.com",
         "referrer": "https://www.njav.com/",
         "iconUrl": "https://www.njav.com/favicon.ico",
@@ -595,13 +595,21 @@ function parseEmbedResponse(htmlContent, pageUrl) {
         var m3u8Match = htmlContent.match(/m3u8["']?\s*:\s*["'](https?:\/\/[^"']+)["']/);
         if (m3u8Match) {
             var m3u8Url = m3u8Match[1].replace(/\\/g, ''); // Clean escaped slashes if any
+
+            // Bypass HEAD request check in VAAPP by appending dummy .m3u8 query param
+            if (m3u8Url.indexOf("?") !== -1) {
+                m3u8Url += "&ext=.m3u8";
+            } else {
+                m3u8Url += "?ext=.m3u8";
+            }
+
             return JSON.stringify({
                 url: m3u8Url,
                 isEmbed: false,
                 headers: {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "Referer": "https://www.njav.com/",
-                    "Origin": "https://www.njav.com"
+                    "Referer": "https://upload18.org/",
+                    "Origin": "https://upload18.org"
                 },
                 subtitles: []
             });
@@ -611,13 +619,19 @@ function parseEmbedResponse(htmlContent, pageUrl) {
     // Fallback: try finding any m3u8 in the htmlContent
     var genericM3u8 = htmlContent.match(/(https?:\/\/[^\s"'<>]+?\.m3u8[^\s"'<>]*)/i);
     if (genericM3u8) {
+        var m3u8Url = genericM3u8[1].replace(/\\/g, '');
+        if (m3u8Url.indexOf("?") !== -1) {
+            m3u8Url += "&ext=.m3u8";
+        } else {
+            m3u8Url += "?ext=.m3u8";
+        }
         return JSON.stringify({
-            url: genericM3u8[1].replace(/\\/g, ''),
+            url: m3u8Url,
             isEmbed: false,
             headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Referer": "https://www.njav.com/",
-                "Origin": "https://www.njav.com"
+                "Referer": "https://upload18.org/",
+                "Origin": "https://upload18.org"
             }
         });
     }
