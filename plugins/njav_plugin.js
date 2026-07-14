@@ -20,7 +20,7 @@ function getManifest() {
 
 function getHomeSections() {
     return JSON.stringify([
-        { slug: 'en/new', title: 'Mới Cập Nhật', type: 'Horizontal', path: '' },
+        { slug: 'en/new-release', title: 'Mới Cập Nhật', type: 'Horizontal', path: '' },
         { slug: 'en/trending', title: 'Xem Nhiều / Xu Hướng', type: 'Horizontal', path: '' },
         { slug: 'en/censored', title: 'Phim Có Che (Censored)', type: 'Horizontal', path: '' },
         { slug: 'en/uncensored', title: 'Không Che (Uncensored)', type: 'Horizontal', path: '' },
@@ -30,7 +30,7 @@ function getHomeSections() {
 
 function getPrimaryCategories() {
     return JSON.stringify([
-        { name: 'Mới cập nhật', slug: 'en/new' },
+        { name: 'Mới cập nhật', slug: 'en/new-release' },
         { name: 'Thịnh hành', slug: 'en/trending' },
         { name: 'Có che (Censored)', slug: 'en/censored' },
         { name: 'Không che (Uncensored)', slug: 'en/uncensored' },
@@ -71,7 +71,10 @@ function getUrlList(slug, filtersJson) {
     var page = filters.page || 1;
     var baseUrl = "https://www.njav.com";
     
-    var path = slug || "en/new";
+    var path = slug || "en/new-release";
+    if (path === "en/new" || path === "/en/new") {
+        path = "en/new-release";
+    }
     
     // Ensure path has en/ prefix
     if (path.indexOf("en/") !== 0 && path.indexOf("/en/") !== 0) {
@@ -80,6 +83,11 @@ function getUrlList(slug, filtersJson) {
     }
     
     if (path.indexOf("/") !== 0) path = "/" + path;
+    
+    // Ensure trailing slash (only if there is no query param already in the path)
+    if (path.indexOf("?") === -1 && path.substring(path.length - 1) !== "/") {
+        path += "/";
+    }
     
     var url = baseUrl + path;
     
