@@ -12,7 +12,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "njav",
         "name": "NJAV",
-        "version": "1.1.0",
+        "version": "1.0.5",
         "baseUrl": "https://www.njav.com",
         "referrer": "https://www.njav.com/",
         "iconUrl": "https://www.njav.com/favicon.ico",
