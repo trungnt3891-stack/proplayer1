@@ -12,7 +12,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "njav",
         "name": "NJAV",
-        "version": "1.0.3",
+        "version": "1.1.0",
         "baseUrl": "https://www.njav.com",
         "referrer": "https://www.njav.com/",
         "iconUrl": "https://www.njav.com/favicon.ico",
@@ -195,29 +195,15 @@ var SKIP_SEGMENTS = {
 
 function parseListResponse(html) {
     var movies = [];
-    
-    // DEBUG ITEM TO VIEW ON ANDROID UI
-    movies.push({
-        id: "debug-info",
-        title: "DBG: Len=" + (html ? html.length : 0) + " | HTML=" + (html ? html.substring(0, 400).replace(/</g, '[').replace(/>/g, ']') : "null"),
-        posterUrl: "",
-        backdropUrl: "",
-        description: "Debug info",
-        year: 0,
-        quality: "DEBUG",
-        episode_current: "DBG",
-        lang: "DBG"
-    });
 
     // Tách các card phim bằng cách chia nhỏ HTML
     var splitPatterns = [
+        'class="box-item"',
+        'class="col-6 col-sm-4 col-lg-3"',
         'class="card"',
         'class="thumbnail"',
         'class="box"',
-        'class="video-card"',
-        'class="movie-card"',
-        'class="video-item"',
-        'class="col-6 col-sm-4 col-md-3"'
+        'class="video-card"'
     ];
 
     var parts = [];
@@ -230,9 +216,9 @@ function parseListResponse(html) {
         }
     }
 
-    // Nếu không tách được bằng class, thử tách bằng href="/en/xvideos/ hoặc href="https://www.njav.com/en/xvideos/
+    // Nếu không tách được bằng class, thử tách bằng href có xvideos
     if (parts.length <= 1) {
-        parts = html.split(/href=["'](?:https?:\/\/www\.njav\.com)?\/en\/xvideos\//i);
+        parts = html.split(/href=["'](?:https?:\/\/www\.njav\.com)?\/?(?:en)?\/?xvideos\//i);
     }
 
     var seenSlugs = {};
@@ -240,15 +226,14 @@ function parseListResponse(html) {
     for (var i = 1; i < parts.length; i++) {
         var cardHtml = parts[i];
 
-        // Tìm link video trong cardHtml này
-        var linkMatch = cardHtml.match(/href=["']([^"']*(?:\/en\/xvideos\/|\/xvideos\/)([a-zA-Z0-9\-\_]+))["']/i);
+        // Tìm link video trong cardHtml này (chấp nhận cả /en/xvideos/, /xvideos/, xvideos/)
+        var linkMatch = cardHtml.match(/href=["'](?:https?:\/\/www\.njav\.com)?\/?(?:en)?\/?xvideos\/([a-zA-Z0-9\-\_]+)["']/i);
         
-        // Nếu dùng split bằng href ở trên thì fallback lấy từ phần đầu của cardHtml
         var slug = "";
         if (linkMatch) {
-            slug = linkMatch[2].toLowerCase();
+            slug = linkMatch[1].toLowerCase();
         } else {
-            // Khi split bằng href="/en/xvideos/ thì slug nằm ở ngay đầu chuỗi cardHtml trước dấu nháy tiếp theo
+            // Khi split bằng href thì slug nằm ở ngay đầu chuỗi cardHtml trước dấu nháy tiếp theo
             var slugMatch = cardHtml.match(/^([a-zA-Z0-9\-\_]+)["']/);
             if (slugMatch) {
                 slug = slugMatch[1].toLowerCase();
@@ -264,17 +249,25 @@ function parseListResponse(html) {
         // ---- Extract Title ----
         var title = "";
 
-        // 1. title="" attribute trong khối cardHtml này
-        var titleAttrMatch = cardHtml.match(/title=["']([^"']{3,300})["']/i);
-        if (titleAttrMatch) title = PluginUtils.cleanText(titleAttrMatch[1]);
+        // 1. Lấy từ div class="detail" chứa thẻ a (chuẩn nhất cho card NJAV)
+        var detailMatch = cardHtml.match(/class=["']detail["'][^>]*>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/i);
+        if (detailMatch) {
+            title = PluginUtils.cleanText(detailMatch[1]);
+        }
 
-        // 2. img alt attribute
+        // 2. title="" attribute trong khối cardHtml này
+        if (!title) {
+            var titleAttrMatch = cardHtml.match(/title=["']([^"']{3,300})["']/i);
+            if (titleAttrMatch) title = PluginUtils.cleanText(titleAttrMatch[1]);
+        }
+
+        // 3. img alt attribute
         if (!title) {
             var altMatch = cardHtml.match(/<img[^>]+alt=["']([^"']{3,300})["']/i);
             if (altMatch) title = PluginUtils.cleanText(altMatch[1]);
         }
 
-        // 3. Text content của thẻ a chứa slug này
+        // 4. Text content của thẻ a chứa slug này
         if (!title) {
             var escapedSlug = slug.replace(/([-_])/g, '\\$1');
             var anchorTextRx = new RegExp('(?:href=["\'][^"\']*' + escapedSlug + '[^>]*>|>)([\\s\\S]{2,300}?)<\/a>', 'i');
@@ -282,29 +275,36 @@ function parseListResponse(html) {
             if (anchorTextMatch) title = PluginUtils.cleanText(anchorTextMatch[1]);
         }
 
-        // 4. Nhãn heading gần nhất
+        // 5. Nhãn heading gần nhất
         if (!title || title.length < 2) {
             var hMatch = cardHtml.match(/<h[2-5][^>]*>([\s\S]{2,300}?)<\/h[2-5]>/i);
             if (hMatch) title = PluginUtils.cleanText(hMatch[1]);
         }
 
-        // 5. Fallback từ slug
+        // 6. Fallback từ slug
         if (!title || title.length < 2) {
             title = slug.replace(/-/g, ' ').replace(/\b[a-z]/g, function(c) { return c.toUpperCase(); });
         }
 
         // ---- Extract Poster ----
         var poster = "";
-        var imgMatch = cardHtml.match(/<img[^>]+(?:data-src|data-lazy-src|data-original|data-bg|src)=["']([^"']+)["']/i);
-        if (imgMatch) {
-            poster = imgMatch[1];
-            if (poster.indexOf("//") === 0) poster = "https:" + poster;
+        // Ưu tiên data-src hơn src vì src thường là base64 placeholder của lazyload
+        var dataSrcMatch = cardHtml.match(/data-src=["']([^"']+)["']/i);
+        if (dataSrcMatch) {
+            poster = dataSrcMatch[1];
+        } else {
+            var imgMatch = cardHtml.match(/<img[^>]+src=["'](https?:\/\/[^"']+)["']/i);
+            if (imgMatch) poster = imgMatch[1];
+        }
+
+        if (poster && poster.indexOf("//") === 0) {
+            poster = "https:" + poster;
         }
 
         // ---- Extract Duration ----
         var duration = "";
-        var durMatch = cardHtml.match(/(\d{1,2}:\d{2}(?::\d{2})?)/);
-        if (durMatch) duration = durMatch[1];
+        var durMatch = cardHtml.match(/class=["']duration["'][^>]*>([^<]+)/i) || cardHtml.match(/(\d{1,2}:\d{2}(?::\d{2})?)/);
+        if (durMatch) duration = PluginUtils.cleanText(durMatch[1]);
 
         // ---- Detect quality ----
         var qualityLabel = "HD";
@@ -319,6 +319,13 @@ function parseListResponse(html) {
         var codeMatch = title.match(/([A-Z]{2,8}-\d{3,5})/i) || slug.match(/([a-z]{2,8}-\d{3,5})/i);
         if (codeMatch) code = codeMatch[1].toUpperCase();
 
+        // ---- Extract Preview URL ----
+        var previewUrl = "";
+        var previewMatch = cardHtml.match(/v-scope=["']Preview\(['"]([^'"]+)['"]\)["']/i);
+        if (previewMatch) {
+            previewUrl = previewMatch[1];
+        }
+
         movies.push({
             id: videoId,
             title: title,
@@ -328,7 +335,8 @@ function parseListResponse(html) {
             year: 0,
             quality: qualityLabel,
             episode_current: duration || "Full",
-            lang: code || "NJAV"
+            lang: code || "NJAV",
+            previewUrl: previewUrl
         });
     }
 
