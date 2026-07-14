@@ -33,7 +33,7 @@ function getPrimaryCategories() {
         { name: 'Có che (Censored)', slug: 'en/censored' },
         { name: 'Không che (Uncensored)', slug: 'en/uncensored' },
         { name: 'Không che rò rỉ', slug: 'en/uncensored-leaked' },
-        { name: 'Thể loại', slug: 'en/genre' },
+        { name: 'Thể loại', slug: 'en/genre/' },
         { name: 'Diễn viên', slug: 'en/actor' },
         { name: 'Nhà sản xuất', slug: 'en/make' },
         { name: 'Loạt phim (Series)', slug: 'en/series' }
@@ -49,7 +49,7 @@ function getFilterConfig() {
             { name: 'Tháng này', value: 'month' }
         ],
         category: [
-            { name: "Tất cả thể loại", value: "en/genre" },
+            { name: "Tất cả thể loại", value: "en/genre/" },
             { name: "Có che (Censored)", value: "en/censored" },
             { name: "Không che (Uncensored)", value: "en/uncensored" },
             { name: "Không che rò rỉ", value: "en/uncensored-leaked" },
@@ -128,7 +128,7 @@ function getUrlDetail(slug) {
     return "https://www.njav.com/en/v/" + slug;
 }
 
-function getUrlCategories() { return "https://www.njav.com/en/genre"; }
+function getUrlCategories() { return "https://www.njav.com/en/genre/"; }
 function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
