@@ -12,7 +12,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "njav",
         "name": "NJAV",
-        "version": "1.0.2",
+        "version": "1.1.0",
         "baseUrl": "https://www.njav.com",
         "referrer": "https://www.njav.com/",
         "iconUrl": "https://www.njav.com/favicon.ico",
@@ -195,6 +195,19 @@ var SKIP_SEGMENTS = {
 
 function parseListResponse(html) {
     var movies = [];
+    
+    // DEBUG ITEM TO VIEW ON ANDROID UI
+    movies.push({
+        id: "debug-info",
+        title: "DBG: Len=" + (html ? html.length : 0) + " | HTML=" + (html ? html.substring(0, 400).replace(/</g, '[').replace(/>/g, ']') : "null"),
+        posterUrl: "",
+        backdropUrl: "",
+        description: "Debug info",
+        year: 0,
+        quality: "DEBUG",
+        episode_current: "DBG",
+        lang: "DBG"
+    });
 
     // Tách các card phim bằng cách chia nhỏ HTML
     var splitPatterns = [
