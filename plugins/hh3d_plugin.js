@@ -72,6 +72,17 @@ function getUrlList(slug, filtersJson) {
     var page = filters.page || 1;
     var baseUrl = "https://hoathinh3d.st";
 
+    // Handle special pages which are empty shells but loaded via WP-JSON REST API
+    if (slug === 'phim-hoan-thanh') {
+        return baseUrl + "/wp-json/halim/v1/completed?page=" + page + "&per_page=20";
+    }
+    if (slug === 'hh3d-danh-gia-cao') {
+        return baseUrl + "/wp-json/halim/v1/top-rated?page=" + page + "&per_page=20";
+    }
+    if (slug === 'bang-xep-hang-hoat-hinh-trung-quoc') {
+        return baseUrl + "/wp-json/halim/v1/bxh-hh3d?range=all";
+    }
+
     // Prioritize category filter if present
     if (filters.category) {
         return baseUrl + "/" + filters.category + "/page/" + page + "/";
@@ -143,52 +154,100 @@ var PluginUtils = {
 };
 
 function parseListResponse(html) {
+    // Check if the input is JSON (like the response of special category REST APIs)
+    try {
+        var parsed = JSON.parse(html);
+        if (parsed) {
+            if (parsed.html) {
+                html = parsed.html; // Overwrite and parse HTML below
+            } else {
+                var jsonItems = parsed.items || (Array.isArray(parsed) ? parsed : null);
+                if (jsonItems) {
+                    var movies = [];
+                    for (var i = 0; i < jsonItems.length; i++) {
+                        var item = jsonItems[i];
+                        var pUrl = item.permalink || item.url || "";
+                        var slug = pUrl.replace(/https?:\/\/[^\/]+\//, "").replace(/\/$/, "");
+                        movies.push({
+                            id: slug,
+                            title: PluginUtils.cleanText(item.title),
+                            posterUrl: item.poster_url || item.poster || "",
+                            backdropUrl: item.poster_url || item.poster || "",
+                            description: "",
+                            year: 0,
+                            quality: "HD",
+                            episode_current: item.updated_at || "Full",
+                            lang: "Vietsub"
+                        });
+                    }
+                    var hasMore = parsed.has_more || false;
+                    var currentPage = parsed.page || 1;
+                    return JSON.stringify({
+                        items: movies,
+                        pagination: {
+                            currentPage: currentPage,
+                            totalPages: hasMore ? (currentPage + 1) : currentPage,
+                            totalItems: parsed.total || movies.length,
+                            itemsPerPage: parsed.per_page || 20
+                        }
+                    });
+                }
+            }
+        }
+    } catch (e) {
+        // Not JSON, continue with HTML parsing
+    }
+
     var movies = [];
     var foundSlugs = {};
+    var excludeSlugs = [
+        'huyen-huyen', 'xuyen-khong', 'trung-sinh', 'tien-hiep', 'co-trang', 'hai-huoc', 'kiem-hiep', 'hien-dai', 
+        'phim-hoat-hinh-3d-le', 'phim-dang-chieu', 'phim-hoan-thanh', 'lich-chieu', 'follow', 'page', 'search', 'tag', 'author',
+        'bang-xep-hang-hoat-hinh-trung-quoc', 'hh3d-danh-gia-cao', 'lien-he', 'chinh-sach-rieng-tu'
+    ];
 
-    // Parse movie items: div.halim-item
-    var itemRegex = /<(?:article|div)[^>]*class="[^"]*(?:halim-item|thumb|halim-thumb)[^"]*"[^>]*>([\s\S]*?)<\/(?:article|div)>/gi;
+    // Unified link parser matching any movie links with images
+    var itemRegex = /<a[^>]+href="https?:\/\/hoathinh3d\.st\/([^"\/]+)"[^>]*>([\s\S]*?)<\/a>/gi;
     var match;
 
     while ((match = itemRegex.exec(html)) !== null) {
-        var itemHtml = match[1];
+        var slug = match[1];
+        if (!slug || excludeSlugs.indexOf(slug) !== -1) continue;
+        if (slug.indexOf('wp-content') !== -1 || slug.indexOf('genre') !== -1 || slug.indexOf('category') !== -1 || slug.indexOf('tag') !== -1 || slug.indexOf('page') !== -1) {
+            continue;
+        }
 
-        // Ensure this is a movie item - look for thumb or entry-title links
-        var linkMatch = itemHtml.match(/<a[^>]+class="[^"]*(?:halim-thumb|thumb)[^"]*"[^>]+href="([^"]+)"/i) ||
-            itemHtml.match(/<a[^>]+href="([^"]+)"[^>]*title=/i);
-        if (!linkMatch) continue;
+        var innerHtml = match[2];
 
-        var url = linkMatch[1];
-        var slug = url.replace(/https?:\/\/[^\/]+\//, "").replace(/\/$/, "");
-
-        // Extract title from a.title or h2.entry-title or a.title attribute
-        var titleMatch = itemHtml.match(/title="([^"]+)"/i) ||
-            itemHtml.match(/<h2[^>]*class="[^"]*entry-title[^"]*"[^>]*>([\s\S]*?)<\/h2>/i);
+        // Extract title: first title attribute, then alt attribute, then h2/h3 tags
+        var titleMatch = match[0].match(/title="([^"]+)"/i) || 
+                         innerHtml.match(/alt="([^"]+)"/i) || 
+                         innerHtml.match(/<(?:h2|h3)[^>]*>([\s\S]*?)<\/(?:h2|h3)>/i);
         var title = titleMatch ? PluginUtils.cleanText(titleMatch[1]) : "";
+        if (!title) continue;
 
-        // Extract thumbnail from img tag (data-src, src, or data-srcset)
-        var thumbMatch = itemHtml.match(/<img[^>]+data-src="([^"]+)"/i) ||
-            itemHtml.match(/<img[^>]+src="([^"]+)"/i) ||
-            itemHtml.match(/<img[^>]+data-srcset="([^" ]+)/i);
-        var thumb = thumbMatch ? thumbMatch[1] : "";
+        // Extract thumbnail: data-src, src, or noscript img
+        var imgMatch = innerHtml.match(/<img[^>]+data-src="([^"]+)"/i) || 
+                       innerHtml.match(/<img[^>]+src="([^"]+)"/i);
+        var thumb = imgMatch ? imgMatch[1] : "";
+        if (!thumb || thumb.indexOf('data:image') !== -1) {
+            var noscriptMatch = innerHtml.match(/<noscript>[\s\S]*?src="([^"]+)"/i);
+            if (noscriptMatch) thumb = noscriptMatch[1];
+        }
 
-        // Extract episode info
-        var episodeMatch = itemHtml.match(/<span[^>]*class="[^"]*episode[^"]*"[^>]*>([\s\S]*?)<\/span>/i);
-        var episode = episodeMatch ? PluginUtils.cleanText(episodeMatch[1]) : "Full";
-
-        // Extract quality badge if exists
-        var qualityMatch = itemHtml.match(/<span[^>]*class="[^"]*status[^"]*"[^>]*>([\s\S]*?)<\/span>/i);
-        var quality = qualityMatch ? PluginUtils.cleanText(qualityMatch[1]) : "HD";
+        // Extract episode/badge info
+        var epMatch = innerHtml.match(/<span[^>]*class="[^"]*(?:episode|status|t10-rank-num)[^"]*"[^>]*>([\s\S]*?)<\/span>/i);
+        var episode = epMatch ? PluginUtils.cleanText(epMatch[1]) : "Full";
 
         if (slug && !foundSlugs[slug]) {
             movies.push({
                 id: slug,
-                title: title || "Không có tiêu đề",
+                title: title,
                 posterUrl: thumb,
                 backdropUrl: thumb,
                 description: "",
                 year: 0,
-                quality: quality,
+                quality: "HD",
                 episode_current: episode,
                 lang: "Vietsub"
             });
@@ -200,13 +259,11 @@ function parseListResponse(html) {
     var totalPages = 1;
     var currentPage = 1;
 
-    // Find current page: <span class="current">2</span>
     var currentMatch = html.match(/<span[^>]*class="[^"]*current[^"]*"[^>]*>(\d+)<\/span>/i);
     if (currentMatch) {
         currentPage = parseInt(currentMatch[1]);
     }
 
-    // Find total pages: look for highest page number in pagination
     var pageRegex = /page\/(\d+)\//g;
     var pageMatch;
     while ((pageMatch = pageRegex.exec(html)) !== null) {
@@ -214,7 +271,6 @@ function parseListResponse(html) {
         if (p > totalPages) totalPages = p;
     }
 
-    // Also check for page-numbers links
     var pageNumRegex = /<a[^>]*class="[^"]*page-numbers[^"]*"[^>]*>(\d+)<\/a>/g;
     var numMatch;
     while ((numMatch = pageNumRegex.exec(html)) !== null) {
@@ -240,7 +296,7 @@ function parseSearchResponse(html) {
 function parseMovieDetail(html) {
     try {
         // Extract title
-        var titleMatch = html.match(/<h1[^>]*class="[^"]*(?:movie_name|entry-title)[^"]*"[^>]*>([\s\S]*?)<\/h1>/i);
+        var titleMatch = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
         var title = titleMatch ? PluginUtils.cleanText(titleMatch[1]) : "";
 
         // Extract other name
@@ -250,14 +306,20 @@ function parseMovieDetail(html) {
             title += " (" + otherName + ")";
         }
 
-        // Extract thumbnail/poster
+        // Extract thumbnail/poster (prioritizing data-poster, then og:image if not default logo)
         var poster = "";
-        var posterMetaMatch = html.match(/<meta[^>]*property="og:image"[^>]*content="([^"]+)"/i);
-        if (posterMetaMatch) {
-            poster = posterMetaMatch[1];
+        var posterDataMatch = html.match(/data-poster="([^"]+)"/i);
+        if (posterDataMatch) {
+            poster = posterDataMatch[1];
         } else {
-            var imgMatch = html.match(/<div class="first">\s*<img src="([^"]+)"/i);
-            if (imgMatch) poster = imgMatch[1];
+            var posterMetaMatch = html.match(/<meta[^>]*property="og:image"[^>]*content="([^"]+)"/i);
+            if (posterMetaMatch && posterMetaMatch[1].indexOf('default.png') === -1) {
+                poster = posterMetaMatch[1];
+            } else {
+                var imgMatch = html.match(/class="[^"]*(?:poster-img|movie-poster|info-v2-poster-img)[^"]*"\s+src="([^"]+)"/i) ||
+                               html.match(/<div class="first">\s*<img src="([^"]+)"/i);
+                if (imgMatch) poster = imgMatch[1];
+            }
         }
 
         // Extract description
@@ -537,7 +599,7 @@ function parseCategoriesResponse(html) {
     var seen = {};
 
     // Parse from navigation menu
-    var categoryRegex = /<a[^>]+href="https:\/\/hoathinh3d\.(?:la|my|ai)\/([^"\/]+)"[^>]*>([^<]+)<\/a>/gi;
+    var categoryRegex = /<a[^>]+href="https:\/\/hoathinh3d\.(?:la|my|ai|co|st)\/([^"\/]+)"[^>]*>([^<]+)<\/a>/gi;
     var match;
 
     while ((match = categoryRegex.exec(html)) !== null) {
