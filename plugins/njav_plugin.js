@@ -12,7 +12,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "njav",
         "name": "NJAV",
-        "version": "1.0.4",
+        "version": "1.1.0",
         "baseUrl": "https://www.njav.com",
         "referrer": "https://www.njav.com/",
         "iconUrl": "https://www.njav.com/favicon.ico",
@@ -426,22 +426,23 @@ function parseMovieDetail(htmlContent, pageUrl) {
         }
 
         // Extract video numeric ID from petite-vue v-scope attribute
-        // NJAV markup: <div id="page-video" v-scope="VideoPage({id: 12345, ...})">
+        // NJAV markup: <div id="page-video" v-scope="Video({id: '131129'})">
         var videoId = "";
 
         var vScopeMatch = htmlContent.match(/id=["']page-video["'][^>]*v-scope=["']([^"']+)["']/i)
                        || htmlContent.match(/id=["']player["'][^>]*v-scope=["']([^"']+)["']/i)
-                       || htmlContent.match(/v-scope=["']VideoPage\s*\(\s*\{([^}]+)\}/i);
+                       || htmlContent.match(/v-scope=["']VideoPage\s*\(\s*\{([^}]+)\}/i)
+                       || htmlContent.match(/v-scope=["']Video\s*\(\s*\{([^}]+)\}/i);
 
         if (vScopeMatch) {
             var vScope  = vScopeMatch[1];
-            var idMatch = vScope.match(/\bid\s*:\s*(\d+)/) || vScope.match(/"id"\s*:\s*(\d+)/);
+            var idMatch = vScope.match(/\bid\s*:\s*['"]?(\d+)['"]?/) || vScope.match(/"id"\s*:\s*['"]?(\d+)['"]?/);
             if (idMatch) videoId = idMatch[1];
         }
 
-        // Fallback: VideoPage({id: NNN}) anywhere
+        // Fallback: Video({id: NNN}) anywhere
         if (!videoId) {
-            var vpMatch = htmlContent.match(/VideoPage\s*\(\s*\{[^}]*\bid\s*:\s*(\d+)/i);
+            var vpMatch = htmlContent.match(/Video(?:Page)?\s*\(\s*\{\s*\bid\s*:\s*['"]?(\d+)['"]?/i);
             if (vpMatch) videoId = vpMatch[1];
         }
 
@@ -459,7 +460,7 @@ function parseMovieDetail(htmlContent, pageUrl) {
         // Build server list
         var servers = [];
         if (videoId) {
-            var ajaxUrl = "https://www.njav.com/en/ajax/v/" + videoId + "/videos";
+            var ajaxUrl = "https://www.njav.com/api/v/" + videoId + "/videos";
             servers.push({
                 name: "NJAV HD",
                 episodes: [{
@@ -510,66 +511,53 @@ function parseMovieDetail(htmlContent, pageUrl) {
 }
 
 function parseDetailResponse(htmlContent, pageUrl) {
-    var streamUrl = "";
+    var nextUrl = "";
 
-    // Case 1: JSON response from AJAX endpoint
-    // NJAV AJAX returns array: [{src:"...", label:"1080p"}, ...]
     try {
         var parsed = JSON.parse(htmlContent);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-            // Prefer highest quality
-            var best = parsed[0];
-            for (var j = 0; j < parsed.length; j++) {
-                var lbl = (parsed[j].label || "").toString();
-                if (lbl.indexOf('1080') !== -1 || lbl.indexOf('720') !== -1) {
-                    best = parsed[j];
-                    break;
+        var relativeUrl = "";
+        if (parsed) {
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                relativeUrl = parsed[0].url || parsed[0].src || "";
+            } else if (parsed.data) {
+                if (Array.isArray(parsed.data) && parsed.data.length > 0) {
+                    relativeUrl = parsed.data[0].url || parsed.data[0].src || "";
+                } else {
+                    relativeUrl = parsed.data.url || parsed.data.src || "";
                 }
+            } else {
+                relativeUrl = parsed.url || parsed.src || "";
             }
-            streamUrl = best.src || best.url || "";
-        } else if (parsed && parsed.url) {
-            streamUrl = parsed.url;
-        } else if (parsed && parsed.data && parsed.data.url) {
-            streamUrl = parsed.data.url;
+        }
+        if (relativeUrl) {
+            if (relativeUrl.indexOf("http") === 0) {
+                nextUrl = relativeUrl;
+            } else {
+                if (relativeUrl.indexOf("/") !== 0) {
+                    relativeUrl = "/" + relativeUrl;
+                }
+                nextUrl = "https://www.njav.com" + relativeUrl;
+            }
         }
     } catch (e) {
         // Not JSON
     }
 
-    // Case 2: Extract "src":"..." from raw JSON string
-    if (!streamUrl) {
-        var srcRx = /"src"\s*:\s*"(https?:[^"]+)"/i;
-        var srcM  = htmlContent.match(srcRx);
-        if (srcM) streamUrl = srcM[1].replace(/\\\//g, '/');
-    }
-
-    // Case 3: v-scope attribute containing m3u8
-    if (!streamUrl) {
-        var vScopeM2 = htmlContent.match(/v-scope=["']([^"']+)["']/i);
-        if (vScopeM2) {
-            var decoded = vScopeM2[1]
-                .replace(/&quot;/g, '"')
-                .replace(/&#39;/g, "'")
-                .replace(/&amp;/g, '&');
-            var m3uRx = /["'](https:[^"']+?(?:playlist|index)\.m3u8[^"']*)["']/;
-            var m3uM  = decoded.match(m3uRx);
-            if (m3uM) streamUrl = m3uM[1].replace(/\\\//g, '/');
+    if (!nextUrl) {
+        // Fallback: search for "/vv/" in raw response
+        var vvMatch = htmlContent.match(/\/vv\/[a-zA-Z0-9\-_]+/);
+        if (vvMatch) {
+            nextUrl = "https://www.njav.com" + vvMatch[0];
         }
     }
 
-    // Case 4: Any .m3u8 in response
-    if (!streamUrl) {
-        var m3u8M = htmlContent.match(/(https?:\/\/[^\s"'<>]+?\.m3u8[^\s"'<>]*)/i);
-        if (m3u8M) streamUrl = m3u8M[1].replace(/\\\//g, '/');
-    }
-
-    if (streamUrl) {
+    if (nextUrl) {
         return JSON.stringify({
-            url: streamUrl,
+            url: nextUrl,
+            isEmbed: true,
             headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Referer": "https://www.njav.com/",
-                "Origin": "https://www.njav.com"
+                "Referer": "https://www.njav.com/"
             },
             subtitles: []
         });
@@ -585,6 +573,56 @@ function parseDetailResponse(htmlContent, pageUrl) {
         },
         subtitles: []
     });
+}
+
+function parseEmbedResponse(htmlContent, pageUrl) {
+    if (pageUrl.indexOf("/vv/") !== -1) {
+        // Step 2: From /vv/ page, extract the /jm/ link
+        var jmMatch = htmlContent.match(/\/jm\/[a-zA-Z0-9+/=]+/);
+        if (jmMatch) {
+            var nextUrl = "https://www.njav.com" + jmMatch[0];
+            return JSON.stringify({
+                url: nextUrl,
+                isEmbed: true,
+                headers: {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Referer": pageUrl
+                }
+            });
+        }
+    } else if (pageUrl.indexOf("/jm/") !== -1) {
+        // Step 3: From /jm/ page, extract the m3u8 stream URL
+        var m3u8Match = htmlContent.match(/m3u8["']?\s*:\s*["'](https?:\/\/[^"']+)["']/);
+        if (m3u8Match) {
+            var m3u8Url = m3u8Match[1].replace(/\\/g, ''); // Clean escaped slashes if any
+            return JSON.stringify({
+                url: m3u8Url,
+                isEmbed: false,
+                headers: {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Referer": "https://www.njav.com/",
+                    "Origin": "https://www.njav.com"
+                },
+                subtitles: []
+            });
+        }
+    }
+
+    // Fallback: try finding any m3u8 in the htmlContent
+    var genericM3u8 = htmlContent.match(/(https?:\/\/[^\s"'<>]+?\.m3u8[^\s"'<>]*)/i);
+    if (genericM3u8) {
+        return JSON.stringify({
+            url: genericM3u8[1].replace(/\\/g, ''),
+            isEmbed: false,
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Referer": "https://www.njav.com/",
+                "Origin": "https://www.njav.com"
+            }
+        });
+    }
+
+    return JSON.stringify({ url: "" });
 }
 
 function parseCategoriesResponse(html) {
@@ -622,6 +660,7 @@ if (typeof globalThis !== 'undefined') {
     globalThis.parseSearchResponse     = parseSearchResponse;
     globalThis.parseMovieDetail        = parseMovieDetail;
     globalThis.parseDetailResponse     = parseDetailResponse;
+    globalThis.parseEmbedResponse      = parseEmbedResponse;
     globalThis.parseCategoriesResponse = parseCategoriesResponse;
     globalThis.parseCountriesResponse  = parseCountriesResponse;
     globalThis.parseYearsResponse      = parseYearsResponse;
