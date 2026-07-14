@@ -6,7 +6,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "hh3d",
         "name": "HH3D - Hoạt Hình 3D",
-        "version": "1.0.4",
+        "version": "1.0.5",
         "baseUrl": "https://hoathinh3d.st",
         "iconUrl": "https://hoathinh3d.st/wp-content/uploads/2023/09/favicon.png",
         "isEnabled": true,
