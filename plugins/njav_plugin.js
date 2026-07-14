@@ -128,7 +128,7 @@ function getUrlDetail(slug) {
     return "https://www.njav.com/en/v/" + slug;
 }
 
-function getUrlCategories() { return "https://www.njav.com/en/genres"; }
+function getUrlCategories() { return "https://www.njav.com/en/genre"; }
 function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
@@ -163,8 +163,8 @@ function parseListResponse(html) {
     var actressLinkMatch = html.match(/href="[^"]*\/actresses\/[^"]+"/g);
     var isActressesPage = (actressLinkMatch && actressLinkMatch.length > 8 && html.indexOf('Actresses') !== -1);
     
-    // Check if it's the Genres list page
-    var isAllGenresPage = (html.indexOf('/genres/') !== -1 && html.indexOf('Genres') !== -1 && html.indexOf('title="Genres"') === -1);
+    // Check if it's the genre list page
+    var isAllgenrePage = (html.indexOf('/genre/') !== -1 && html.indexOf('genre') !== -1 && html.indexOf('title="genre"') === -1);
     
     if (isActressesPage) {
         var actressRegex = /<a[^>]+href="([^"]*\/actresses\/([^"\/ \?]+))"[^>]*>([\s\S]*?)<\/a>/gi;
@@ -193,19 +193,19 @@ function parseListResponse(html) {
                 foundActresses[slug] = true;
             }
         }
-    } else if (isAllGenresPage) {
-        var genreRegex = /<a[^>]+href="([^"]*\/genres\/([^"\/ \?]+))"[^>]*>([\s\S]*?)<\/a>/gi;
-        var foundGenres = {};
+    } else if (isAllgenrePage) {
+        var genreRegex = /<a[^>]+href="([^"]*\/genre\/([^"\/ \?]+))"[^>]*>([\s\S]*?)<\/a>/gi;
+        var foundgenre = {};
         var match;
         
         while ((match = genreRegex.exec(html)) !== null) {
             var url = match[1];
-            var genreSlug = match[2];
+            var genrelug = match[2];
             var name = PluginUtils.cleanText(match[3]).replace(/\d+,\d+|\d+/g, '').trim(); // Remove post count
             if (!name || name.length < 2) continue;
             
-            var slug = "en/genres/" + genreSlug;
-            if (!foundGenres[slug]) {
+            var slug = "en/genre/" + genrelug;
+            if (!foundgenre[slug]) {
                 movies.push({
                     id: slug,
                     title: name,
@@ -217,7 +217,7 @@ function parseListResponse(html) {
                     episode_current: "",
                     lang: ""
                 });
-                foundGenres[slug] = true;
+                foundgenre[slug] = true;
             }
         }
     } else {
@@ -380,7 +380,7 @@ function parseMovieDetail(htmlContent, pageUrl) {
         var studio = getField("Maker") || getField("Studio") || getField("Nhà sản xuất");
         var director = getField("Director") || getField("Giám đốc");
         var casts = getLinksField("Actresses") || getLinksField("Actress") || getLinksField("Diễn viên") || getLinksField("Nữ diễn viên");
-        var genres = getLinksField("Genres") || getLinksField("Genre") || getLinksField("Thể loại");
+        var genre = getLinksField("genre") || getLinksField("Genre") || getLinksField("Thể loại");
         
         var year = 0;
         if (releaseDate) {
@@ -458,7 +458,7 @@ function parseMovieDetail(htmlContent, pageUrl) {
             servers: servers,
             episode_current: servers.length > 0 ? "Full" : "No Source",
             lang: "NJAV",
-            category: genres,
+            category: genre,
             country: "Japan",
             director: director,
             casts: casts,
@@ -547,18 +547,18 @@ function parseDetailResponse(htmlContent, pageUrl) {
 
 function parseCategoriesResponse(html) {
     var categories = [];
-    categories.push({ name: "Tất cả thể loại", slug: "en/genres" });
+    categories.push({ name: "Tất cả thể loại", slug: "en/genre" });
     
-    var genreRegex = /<a[^>]+href="([^"]*\/genres\/([^"\/ \?]+))"[^>]*>([\s\S]*?)<\/a>/gi;
+    var genreRegex = /<a[^>]+href="([^"]*\/genre\/([^"\/ \?]+))"[^>]*>([\s\S]*?)<\/a>/gi;
     var seen = {};
     var match;
     
     while ((match = genreRegex.exec(html)) !== null) {
-        var genreSlug = match[2];
+        var genrelug = match[2];
         var name = PluginUtils.cleanText(match[3]).replace(/\d+,\d+|\d+/g, '').trim();
         if (!name || name.length < 2) continue;
         
-        var slug = "en/genres/" + genreSlug;
+        var slug = "en/genre/" + genrelug;
         if (!seen[slug]) {
             categories.push({ name: name, slug: slug });
             seen[slug] = true;
