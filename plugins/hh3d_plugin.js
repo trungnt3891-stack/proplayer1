@@ -6,9 +6,9 @@ function getManifest() {
     return JSON.stringify({
         "id": "hh3d",
         "name": "HH3D - Hoạt Hình 3D",
-        "version": "1.0.3",
-        "baseUrl": "https://hoathinh3d.co",
-        "iconUrl": "https://hoathinh3d.co/wp-content/uploads/2023/09/favicon.png",
+        "version": "1.0.4",
+        "baseUrl": "https://hoathinh3d.st",
+        "iconUrl": "https://hoathinh3d.st/wp-content/uploads/2023/09/favicon.png",
         "isEnabled": true,
         "isAdult": false,
         "type": "MOVIE",
@@ -70,7 +70,7 @@ function getFilterConfig() {
 function getUrlList(slug, filtersJson) {
     var filters = JSON.parse(filtersJson || "{}");
     var page = filters.page || 1;
-    var baseUrl = "https://hoathinh3d.co";
+    var baseUrl = "https://hoathinh3d.st";
 
     // Prioritize category filter if present
     if (filters.category) {
@@ -92,7 +92,7 @@ function getUrlList(slug, filtersJson) {
 function getUrlSearch(keyword, filtersJson) {
     var filters = JSON.parse(filtersJson || "{}");
     var page = filters.page || 1;
-    return "https://hoathinh3d.co/page/" + page + "/?s=" + encodeURIComponent(keyword);
+    return "https://hoathinh3d.st/page/" + page + "/?s=" + encodeURIComponent(keyword);
 }
 
 function getUrlDetail(slug) {
@@ -106,16 +106,16 @@ function getUrlDetail(slug) {
             var postId = parts[1];
             var svId = parts[2];
             // Format for player.php direct call
-            return "https://hoathinh3d.co/wp-content/themes/halimmovies/player.php?episode_slug=" + epSlug + "&server_id=" + svId + "&subsv_id=&post_id=" + postId;
+            return "https://hoathinh3d.st/wp-content/themes/halimmovies/player.php?episode_slug=" + epSlug + "&server_id=" + svId + "&subsv_id=&post_id=" + postId;
         }
     }
 
     if (slug.indexOf("http") === 0) return slug;
-    if (slug.indexOf("/") === 0) return "https://hoathinh3d.co" + slug;
-    return "https://hoathinh3d.co/" + slug;
+    if (slug.indexOf("/") === 0) return "https://hoathinh3d.st" + slug;
+    return "https://hoathinh3d.st/" + slug;
 }
 
-function getUrlCategories() { return "https://hoathinh3d.co/"; }
+function getUrlCategories() { return "https://hoathinh3d.st/"; }
 function getUrlCountries() { return ""; } // Not supported
 function getUrlYears() { return ""; } // Not supported
 
@@ -452,8 +452,8 @@ function parseDetailResponse(html) {
         var streamUrl = "";
         var headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Referer": "https://hoathinh3d.co/",
-            "Origin": "https://hoathinh3d.co",
+            "Referer": "https://hoathinh3d.st/",
+            "Origin": "https://hoathinh3d.st",
             "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"
         };
 
