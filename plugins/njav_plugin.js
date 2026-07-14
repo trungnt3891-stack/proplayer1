@@ -21,7 +21,6 @@ function getManifest() {
 function getHomeSections() {
     return JSON.stringify([
         { slug: 'en/new-release', title: 'Mới Cập Nhật', type: 'Horizontal', path: '' },
-        { slug: 'en/trending', title: 'Xem Nhiều / Xu Hướng', type: 'Horizontal', path: '' },
         { slug: 'en/censored', title: 'Phim Có Che (Censored)', type: 'Horizontal', path: '' },
         { slug: 'en/uncensored', title: 'Không Che (Uncensored)', type: 'Horizontal', path: '' },
         { slug: 'en/uncensored-leaked', title: 'Không Che Rò Rỉ', type: 'Horizontal', path: '' }
@@ -31,13 +30,12 @@ function getHomeSections() {
 function getPrimaryCategories() {
     return JSON.stringify([
         { name: 'Mới cập nhật', slug: 'en/new-release' },
-        { name: 'Thịnh hành', slug: 'en/trending' },
         { name: 'Có che (Censored)', slug: 'en/censored' },
         { name: 'Không che (Uncensored)', slug: 'en/uncensored' },
         { name: 'Không che rò rỉ', slug: 'en/uncensored-leaked' },
-        { name: 'Thể loại', slug: 'en/genres' },
-        { name: 'Diễn viên', slug: 'en/actresses' },
-        { name: 'Nhà sản xuất', slug: 'en/makers' },
+        { name: 'Thể loại', slug: 'en/genre' },
+        { name: 'Diễn viên', slug: 'en/actor' },
+        { name: 'Nhà sản xuất', slug: 'en/make' },
         { name: 'Loạt phim (Series)', slug: 'en/series' }
     ]);
 }
@@ -51,12 +49,12 @@ function getFilterConfig() {
             { name: 'Tháng này', value: 'month' }
         ],
         category: [
-            { name: "Tất cả thể loại", value: "en/genres" },
+            { name: "Tất cả thể loại", value: "en/genre" },
             { name: "Có che (Censored)", value: "en/censored" },
             { name: "Không che (Uncensored)", value: "en/uncensored" },
             { name: "Không che rò rỉ", value: "en/uncensored-leaked" },
-            { name: "Nữ diễn viên", value: "en/actresses" },
-            { name: "Nhà sản xuất", value: "en/makers" },
+            { name: "Nữ diễn viên", value: "en/actor" },
+            { name: "Nhà sản xuất", value: "en/make" },
             { name: "Loạt phim (Series)", value: "en/series" }
         ]
     });
