@@ -793,9 +793,8 @@ function parseEmbedResponse(htmlContent, url) {
         }
         
         // 3. Trả về cấu hình POST request đến API getVideo để VAAPP fetch tiếp (depth 2)
-        // NOTE: KHÔNG gửi subtitle URLs trong query parameter vì app sẽ fetch chúng riêng
-        // và nếu server subtitle bị lỗi thì không nên block playback video
-        var postUrl = "https://play.streamxemphimhd.site/player/index.php?data=" + embedId + "&do=getVideo";
+        var subtitlesQuery = encodeURIComponent(JSON.stringify(subtitles));
+        var postUrl = "https://play.streamxemphimhd.site/player/index.php?data=" + embedId + "&do=getVideo&subs=" + subtitlesQuery;
         var postBody = "hash=" + embedId + "&r=https%3A%2F%2Fphimhdcss.com%2F";
         var headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -805,13 +804,13 @@ function parseEmbedResponse(htmlContent, url) {
             "X-Requested-With": "XMLHttpRequest"
         };
         
-        log("parseEmbedResponse returning POST request to getVideo API (subtitle URLs removed to avoid blocking playback)");
+        log("parseEmbedResponse returning POST request to getVideo API");
         return JSON.stringify({
             url: postUrl,
             isEmbed: true, // Tiếp tục vòng lặp tiếp theo
             postBody: postBody,
             headers: headers,
-            subtitles: subtitles // Trả về subtitle ở đây nếu muốn app tự fetch, hoặc để trống
+            subtitles: []
         });
         
     } catch (e) {
