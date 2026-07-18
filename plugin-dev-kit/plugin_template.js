@@ -70,8 +70,10 @@ function getUrlYears() { return ""; }
 /**
  * Parse danh sách phim từ HTML trang danh sách.
  * App mong đợi: { items: [{id, title, posterUrl, ...}], pagination: {...} }
+ * @param {string} html - HTML/JSON thô của trang web
+ * @param {string} url - URL thực tế đã fetch để lấy html này
  */
-function parseListResponse(html) {
+function parseListResponse(html, url) {
     try {
         // Ví dụ: Nếu trang có API trả JSON
         // var data = JSON.parse(html);
@@ -100,8 +102,8 @@ function parseListResponse(html) {
     }
 }
 
-function parseSearchResponse(html) {
-    return parseListResponse(html);
+function parseSearchResponse(html, url) {
+    return parseListResponse(html, url);
 }
 
 /**
@@ -109,8 +111,10 @@ function parseSearchResponse(html) {
  * ⚠️ episode.id là giá trị App dùng để resolve link xem:
  *    - Nếu là URL .m3u8/.mp4 → App phát luôn
  *    - Nếu là slug/URL → App gọi getUrlDetail(id) → parseDetailResponse()
+ * @param {string} html - HTML/JSON thô của trang chi tiết
+ * @param {string} url - URL thực tế đã fetch để lấy html này
  */
-function parseMovieDetail(html) {
+function parseMovieDetail(html, url) {
     return JSON.stringify({
         id: "slug-phim",
         title: "Tên phim",
@@ -154,8 +158,11 @@ function parseMovieDetail(html) {
  * Trường hợp 4 — Extension lạ:
  *   { url: "https://cdn.com/video.vl", mimeType: "application/x-mpegURL" }
  *   → Báo App đây là HLS dù extension không phải .m3u8
+ * 
+ * @param {string} html - HTML/JSON thô của trang xem tập phim
+ * @param {string} url - URL thực tế đã fetch để lấy html này
  */
-function parseDetailResponse(html) {
+function parseDetailResponse(html, url) {
     return JSON.stringify({
         url: "https://cdn.example.com/video.m3u8",
         headers: {

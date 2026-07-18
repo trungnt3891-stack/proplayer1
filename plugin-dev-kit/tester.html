@@ -69,9 +69,9 @@
                         class="bg-yellow-600 hover:bg-yellow-700 text-white font-medium py-2 px-4 rounded text-sm transition">parseEmbedResponse(html, url)</button>
                 </div>
                 
-                <!-- Source URL input for parseEmbedResponse -->
+                <!-- Source URL input for parsers -->
                 <div class="mt-3">
-                    <label class="text-xs text-gray-400">Source URL (cho parseEmbedResponse):</label>
+                    <label class="text-xs text-gray-400">Source URL / API URL (cho các hàm parse/embed):</label>
                     <input type="text" id="sourceUrl" placeholder="https://site.com/ajax.php"
                         class="w-full mt-1 bg-gray-900 text-gray-200 p-2 rounded border border-gray-600 focus:outline-none focus:border-yellow-500 font-mono text-sm" />
                 </div>
@@ -134,19 +134,17 @@
             }
 
             const inputArgs = document.getElementById('inputData').value;
+            const sourceUrl = document.getElementById('sourceUrl').value || 'https://example.com';
 
             try {
                 let result;
 
-                if (funcName === 'parseEmbedResponse') {
-                    // parseEmbedResponse nhận 2 tham số: html + sourceUrl
-                    const sourceUrl = document.getElementById('sourceUrl').value || 'https://example.com';
-                    result = window[funcName](inputArgs, sourceUrl);
-                } else if (funcName.startsWith('parse')) {
+                if (funcName.startsWith('parse')) {
                     if (!inputArgs) {
                         console.warn("⚠️ Chưa nhập HTML source vào ô input.");
                     }
-                    result = window[funcName](inputArgs, "{}");
+                    // Tất cả các hàm parse đều nhận html làm tham số 1 và url làm tham số 2
+                    result = window[funcName](inputArgs, sourceUrl);
                 } else if (funcName.startsWith('getUrl')) {
                     result = window[funcName](inputArgs || "phim-le", "{}");
                 } else {
