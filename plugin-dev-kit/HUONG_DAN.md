@@ -137,7 +137,8 @@ Khi đăng ký plugin trên file JSON hoặc thêm nguồn tùy chỉnh, đườ
 | Giá trị | Khi nào dùng |
 |---------|-------------|
 | `"exoplayer"` | Khi bạn trích được link `.m3u8` / `.mp4` trực tiếp (khuyến nghị) |
-| `"embed"` | Khi chỉ có link iframe, phải dùng WebView |
+| `"embed"` | Khi chỉ có link iframe, bắt buộc hiển thị phát bằng WebView |
+| `"embedtoexoplay"` | Tải iframe qua WebView ngầm và chạy bộ dò mạng (Sniffer) để lấy link stream phát bằng ExoPlayer |
 | `"auto"` | App tự phán: URL chứa `.m3u8`/`.mp4` → ExoPlayer, còn lại → WebView |
 
 ---

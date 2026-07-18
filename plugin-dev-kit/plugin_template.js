@@ -18,7 +18,7 @@ function getManifest() {
         "isAdult": false,
         "type": "MOVIE",                // "MOVIE" hoặc "COMIC"
         "layoutType": "VERTICAL",       // "VERTICAL" hoặc "HORIZONTAL"
-        "playerType": "exoplayer"       // "exoplayer" | "embed" | "auto"
+        "playerType": "exoplayer"       // "exoplayer" | "embed" | "embedtoexoplay" | "auto"
     });
 }
 
