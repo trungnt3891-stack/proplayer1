@@ -260,11 +260,15 @@ function parseMovieDetail(htmlResponse) {
 
                 // Parse episode links in this section
                 var sectionEpisodes = [];
-                var sectionLinkRegex = /<a href="(https?:\/\/clbphimxua\.com\/clbpx\.html\?v=[a-zA-Z0-9_-]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+                var sectionLinkRegex = /<a href="(https?:\/\/clbphimxua\.com\/clbpx(?:\.html)?\?v=[a-zA-Z0-9_-]+)"[^>]*>([\s\S]*?)<\/a>/gi;
                 var slMatch;
                 while ((slMatch = sectionLinkRegex.exec(section)) !== null) {
                     var epUrl = slMatch[1];
                     var epLabel = slMatch[2].replace(/<[^>]+>/g, '').trim();
+
+                    if (!epLabel || /^\s*$/.test(epLabel) || /<img/i.test(slMatch[2])) {
+                        epLabel = sectionEpisodes.length === 0 && boldSections.length === 1 ? "Xem phim" : "Tập";
+                    }
 
                     if (!epLabel || epLabel.length === 0) {
                         epLabel = "Phim";
@@ -289,11 +293,15 @@ function parseMovieDetail(htmlResponse) {
         // Fallback: if no server sections found, collect all links as one server
         if (servers.length === 0) {
             var episodes = [];
-            var allLinksRegex = /<a href="(https?:\/\/clbphimxua\.com\/clbpx\.html\?v=[a-zA-Z0-9_-]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+            var allLinksRegex = /<a href="(https?:\/\/clbphimxua\.com\/clbpx(?:\.html)?\?v=[a-zA-Z0-9_-]+)"[^>]*>([\s\S]*?)<\/a>/gi;
             var lMatch;
             while ((lMatch = allLinksRegex.exec(htmlResponse)) !== null) {
                 var epUrl = lMatch[1];
                 var epLabel = lMatch[2].replace(/<[^>]+>/g, '').trim();
+
+                if (!epLabel || /^\s*$/.test(epLabel) || /<img/i.test(lMatch[2])) {
+                    epLabel = "Xem phim";
+                }
 
                 if (!epLabel || epLabel.length === 0) {
                     epLabel = "Phim";
@@ -308,12 +316,12 @@ function parseMovieDetail(htmlResponse) {
 
             if (episodes.length === 0) {
                 // Fallback single play button (empty <a> tag with play image)
-                var playBtnRegex = /<a href="(https?:\/\/clbphimxua\.com\/clbpx\.html\?v=[a-zA-Z0-9_-]+)"[^>]*><\/a>/gi;
+                var playBtnRegex = /<a href="(https?:\/\/clbphimxua\.com\/clbpx(?:\.html)?\?v=[a-zA-Z0-9_-]+)"[^>]*>\s*(?:<img[^>]*>)?\s*<\/a>/gi;
                 var sMatch;
                 while ((sMatch = playBtnRegex.exec(htmlResponse)) !== null) {
                     episodes.push({
                         id: sMatch[1],
-                        name: "Phim",
+                        name: "Xem phim",
                         slug: sMatch[1]
                     });
                 }
