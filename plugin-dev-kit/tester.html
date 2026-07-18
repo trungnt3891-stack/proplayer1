@@ -153,10 +153,20 @@
                     result = window[funcName]();
                 }
 
-                // Format JSON
+                // Format JSON (Tolerate trailing comma like App v1.7.5+)
                 try {
-                    const parsed = JSON.parse(result);
+                    let cleanResult = result;
+                    let hasTrailingComma = /,(\s*[\]}])/g.test(result);
+                    if (hasTrailingComma) {
+                        cleanResult = result.replace(/,(\s*[\]}])/g, '$1');
+                    }
+
+                    const parsed = JSON.parse(cleanResult);
                     outBox.value = JSON.stringify(parsed, null, 4);
+
+                    if (hasTrailingComma) {
+                        outBox.value += '\n\n⚠️ CẢNH BÁO: Phát hiện dấu phẩy thừa (Trailing Comma) ở cuối JSON.\n📌 Mặc dù App v1.7.5+ tự sửa lỗi này, bạn nên bỏ dấu phẩy thừa để JSON đúng chuẩn.';
+                    }
                     
                     // Validation hints
                     if (funcName === 'parseListResponse' || funcName === 'parseSearchResponse') {
