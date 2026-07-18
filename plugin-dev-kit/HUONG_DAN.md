@@ -67,6 +67,19 @@ Mở file **`tester.html`** bằng Chrome:
 ### Bước 3: Đăng Ký
 Upload file `.js` lên GitHub Raw → thêm vào `plugins.json` → App tự cập nhật.
 
+### ⚠️ Lưu Ý Quan Trọng Khi Phát Hành Plugin (Mới)
+
+#### 1. Bắt Buộc Sử Dụng Link RAW
+Khi đăng ký plugin trên file JSON hoặc thêm nguồn tùy chỉnh, đường dẫn file JS **bắt buộc phải là đường dẫn RAW** trả về code JavaScript thô.
+*   **Sai:** `https://github.com/user/repo/blob/main/plugin.js` (Trả về giao diện web HTML của GitHub).
+*   **Đúng:** `https://raw.githubusercontent.com/user/repo/main/plugin.js` (Trả về code JS thô).
+*   *Lưu ý:* Nếu dùng sai link, App tải về file HTML sẽ không tìm thấy manifest và sẽ báo lỗi **`❌ File không hợp lệ`** hoặc **`❌ File lỗi`** ngay khi cài đặt.
+
+#### 2. Dung Thứ Dấu Phẩy Thừa (Trailing Comma)
+*   Từ phiên bản ứng dụng **1.7.5**, bộ phân tích cú pháp JSON của App đã được bật thuộc tính `allowTrailingComma = true`.
+*   Nếu bạn lỡ tay viết thừa dấu phẩy ở phần tử cuối cùng của object/mảng trong JSON trả về (ví dụ: `{"id": "test", "name": "Test",}`), ứng dụng vẫn sẽ tự động bỏ qua và nạp plugin bình thường thay vì crash/báo lỗi như trước.
+*   *Lời khuyên:* Mặc dù ứng dụng có cơ chế tự động dung thứ, bạn vẫn nên viết đúng chuẩn JSON chuẩn chỉ để đảm bảo khả năng tương thích cao nhất trên mọi nền tảng kiểm thử.
+
 ---
 
 ## 📋 Danh Sách Tất Cả Các Hàm
