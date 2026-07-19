@@ -12,7 +12,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "sieutamphim",
         "name": "Sưu Tầm Phim",
-        "version": "1.0.9",
+        "version": "1.0.8",
         "baseUrl": "https://www.sieutamphim.pro",
         "iconUrl": "https://www.sieutamphim.pro/posts/2024/06/cropped-logosieutamphim-192x192.png",
         "isEnabled": true,
@@ -276,12 +276,19 @@ function parseMovieDetail(html, url) {
             });
         }
 
-        // Fallback cho phim lẻ không có episodeGroup
+        // Fallback chỉ dành cho phim lẻ thực sự có dữ liệu phát. Trước đây mọi
+        // bài viết không parse được data-server đều bị tạo server "Mặc định",
+        // khiến app ghép thành "Mặc định - Sưu Tầm Phim" dù không có nguồn phim.
         if (servers.length === 0) {
-            servers.push({
-                name: "Mặc định",
-                episodes: [{ id: "play-" + movieUrl + "?id=" + postId + "&server=hx&tap=1", name: "Full", slug: "full" }]
-            });
+            var hasPlayableFallback = /data-episodes\s*=|<iframe\b|https?:\/\/[^"'\s]+\.m3u8/i.test(contentHtml);
+            if (hasPlayableFallback) {
+                servers.push({
+                    name: "HX",
+                    episodes: [{ id: "play-" + movieUrl + "?id=" + postId + "&server=hx&tap=1", name: "Full", slug: "full" }]
+                });
+            } else {
+                log("No playable server found; skip fallback for: " + movieUrl);
+            }
         }
 
         return JSON.stringify({
