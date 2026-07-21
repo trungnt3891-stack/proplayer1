@@ -19,7 +19,6 @@
             "id": "nguonc",
             "name": "Phim NguonC",
             "version": "1.1.5",
-            "info": "Lưu ý: Kênh này yêu cầu tài khoản để xem phim chất lượng cao",
             "scriptUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/nguonc_plugin.js",
             "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/nguonC.png"
         },
@@ -27,7 +26,7 @@
             "id": "clbpx",
             "name": "CLB Phim Xưa",
             "version": "1.0.7",
-            
+            "info": "Lưu ý: Nguồn này cần vào kho plugin đăng nhập tài khoản mới xem được",
             "scriptUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/clbpx_plugin.js",
             "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/clbpx.ico"
         },
