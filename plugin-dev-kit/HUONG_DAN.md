@@ -369,6 +369,94 @@ ExoPlayer nhận dạng stream qua extension (`.m3u8` → HLS, `.mp4` → Progre
 
 ---
 
+### 📝 Hướng Dẫn Cấu Hình Phụ Đề (Subtitles)
+
+Plugin có thể cung cấp danh sách phụ đề cho ExoPlayer thông qua trường `subtitles` trong `parseDetailResponse()`.
+
+#### Cấu trúc trả về trong `parseDetailResponse()`:
+```javascript
+return JSON.stringify({
+    "url": "https://cdn.example.com/video.m3u8",
+    "headers": { "Referer": "https://example.com" },
+    "subtitles": [
+        {
+            "lang": "Tiếng Việt (Vietsub)", // Tên hiển thị trên menu phụ đề của App
+            "url": "https://cdn.example.com/sub/vietnamese.vtt" // Link WebVTT (.vtt), SubRip (.srt), hoặc ASS (.ass)
+        },
+        {
+            "lang": "English",
+            "url": "https://cdn.example.com/sub/english.vtt"
+        }
+    ]
+});
+```
+
+#### Quy tắc xử lý phụ đề trong App:
+1. **Định dạng hỗ trợ**: App hỗ trợ các file phụ đề chuẩn WebVTT (`.vtt`), SRT (`.srt`), ASS/SSA (`.ass`). App tự động bóc tách loại bỏ query string `?token=...` để nhận diện đúng định dạng.
+2. **Tên hiển thị (`lang`)**: App sẽ lấy trực tiếp chuỗi trong `lang` để làm nhãn trên giao diện menu phụ đề. Nên đặt tên ngắn gọn, rõ ràng (ví dụ: `"Tiếng Việt (Bản chuẩn)"`, `"English"`).
+3. **Cơ chế tương tác với SubtitleCat**:
+   - Nếu plugin đã khai báo phụ đề Tiếng Việt (chuỗi `lang` chứa chữ `"Việt"` hoặc `"Vietnamese"`), App sẽ **tự động bỏ qua SubtitleCat** và ưu tiên phát phụ đề từ plugin của bạn.
+   - Để tắt hoàn toàn tính năng tự động tìm phụ đề ngoài SubtitleCat cho plugin, bạn chỉ cần đặt `"subtitleCat": false` trong `getManifest()`.
+
+---
+
+### 📺 Hướng Dẫn Viết Plugin Truyền Hình / IPTV (`"type": "IPTV"`)
+
+Khi bạn viết plugin cho các nguồn kênh truyền hình trực tiếp (Live TV / IPTV), khai báo `"type": "IPTV"` giúp tối ưu hóa luồng xem cho người dùng.
+
+#### Đặc điểm của Plugin IPTV trong App:
+- Khi người dùng bấm chọn kênh từ danh sách, App sẽ **bỏ qua giao diện chi tiết (Detail Screen)** và giải mã link stream để **phát trực tiếp ngay lập tức** bằng ExoPlayer.
+- Hỗ trợ đầy đủ các nguồn trực tiếp: HLS (`.m3u8`), DASH (`.mpd`), MP4, và mã hóa bản quyền **ClearKey DRM**.
+
+#### 1. Khai báo Manifest:
+```javascript
+function getManifest() {
+    return JSON.stringify({
+        "id": "onsports_tv",
+        "name": "Kênh Truyền Hình Thể Thao",
+        "version": "1.0.0",
+        "baseUrl": "https://onsports.vn",
+        "type": "IPTV",             // ⭐ Đánh dấu plugin loại IPTV
+        "playerType": "exoplayer"   // Khuyến nghị dùng exoplayer
+    });
+}
+```
+
+#### 2. Trả về luồng phát Kênh trực tiếp trong `parseDetailResponse()`:
+
+- **Dạng HLS (.m3u8) / MP4 thông thường**:
+```javascript
+function parseDetailResponse(html, url) {
+    return JSON.stringify({
+        "url": "https://live.example.com/vtvcab1/index.m3u8",
+        "mimeType": "application/x-mpegURL",
+        "headers": {
+            "User-Agent": "Mozilla/5.0 ...",
+            "Referer": "https://example.com/"
+        }
+    });
+}
+```
+
+- **Dạng DASH (.mpd) kèm ClearKey DRM**:
+```javascript
+function parseDetailResponse(html, url) {
+    return JSON.stringify({
+        "url": "https://live.example.com/channel/manifest.mpd",
+        "mimeType": "application/dash+xml",
+        "drmType": "clearkey",
+        "drmKid": "c410ddc6a75244639fd0561fba5ef19b",
+        "drmKey": "30d13ea42031b9ff8271e5dc37d90e10",
+        "headers": {
+            "User-Agent": "Mozilla/5.0 ...",
+            "Referer": "https://example.com/"
+        }
+    });
+}
+```
+
+---
+
 ## 🧪 Mẹo Debug
 
 ### Trong tester.html:
