@@ -510,18 +510,49 @@ function parseDetailResponse(html, episodeUrl) {
 }
 ```
 
-##### Ví dụ 2: Đóng gói dạng JSON String (Khi cần lưu nhiều thông tin)
+##### Ví dụ 2: Mã hóa Base64 cho Dữ liệu LỚN / Phức Tạp (Tránh vỡ cú pháp URL)
+
+Khi cần truyền Object chứa nhiều dữ liệu (Cookie, Token JWT, bối cảnh Session...), bạn dùng `btoa()` để nén thành chuỗi Base64 1 dòng chữ an toàn:
+
 ```javascript
+// 1. Ở parseListResponse: Mã hóa Object thành Base64 đính vào ID
 function parseListResponse(html) {
-    var payload = { slug: "phim-demo", token: "tok_999", sign: "sig_abc" };
+    var bigData = {
+        token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+        session: "sess_9988776655",
+        quality: "1080p"
+    };
+
+    // Nén Object thành chuỗi Base64 an toàn 1 dòng
+    var encodedData = btoa(JSON.stringify(bigData));
+
     return JSON.stringify({
-        "items": [{ "id": JSON.stringify(payload), "title": "Phim Demo" }]
+        "items": [
+            {
+                "id": "phim-demo|" + encodedData,
+                "title": "Phim Demo"
+            }
+        ]
     });
 }
 
-function parseMovieDetail(html) {
-    var payload = JSON.parse(slugFromApp);
-    console.log(payload.token); // "tok_999"
+// 2. Ở parseDetailResponse: Giải mã Base64 ngược lại thành Object
+function parseDetailResponse(html, episodeUrl) {
+    var data = {};
+    if (episodeUrl && episodeUrl.indexOf("|") > -1) {
+        var base64Str = episodeUrl.split("|")[1];
+        try {
+            data = JSON.parse(atob(base64Str)); // Giải mã Base64 ngược lại
+        } catch(e) {}
+    }
+
+    console.log(data.token);   // "eyJhbGciOi..."
+    console.log(data.session); // "sess_9988776655"
+
+    return JSON.stringify({
+        "url": "https://server.com/stream?token=" + data.token,
+        "isEmbed": false
+    });
 }
 ```
 
