@@ -457,6 +457,76 @@ function parseDetailResponse(html, url) {
 
 ---
 
+### 💾 Kỹ Thuật Truyền Dữ Liệu / Cache Biến Giữa Các Bước (State Management)
+
+Do engine QuickJS trong App chạy độc lập từng phiên (stateless), các biến toàn cục (global variables) sẽ bị xóa RAM sau khi chuyển màn hình hoặc reload engine.
+
+#### **Giải pháp chuẩn:** Đính kèm dữ liệu/token/key vào thuộc tính `id` hoặc `slug`
+
+Muốn mang dữ liệu gì từ `parseListResponse()` sang `parseMovieDetail()` hay `parseDetailResponse()`, bạn nhúng thông tin đó vào `id` / `slug` của item.
+
+##### Ví dụ 1: Nối chuỗi bằng dấu `|` (Đơn giản, khuyến nghị)
+```javascript
+// 1. Ở parseListResponse: Nối key vào id phim
+function parseListResponse(html) {
+    var secretKey = "ABC123XYZ";
+    return JSON.stringify({
+        "items": [
+            {
+                "id": "phim-hanh-dong-1|" + secretKey, // Nối key vào id
+                "title": "Phim Hay 1"
+            }
+        ]
+    });
+}
+
+// 2. Ở parseMovieDetail: Tách key ra dùng & truyền tiếp vào episode.id
+function parseMovieDetail(html) {
+    var rawId = "phim-hanh-dong-1|ABC123XYZ"; // slug/id nhận được
+    var parts = rawId.split("|");
+    var realSlug = parts[0];
+    var myKey = parts[1]; // => "ABC123XYZ"
+
+    return JSON.stringify({
+        "id": realSlug,
+        "title": "Phim Hay 1",
+        "servers": [{
+            "name": "Server 1",
+            "episodes": [{
+                "name": "Tập 1",
+                "id": "tap-1|" + myKey // Truyền tiếp key vào id tập phim
+            }]
+        }]
+    });
+}
+
+// 3. Ở parseDetailResponse: Lấy lại key dùng để bóc link stream
+function parseDetailResponse(html, episodeUrl) {
+    var myKey = episodeUrl.split("|")[1]; // => "ABC123XYZ"
+    return JSON.stringify({
+        "url": "https://server.com/stream?key=" + myKey,
+        "isEmbed": false
+    });
+}
+```
+
+##### Ví dụ 2: Đóng gói dạng JSON String (Khi cần lưu nhiều thông tin)
+```javascript
+function parseListResponse(html) {
+    var payload = { slug: "phim-demo", token: "tok_999", sign: "sig_abc" };
+    return JSON.stringify({
+        "items": [{ "id": JSON.stringify(payload), "title": "Phim Demo" }]
+    });
+}
+
+function parseMovieDetail(html) {
+    var payload = JSON.parse(slugFromApp);
+    console.log(payload.token); // "tok_999"
+}
+```
+
+---
+
 ## 🧪 Mẹo Debug
 
 ### Trong tester.html:
