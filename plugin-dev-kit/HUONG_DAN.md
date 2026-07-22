@@ -248,6 +248,67 @@ App sẽ POST tới URL đó → nhận response → gọi `parseEmbedResponse(h
 
 ---
 
+### 🎬 Chế Độ `embedtoexoplay` & EmbedSniffer (Nâng Cao)
+
+Khi plugin khai báo `"playerType": "embedtoexoplay"` trong `getManifest()`, ứng dụng sẽ dùng **EmbedSniffer** (WebView chạy ngầm) để tải trang web embed, tự động dò tìm link stream (.m3u8, .mp4, ...) và chuyển cho ExoPlayer phát native.
+
+#### Các thuộc tính điều khiển qua `headers` trong `parseDetailResponse`:
+
+| Header Key | Mục đích | Ví dụ |
+|------------|----------|-------|
+| `Custom-Js` | Chuỗi JavaScript được inject vào WebView ngầm sau khi trang tải xong. Có thể chủ động lấy link và gọi `SnifferBridge.onVideoDetected(link)` | `"(function() { SnifferBridge.onVideoDetected(url); })();"` |
+| `Stream-Regex` | Chuỗi RegEx tùy chỉnh để EmbedSniffer lọc bắt link mạng thay cho mẫu mặc định (.m3u8, .mp4...) | `"https?:\\/\\/[^\"'\\s]+\\/index\\.m3u8"` |
+| `User-Agent` | Đặt User-Agent cho WebView ngầm | `"Mozilla/5.0 ..."` |
+| `Referer` | Đặt Referer cho WebView ngầm | `"https://site.com/"` |
+
+#### Ví dụ 1: Inject `Custom-Js` để gửi link callback về ExoPlayer
+```javascript
+function parseDetailResponse(html, url) {
+    var customJsCode = `(function() {
+        if (window._vaapp_custom) return;
+        window._vaapp_custom = true;
+        
+        // Tìm player hoặc thẻ video trên trang web ngầm
+        var v = document.querySelector('video');
+        if (v && v.src && v.src.indexOf('http') === 0) {
+            // Gửi callback trực tiếp về cho ExoPlayer phát
+            SnifferBridge.onVideoDetected(v.src);
+        }
+    })();`;
+
+    return JSON.stringify({
+        "url": "https://gamomephim.com/embed/123",
+        "isEmbed": true,
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://gamomephim.com/",
+            "Custom-Js": customJsCode
+        }
+    });
+}
+```
+
+> ⚠️ **LƯU Ý QUAN TRỌNG:**
+> 1. `Custom-Js` trong `headers` phải là một **chuỗi dạng String** chứa mã JS, KHÔNG viết hàm tự gọi IIFE trực tiếp vì QuickJS engine trên Android app sẽ bị crash do không có đối tượng `window`.
+> 2. `SnifferBridge.onVideoDetected(url)` là hàm Bridge native của App. Ngay khi được gọi, WebView ngầm sẽ lập tức đóng lại và ExoPlayer sẽ nhận link stream để phát.
+
+#### Ví dụ 2: Lọc link theo `Stream-Regex` tùy chỉnh
+```javascript
+function parseDetailResponse(html, url) {
+    return JSON.stringify({
+        "url": "https://gamomephim.com/embed/123",
+        "isEmbed": true,
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://gamomephim.com/",
+            "Stream-Regex": "https?:\\/\\/[^\"'\\s]+\\/hls\\/[^\"'\\s]+\\.m3u8"
+        }
+    });
+}
+```
+
+---
+
 ### `parseEmbedResponse(html, url)` — Xử lý embed nhiều bước
 
 Hàm này **chỉ cần viết** khi trang của bạn dùng luồng phức tạp (AJAX → iframe → stream). App gọi hàm này trong vòng lặp.
