@@ -9,7 +9,7 @@ function getManifest() {
         "id": "phimchill",          
         "name": "Phim Chill",
         "description": "Phim online chất lượng cao",
-        "version": "3.8.0",             
+        "version": "3.8.1",             
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/motherless_logo.jpgphimchill.ico", 
         "isEnabled": true,
@@ -21,7 +21,7 @@ function getManifest() {
 function getHomeSections() {
     return JSON.stringify([{
         "slug": "danh-sach/phim-moi.html",
-        "title": "Phim Mới",
+        "title": "Phim Mới Đề Cử",
         "type": "Grid"
     }]);
 }
@@ -212,7 +212,7 @@ function parseMovieDetail(htmlContent, url) {
         rmatch = htmlContent.match(/meta\s+property="video:duration"\s+content="([^"]+)"/i);
         if (rmatch && rmatch[1]) lduran = rmatch[1];
         
-        // Quét tập phim chuẩn xác từ các khối server của trang xem phim
+        // Quét toàn bộ danh sách tập sử dụng cơ chế DOM thông minh từ code mẫu
         var servers = [];
         _$(htmlContent).find('span:content("Danh Sách")').each(function(index, el) {
             var $box = this.next();
@@ -243,7 +243,39 @@ function parseMovieDetail(htmlContent, url) {
             }
         });
 
-        // Sắp xếp thứ tự các server ưu tiên
+        // Fallback dự phòng nếu không tìm thấy thẻ span chứa chữ "Danh Sách"
+        if (servers.length === 0) {
+            var fallbackEpisodes = [];
+            var aRegex = /<a[^>]*href="([^"]+\/phim\/[^"]+\/tap-[^"]+\.html)"[^>]*>([\s\S]*?)<\/a>/gi;
+            var match;
+            var seen = {};
+            while ((match = aRegex.exec(htmlContent)) !== null) {
+                var epUrl = match[1].trim();
+                var epText = match[2].replace(/<[^>]*>/g, '').trim();
+                if (epUrl.indexOf('http') !== 0) epUrl = BASEURL + (epUrl.startsWith('/') ? '' : '/') + epUrl;
+                if (epText && !seen[epUrl]) {
+                    fallbackEpisodes.push({
+                        id: epUrl,
+                        name: isNaN(epText) ? epText : ("Tập " + epText),
+                        slug: epUrl.split('/').pop()
+                    });
+                    seen[epUrl] = true;
+                }
+            }
+            if (fallbackEpisodes.length > 0) {
+                servers.push({
+                    name: "Danh Sách Vietsub",
+                    episodes: fallbackEpisodes
+                });
+            } else {
+                servers.push({
+                    name: "Phim Lẻ",
+                    episodes: [{ id: id, name: "Full", slug: "full" }]
+                });
+            }
+        }
+
+        // Sắp xếp ưu tiên các server
         servers.sort((a, b) => {
             const getPriority = (name) => {
                 if (name.includes("KK") || name.includes("OP")) return 1;
@@ -295,12 +327,6 @@ function parseMovieDetail(htmlContent, url) {
     }
 }
 
-function formatEpisode(numStr) {
-    var num = parseInt(numStr, 10);
-    if (isNaN(num)) return "01"; 
-    return num < 10 ? "0" + num : "" + num;
-}
-
 function parseDetailResponse(html, url) {
     try {
         var streamUrl = "";
@@ -311,10 +337,8 @@ function parseDetailResponse(html, url) {
             VDtype = "m3u8";
         });
         var embed = _$(html).find('a[data-type="embed"]').attr("data-link");
-        var typevideo = "true";
         
         if (!streamUrl) {
-            typevideo = "false";
             if (embed) {
                 streamUrl = embed;
                 VDtype = "embed";
@@ -322,8 +346,6 @@ function parseDetailResponse(html, url) {
                 streamUrl = url;
             }
         }
-        
-        var customJs = textJS(typevideo);
         
         if (VDtype == "m3u8") {
             return JSON.stringify({
@@ -343,8 +365,7 @@ function parseDetailResponse(html, url) {
                 "headers": {
                     "Referer": BASEURL,
                     "Origin": BASEURL,
-                    "User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-                    "Custom-Js": customJs.trim()
+                    "User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
                 },
                 "subtitles": []
             });
@@ -392,32 +413,6 @@ the-loai/hinh-su.html@@Hình Sự
 the-loai/bi-an.html@@Bí Ẩn
 the-loai/phim-18.html@@Phim 18+
 `;
-}
-
-// Script tiêm vào Webview giúp chống Autoplay hiệu quả để bạn thong thả chọn tập
-function textJS($links) {
-    return `
-    LINKVIDEO = ${JSON.stringify($links)};
-    window.addEventListener('DOMContentLoaded', function() {
-        var vids = document.querySelectorAll('video, iframe');
-        for(var i=0; i<vids.length; i++) {
-            try { 
-                vids[i].pause(); 
-                if(vids[i].tagName === 'VIDEO') {
-                    vids[i].removeAttribute('autoplay');
-                }
-            } catch(e){}
-        }
-    });
-    setInterval(function() {
-        var vids = document.querySelectorAll('video');
-        for(var i=0; i<vids.length; i++) {
-            if(!vids[i].paused && vids[i].currentTime < 2) {
-                vids[i].pause();
-            }
-        }
-    }, 500);
-    `;
 }
 
 function buildMenu(listurl) {
