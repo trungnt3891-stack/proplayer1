@@ -9,12 +9,12 @@ function getManifest() {
         "id": "phimchill",          
         "name": "Phim Chill",
         "description": "Phim online chất lượng cao",
-        "version": "2.1.0",             
+        "version": "2.1.1",             
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/motherless_logo.jpgphimchill.ico", 
         "isEnabled": true,
         "type": "MOVIE",
-        "playerType": "auto" // Quay lại dạng player chuẩn gốc của ứng dụng
+        "playerType": "auto"
     });
 }
 
@@ -217,7 +217,6 @@ function parseMovieDetail(htmlContent, url) {
         var episodes = [];
         var seenEp = {};
         
-        // Quét toàn bộ danh sách tập thực tế từ trang HTML
         var aRegex = /<a[^>]*href="([^"]+\/phim\/[^"]+\/tap-[^"]+\.html)"[^>]*>([\s\S]*?)<\/a>/gi;
         var match;
         while ((match = aRegex.exec(htmlContent)) !== null) {
@@ -282,7 +281,7 @@ function parseMovieDetail(htmlContent, url) {
 }
 
 // =============================================================================
-// PARSER CHI TIẾT TẬP PHIM & TRẢ LINK PLAYER CHUẨN KHÔNG AUTOPLAY
+// PARSER CHI TIẾT TẬP PHIM & TRẢ LINK PLAYER (TẮT AUTOPLAY & FULLSCREEN)
 // =============================================================================
 
 function parseDetailResponse(html, url) {
@@ -318,6 +317,9 @@ function parseDetailResponse(html, url) {
             "url": streamUrl,
             "isEmbed": isEmbed,
             "mimeType": isEmbed ? "" : mimeType,
+            "autoplay": false,       // Tắt hoàn toàn tự động phát
+            "autostart": false,      // Tắt tự động chạy
+            "fullscreen": false,     // Tắt tự động phóng to màn hình
             "headers": {
                 "Referer": BASEURL,
                 "Origin": BASEURL,
@@ -329,6 +331,9 @@ function parseDetailResponse(html, url) {
         return JSON.stringify({
             url: url,
             isEmbed: true,
+            autoplay: false,
+            autostart: false,
+            fullscreen: false,
             headers: {}
         });
     }
