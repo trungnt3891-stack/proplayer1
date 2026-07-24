@@ -9,12 +9,12 @@ function getManifest() {
         "id": "phimchill",          
         "name": "Phim Chill",
         "description": "Phim online chất lượng cao",
-        "version": "2.1.6",             
+        "version": "3.0.0",             
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/motherless_logo.jpgphimchill.ico", 
         "isEnabled": true,
         "type": "MOVIE",
-        "playerType": "webview" // Mở webview để chọn tập trực quan, cuộn mượt mà không giới hạn
+        "playerType": "auto" // Dùng player chuẩn, xử lý bóc tách tập sâu bên trong hoàn toàn không qua webview
     });
 }
 
@@ -192,7 +192,7 @@ function parseSearchResponse(html) {
 }
 
 // =============================================================================
-// PARSER CHI TIẾT PHIM
+// PARSER CHI TIẾT PHIM & CÀO SÂU DANH SÁCH TẬP
 // =============================================================================
 
 function parseMovieDetail(htmlContent, url) {
@@ -214,15 +214,70 @@ function parseMovieDetail(htmlContent, url) {
         rmatch = htmlContent.match(/meta\s+property="og:description"\s+content="([^"]+)"/i);
         if (rmatch && rmatch[1]) ldes = rmatch[1];
 
-        // Giao diện trỏ vào trang chính để người dùng chọn tập trực quan
-        var servers = [{
-            name: "Chọn tập phim",
-            episodes: [{
-                id: id,
-                name: "Mở danh sách tập phim",
-                slug: "webview"
-            }]
-        }];
+        var episodes = [];
+        var seenEp = {};
+        
+        // Quét sâu vào toàn bộ mã nguồn HTML để bóc tách tất cả các liên kết tập phim thực tế
+        var epRegex = /href=["']([^"']+\/tap-[^"']+\.html)["'][^>]*>([\s\S]*?)<\/a>/gi;
+        var match;
+        while ((match = epRegex.exec(htmlContent)) !== null) {
+            var epUrl = match[1].trim();
+            var epText = match[2].replace(/<[^>]*>/g, '').trim();
+
+            if (epUrl.indexOf('http') !== 0) {
+                epUrl = BASEURL + (epUrl.startsWith('/') ? '' : '/') + epUrl;
+            }
+
+            if (epText && !seenEp[epUrl]) {
+                var cleanName = isNaN(epText) ? epText : ("Tập " + epText);
+                episodes.push({
+                    id: epUrl,
+                    name: cleanName,
+                    slug: epUrl.split('/').pop()
+                });
+                seenEp[epUrl] = true;
+            }
+        }
+
+        // Dự phòng quét diện rộng nếu cấu trúc thẻ a khác biệt
+        if (episodes.length === 0) {
+            var generalRegex = /href=["']([^"']+\/phim\/[^"']+\/[^"']+\.html)["']/gi;
+            while ((match = generalRegex.exec(htmlContent)) !== null) {
+                var gUrl = match[1].trim();
+                if (gUrl.indexOf('tap-') !== -1) {
+                    if (gUrl.indexOf('http') !== 0) gUrl = BASEURL + (gUrl.startsWith('/') ? '' : '/') + gUrl;
+                    if (!seenEp[gUrl]) {
+                        var numMatch = gUrl.match(/tap-([^_.]+)/i);
+                        var epNum = numMatch ? numMatch[1] : "1";
+                        episodes.push({
+                            id: gUrl,
+                            name: "Tập " + epNum,
+                            slug: gUrl.split('/').pop()
+                        });
+                        seenEp[gUrl] = true;
+                    }
+                }
+            }
+        }
+
+        var servers = [];
+        if (episodes.length > 0) {
+            episodes.sort(function(a, b) {
+                var numA = parseInt(a.name.replace(/\D/g, '')) || 0;
+                var numB = parseInt(b.name.replace(/\D/g, '')) || 0;
+                return numA - numB;
+            });
+
+            servers.push({
+                name: "Danh Sách Vietsub",
+                episodes: episodes
+            });
+        } else {
+            servers.push({
+                name: "Phim Lẻ",
+                episodes: [{ id: id, name: "Full", slug: "full" }]
+            });
+        }
 
         return JSON.stringify({
             id: id,
@@ -246,26 +301,60 @@ function parseMovieDetail(htmlContent, url) {
 }
 
 // =============================================================================
-// PARSER CHI TIẾT TẬP & MỞ KHÓA CUỘN TRANG WEBVIEW
+// PARSER CHI TIẾT TẬP & TRẢ LINK STREAM (BỎ QUA HOÀN TOÀN WEBVIEW)
 // =============================================================================
 
 function parseDetailResponse(html, url) {
-    var pureScrollScript = `
-        (function() {
-            // Mở khóa toàn bộ khung nhìn để cuộn mượt mà xem danh sách tập dài hàng trăm tập
-            var styleTag = document.createElement('style');
-            styleTag.innerHTML = 'html, body { height: auto !important; min-height: 100% !important; overflow: scroll !important; -webkit-overflow-scrolling: touch !important; }';
-            document.head.appendChild(styleTag);
-        })();
-    `;
+    try {
+        var streamUrl = "";
+        var mimeType = "application/x-mpegURL";
+        var isEmbed = false;
 
-    return JSON.stringify({
-        "url": url,
-        "isEmbed": true,
-        "headers": {},
-        "subtitles": [],
-        "injectScript": pureScrollScript
-    });
+        var m3u8Match = html.match(/data-type="m3u8"[^>]*data-link="([^"]+)"/i) || html.match(/data-link="([^"]+\.m3u8[^"]*)"/i);
+        if (m3u8Match) {
+            streamUrl = m3u8Match[1];
+        }
+
+        if (!streamUrl) {
+            var embedMatch = html.match(/data-type="embed"[^>]*data-link="([^"]+)"/i);
+            if (embedMatch) {
+                streamUrl = embedMatch[1];
+                isEmbed = true;
+            }
+        }
+
+        if (!streamUrl) {
+            var genericMatch = html.match(/(https?:\/\/[^"'\s<>]*\.m3u8[^"'\s<>]*)/i);
+            if (genericMatch) {
+                streamUrl = genericMatch[1];
+            } else {
+                streamUrl = url;
+                isEmbed = true;
+            }
+        }
+
+        return JSON.stringify({
+            "url": streamUrl,
+            "isEmbed": isEmbed,
+            "mimeType": isEmbed ? "" : mimeType,
+            "autoplay": false,
+            "autostart": false,
+            "headers": {
+                "Referer": BASEURL,
+                "Origin": BASEURL,
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
+            },
+            "subtitles": []
+        });
+    } catch (e) {
+        return JSON.stringify({
+            url: url,
+            isEmbed: true,
+            autoplay: false,
+            autostart: false,
+            headers: {}
+        });
+    }
 }
 
 function parseCategoriesResponse(apiResponseJson) {
