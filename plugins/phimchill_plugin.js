@@ -9,12 +9,12 @@ function getManifest() {
         "id": "phimchill",          
         "name": "Phim Chill",
         "description": "Phim online chất lượng cao",
-        "version": "2.1.5",             
+        "version": "2.1.6",             
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/motherless_logo.jpgphimchill.ico", 
         "isEnabled": true,
         "type": "MOVIE",
-        "playerType": "webview"
+        "playerType": "webview" // Mở webview để chọn tập trực quan, cuộn mượt mà không giới hạn
     });
 }
 
@@ -192,7 +192,7 @@ function parseSearchResponse(html) {
 }
 
 // =============================================================================
-// PARSER CHI TIẾT PHIM & WEBVIEW HANDLER
+// PARSER CHI TIẾT PHIM
 // =============================================================================
 
 function parseMovieDetail(htmlContent, url) {
@@ -214,23 +214,12 @@ function parseMovieDetail(htmlContent, url) {
         rmatch = htmlContent.match(/meta\s+property="og:description"\s+content="([^"]+)"/i);
         if (rmatch && rmatch[1]) ldes = rmatch[1];
 
-        var xemPhimMatch = htmlContent.match(/href="([^"]+\/phim\/[^"]+\/tap-[^"]*\.html)"/i) || 
-                           htmlContent.match(/href="([^"]+\/tap-[^"]*)"/i) ||
-                           htmlContent.match(/href="([^"]+)"[^>]*>[^<]*Xem Phim/i);
-        
-        var targetUrl = id;
-        if (xemPhimMatch) {
-            targetUrl = xemPhimMatch[1];
-            if (targetUrl.indexOf('http') !== 0) {
-                targetUrl = BASEURL + (targetUrl.startsWith('/') ? '' : '/') + targetUrl;
-            }
-        }
-
+        // Giao diện trỏ vào trang chính để người dùng chọn tập trực quan
         var servers = [{
             name: "Chọn tập phim",
             episodes: [{
-                id: targetUrl,
-                name: "Chọn tập phim",
+                id: id,
+                name: "Mở danh sách tập phim",
                 slug: "webview"
             }]
         }];
@@ -256,46 +245,17 @@ function parseMovieDetail(htmlContent, url) {
     }
 }
 
-// Xử lý Webview chuẩn mực: Mở khóa cuộn danh sách dài, chặn autoplay triệt để và phóng to dựa trên sự kiện click thật
+// =============================================================================
+// PARSER CHI TIẾT TẬP & MỞ KHÓA CUỘN TRANG WEBVIEW
+// =============================================================================
+
 function parseDetailResponse(html, url) {
-    var eventDrivenScript = `
+    var pureScrollScript = `
         (function() {
-            // Mở khóa thanh cuộn để kéo xem trọn vẹn danh sách tập dài
-            var cssFix = document.createElement('style');
-            cssFix.innerHTML = 'html, body { height: auto !important; min-height: 100% !important; overflow: scroll !important; -webkit-overflow-scrolling: touch !important; }';
-            document.head.appendChild(cssFix);
-
-            // Chặn autoplay ngay lập tức khi load trang
-            window.addEventListener('DOMContentLoaded', function() {
-                var mediaElements = document.querySelectorAll('video, iframe');
-                for(var i = 0; i < mediaElements.length; i++) {
-                    try {
-                        mediaElements[i].pause();
-                        mediaElements[i].removeAttribute('autoplay');
-                    } catch(e) {}
-                }
-            });
-
-            // Vòng lặp giám sát ngăn chặn phát ngầm
-            setInterval(function() {
-                var videos = document.querySelectorAll('video');
-                for(var j = 0; j < videos.length; j++) {
-                    if(!videos[j].paused && videos[j].currentTime < 2) {
-                        videos[j].pause();
-                    }
-                }
-            }, 200);
-
-            // Lắng nghe chính xác thao tác click của người dùng lên nút chọn tập hoặc server để phóng to mượt mà
-            document.addEventListener('click', function(e) {
-                var clickedElement = e.target.closest('a, button, .streaming-server');
-                if (clickedElement && clickedElement.href && clickedElement.href.indexOf('tap-') !== -1) {
-                    var playerNode = document.querySelector('video') || document.querySelector('iframe');
-                    if (playerNode && playerNode.requestFullscreen) {
-                        playerNode.requestFullscreen().catch(function(){});
-                    }
-                }
-            });
+            // Mở khóa toàn bộ khung nhìn để cuộn mượt mà xem danh sách tập dài hàng trăm tập
+            var styleTag = document.createElement('style');
+            styleTag.innerHTML = 'html, body { height: auto !important; min-height: 100% !important; overflow: scroll !important; -webkit-overflow-scrolling: touch !important; }';
+            document.head.appendChild(styleTag);
         })();
     `;
 
@@ -304,7 +264,7 @@ function parseDetailResponse(html, url) {
         "isEmbed": true,
         "headers": {},
         "subtitles": [],
-        "injectScript": eventDrivenScript
+        "injectScript": pureScrollScript
     });
 }
 
