@@ -250,29 +250,51 @@ App sẽ POST tới URL đó → nhận response → gọi `parseEmbedResponse(h
 
 ### 🎬 Chế Độ `embedtoexoplay` & EmbedSniffer (Nâng Cao)
 
-Khi plugin khai báo `"playerType": "embedtoexoplay"` trong `getManifest()`, ứng dụng sẽ dùng **EmbedSniffer** (WebView chạy ngầm) để tải trang web embed, tự động dò tìm link stream (.m3u8, .mp4, ...) và chuyển cho ExoPlayer phát native.
+Khi plugin khai báo `"playerType": "embedtoexoplay"` trong `getManifest()`, ứng dụng sẽ dùng **EmbedSniffer** (WebView chạy ngầm với màn hình Loading đen che bên trên) để tải trang web embed, tự động dò tìm link stream (.m3u8, .mp4, ...) và chuyển cho ExoPlayer phát native. Người dùng sẽ không nhìn thấy giao diện thô hay quảng cáo của trang web embed.
 
 #### Các thuộc tính điều khiển qua `headers` trong `parseDetailResponse`:
 
 | Header Key | Mục đích | Ví dụ |
 |------------|----------|-------|
-| `Custom-Js` | Chuỗi JavaScript được inject vào WebView ngầm sau khi trang tải xong. Có thể chủ động lấy link và gọi `SnifferBridge.onVideoDetected(link)` | `"(function() { SnifferBridge.onVideoDetected(url); })();"` |
+| `Block-Ads` | Bật bộ chặn quảng cáo mạnh mẽ (AdBlocker) cho WebView. Tự động chặn 50+ mạng quảng cáo, khóa popunder/popup `window.open`, chèn CSS ẩn quảng cáo và xóa các lớp phủ trong suốt (click-traps). | `"true"` |
+| `Custom-Js` | Chuỗi JavaScript được inject vào WebView **ngay khi bắt đầu tải trang** (`onPageStarted` — trước khi script của web gốc chạy). Có thể chủ động trích xuất link và gọi `SnifferBridge.play(url, headers)` | `"(function() { SnifferBridge.play(url); })();"` |
 | `Stream-Regex` | Chuỗi RegEx tùy chỉnh để EmbedSniffer lọc bắt link mạng thay cho mẫu mặc định (.m3u8, .mp4...) | `"https?:\\/\\/[^\"'\\s]+\\/index\\.m3u8"` |
-| `User-Agent` | Đặt User-Agent cho WebView ngầm | `"Mozilla/5.0 ..."` |
-| `Referer` | Đặt Referer cho WebView ngầm | `"https://site.com/"` |
+| `Block-Scripts` | Danh sách từ khóa/mẫu đường dẫn script cần chặn trong WebView (phân cách bằng dấu phẩy) | `"adsterra,popads,clickadu"` |
+| `User-Agent` | Đặt User-Agent cho WebView | `"Mozilla/5.0 ..."` |
+| `Referer` | Đặt Referer cho WebView | `"https://site.com/"` |
 
-#### Ví dụ 1: Inject `Custom-Js` để gửi link callback về ExoPlayer
+---
+
+### 🌉 Danh Sách Các Hàm Native JS Bridge (`SnifferBridge`)
+
+Khi viết `Custom-Js` hoặc mã xử lý trong WebView, plugin có thể sử dụng các hàm Native của **`SnifferBridge`** để chủ động truyền link stream và Header cho ExoPlayer phát:
+
+| Hàm Native | Tham số | Mô tả |
+|------------|---------|-------|
+| `SnifferBridge.play(url)` | `url`: String | Truyền link stream trực tiếp cho ExoPlayer phát |
+| `SnifferBridge.play(url, headersJson)` | `url`: String, `headersJson`: JSON String | Truyền link stream kèm Header tùy chỉnh (ví dụ: `Referer`, `User-Agent`) |
+| `SnifferBridge.playVideo(url, headersJson)` | Bí danh | Giống `play()` |
+| `SnifferBridge.playExoPlayer(url, headersJson)` | Bí danh | Giống `play()` |
+| `SnifferBridge.sendToPlayer(url, headersJson)` | Bí danh | Giống `play()` |
+| `SnifferBridge.onVideoDetected(url)` | `url`: String | Hàm callback cũ (tương thích ngược) |
+
+#### Ví dụ 1: Inject `Custom-Js` chạy sớm và truyền Header JSON về ExoPlayer
 ```javascript
 function parseDetailResponse(html, url) {
     var customJsCode = `(function() {
         if (window._vaapp_custom) return;
         window._vaapp_custom = true;
         
-        // Tìm player hoặc thẻ video trên trang web ngầm
+        // Custom JS chạy ở onPageStarted (trước khi script của web gốc thực thi)
+        // Bạn có thể override window.fetch, XMLHttpRequest hoặc tìm thẻ video:
         var v = document.querySelector('video');
         if (v && v.src && v.src.indexOf('http') === 0) {
-            // Gửi callback trực tiếp về cho ExoPlayer phát
-            SnifferBridge.onVideoDetected(v.src);
+            var headers = JSON.stringify({
+                "Referer": "https://gamomephim.com/",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+            });
+            // Gửi link + header về cho ExoPlayer phát
+            SnifferBridge.play(v.src, headers);
         }
     })();`;
 
@@ -280,6 +302,7 @@ function parseDetailResponse(html, url) {
         "url": "https://gamomephim.com/embed/123",
         "isEmbed": true,
         "headers": {
+            "Block-Ads": "true",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Referer": "https://gamomephim.com/",
             "Custom-Js": customJsCode
@@ -288,17 +311,19 @@ function parseDetailResponse(html, url) {
 }
 ```
 
-> ⚠️ **LƯU Ý QUAN TRỌNG:**
-> 1. `Custom-Js` trong `headers` phải là một **chuỗi dạng String** chứa mã JS, KHÔNG viết hàm tự gọi IIFE trực tiếp vì QuickJS engine trên Android app sẽ bị crash do không có đối tượng `window`.
-> 2. `SnifferBridge.onVideoDetected(url)` là hàm Bridge native của App. Ngay khi được gọi, WebView ngầm sẽ lập tức đóng lại và ExoPlayer sẽ nhận link stream để phát.
+> ⚠️ **LƯU Ý QUAN TRỌNG VỀ `Custom-Js`:**
+> 1. `Custom-Js` được tự động chèn **sớm ở `onPageStarted`** (trước khi các đoạn script HTML của trang web gốc được thực thi). Nếu script của bạn muốn đợi DOM tải xong, hãy dùng `document.addEventListener("DOMContentLoaded", ...)` hoặc `if (document.readyState === "loading")`.
+> 2. `Custom-Js` trong `headers` phải là một **chuỗi dạng String** chứa mã JS. KHÔNG viết IIFE trực tiếp bên ngoài hàm `parseDetailResponse` vì engine QuickJS trên Android app sẽ bị crash do không có đối tượng `window`.
+> 3. `SnifferBridge.play(url, headersJson)` là hàm Bridge native của App. Ngay khi được gọi, WebView ngầm sẽ lập tức đóng lại và ExoPlayer sẽ nhận link stream để phát.
 
-#### Ví dụ 2: Lọc link theo `Stream-Regex` tùy chỉnh
+#### Ví dụ 2: Lọc link theo `Stream-Regex` tùy chỉnh & Bật AdBlock
 ```javascript
 function parseDetailResponse(html, url) {
     return JSON.stringify({
         "url": "https://gamomephim.com/embed/123",
         "isEmbed": true,
         "headers": {
+            "Block-Ads": "true",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Referer": "https://gamomephim.com/",
             "Stream-Regex": "https?:\\/\\/[^\"'\\s]+\\/hls\\/[^\"'\\s]+\\.m3u8"

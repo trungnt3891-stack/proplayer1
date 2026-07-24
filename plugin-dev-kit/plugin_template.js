@@ -167,6 +167,8 @@ function parseDetailResponse(html, url) {
         url: "https://cdn.example.com/video.m3u8",
         headers: {
             "Referer": "https://domain-phim-cua-ban.com"
+            // "Block-Ads": "true", // Bật chặn quảng cáo tự động cho WebView
+            // "Custom-Js": "SnifferBridge.play('https://cdn.com/stream.m3u8', JSON.stringify({'Referer': 'https://site.com/'}));"
         },
         subtitles: []
         // isEmbed: false,     // true nếu cần fetch tiếp (xem parseEmbedResponse)
