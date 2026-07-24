@@ -7,7 +7,8 @@ function getManifest() {
         "id": "yanhh3d",
         "name": "YanHH3D",
         "version": "4.1.0", // Cập nhật: Tự động bắt link độ phân giải cao nhất (Ưu tiên 4K)
-        "baseUrl": "https://yanhh3d.ac", 
+        "baseUrl": "https://yanhh3d.love
+            ", 
         "iconUrl": "https://yanhh3d.ac/storage/settings/August2024/YOoAwtlobLbwKhiFwRZv.png",
         "isEnabled": true,
         "isAdult": false,
