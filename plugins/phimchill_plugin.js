@@ -9,12 +9,12 @@ function getManifest() {
         "id": "phimchill",          
         "name": "Phim Chill",
         "description": "Phim online chất lượng cao",
-        "version": "3.1.0",             
+        "version": "2.1.7",             
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/motherless_logo.jpgphimchill.ico", 
         "isEnabled": true,
         "type": "MOVIE",
-        "playerType": "auto"
+        "playerType": "auto" // Dùng player native để hiển thị danh sách tập chuẩn, cuộn mượt mà không bị lỗi webview
     });
 }
 
@@ -104,7 +104,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSERS - LOAD TRANG CHỦ & THƯ MỤC (GIỮ NGUYÊN BẢN ỔN ĐỊNH)
+// PARSERS - LOAD TRANG CHỦ & THƯ MỤC
 // =============================================================================
 
 function parseListResponse(html) {
@@ -192,7 +192,7 @@ function parseSearchResponse(html) {
 }
 
 // =============================================================================
-// PARSER CHI TIẾT PHIM & BÓC TÁCH DANH SÁCH TẬP THỰC TẾ
+// PARSER CHI TIẾT PHIM & QUÉT DANH SÁCH TẬP
 // =============================================================================
 
 function parseMovieDetail(htmlContent, url) {
@@ -214,13 +214,13 @@ function parseMovieDetail(htmlContent, url) {
         rmatch = htmlContent.match(/meta\s+property="og:description"\s+content="([^"]+)"/i);
         if (rmatch && rmatch[1]) ldes = rmatch[1];
 
-        // Quét toàn bộ danh sách tập thực tế từ mã nguồn HTML chuẩn của web
         var episodes = [];
         var seenEp = {};
         
-        var regexEp = /href=["']([^"']+\/tap-[^"']+\.html)["'][^>]*>([\s\S]*?)<\/a>/gi;
+        // Quét toàn bộ danh sách tập từ mã nguồn trang thông tin phim
+        var aRegex = /<a[^>]*href="([^"]+\/phim\/[^"]+\/tap-[^"]+\.html)"[^>]*>([\s\S]*?)<\/a>/gi;
         var match;
-        while ((match = regexEp.exec(htmlContent)) !== null) {
+        while ((match = aRegex.exec(htmlContent)) !== null) {
             var epUrl = match[1].trim();
             var epText = match[2].replace(/<[^>]*>/g, '').trim();
 
@@ -228,33 +228,16 @@ function parseMovieDetail(htmlContent, url) {
                 epUrl = BASEURL + (epUrl.startsWith('/') ? '' : '/') + epUrl;
             }
 
-            if (epText && !seenEp[epUrl]) {
-                var cleanName = isNaN(epText) ? epText : ("Tập " + epText);
+            if (!seenEp[epUrl]) {
+                var numMatch = epUrl.match(/tap-([^_]+)/i) || epUrl.match(/tap-(\d+)/i);
+                var formattedName = numMatch ? ("Tập " + numMatch[1].replace(/-/g, ' ')) : (!isNaN(epText) ? ("Tập " + epText) : (epText || "Tập"));
+
                 episodes.push({
                     id: epUrl,
-                    name: cleanName,
+                    name: formattedName,
                     slug: epUrl.split('/').pop()
                 });
                 seenEp[epUrl] = true;
-            }
-        }
-
-        // Trường hợp không bắt được bằng thẻ a thông thường, quét dự phòng theo URL tap-
-        if (episodes.length === 0) {
-            var urlRegex = /href=["']([^"']+\/phim\/[^"']+\/tap-[^"']+\.html)["']/gi;
-            while ((match = urlRegex.exec(htmlContent)) !== null) {
-                var fUrl = match[1].trim();
-                if (fUrl.indexOf('http') !== 0) fUrl = BASEURL + (fUrl.startsWith('/') ? '' : '/') + fUrl;
-                if (!seenEp[fUrl]) {
-                    var numMatch = fUrl.match(/tap-([^_.]+)/i);
-                    var epNum = numMatch ? numMatch[1] : "1";
-                    episodes.push({
-                        id: fUrl,
-                        name: "Tập " + epNum,
-                        slug: fUrl.split('/').pop()
-                    });
-                    seenEp[fUrl] = true;
-                }
             }
         }
 
@@ -267,7 +250,7 @@ function parseMovieDetail(htmlContent, url) {
             });
 
             servers.push({
-                name: "Danh Sách Tập Vietsub",
+                name: "Danh Sách Tập",
                 episodes: episodes
             });
         } else {
@@ -299,7 +282,7 @@ function parseMovieDetail(htmlContent, url) {
 }
 
 // =============================================================================
-// PARSER CHI TIẾT TẬP & TRẢ LINK STREAM AN TOÀN
+// PARSER CHI TIẾT TẬP & TRẢ LINK STREAM (CHẶN AUTOPLAY)
 // =============================================================================
 
 function parseDetailResponse(html, url) {
