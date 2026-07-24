@@ -9,12 +9,12 @@ function getManifest() {
         "id": "phimchill",          
         "name": "Phim Chill",
         "description": "Phim online chất lượng cao",
-        "version": "2.1.3",             
+        "version": "2.1.5",             
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/motherless_logo.jpgphimchill.ico", 
         "isEnabled": true,
         "type": "MOVIE",
-        "playerType": "webview" // Dùng webview để hiển thị đầy đủ giao diện gốc, trực quan, không thiếu tập
+        "playerType": "webview"
     });
 }
 
@@ -256,16 +256,16 @@ function parseMovieDetail(htmlContent, url) {
     }
 }
 
-// Xử lý Webview: Mở khóa cuộn toàn trang (fix lỗi không cuộn được đến cuối danh sách tập dài) và chặn autoplay triệt để
+// Xử lý Webview chuẩn mực: Mở khóa cuộn danh sách dài, chặn autoplay triệt để và phóng to dựa trên sự kiện click thật
 function parseDetailResponse(html, url) {
-    var webviewFixScript = `
+    var eventDrivenScript = `
         (function() {
-            // Mở khóa thanh cuộn để người dùng kéo xuống chọn được các tập ở cuối danh sách dài
+            // Mở khóa thanh cuộn để kéo xem trọn vẹn danh sách tập dài
             var cssFix = document.createElement('style');
             cssFix.innerHTML = 'html, body { height: auto !important; min-height: 100% !important; overflow: scroll !important; -webkit-overflow-scrolling: touch !important; }';
             document.head.appendChild(cssFix);
 
-            // Chặn đứng autoplay ngay khi tải trang webview
+            // Chặn autoplay ngay lập tức khi load trang
             window.addEventListener('DOMContentLoaded', function() {
                 var mediaElements = document.querySelectorAll('video, iframe');
                 for(var i = 0; i < mediaElements.length; i++) {
@@ -276,7 +276,7 @@ function parseDetailResponse(html, url) {
                 }
             });
 
-            // Vòng lặp giám sát liên tục để vô hiệu hóa việc tự phát video ngầm
+            // Vòng lặp giám sát ngăn chặn phát ngầm
             setInterval(function() {
                 var videos = document.querySelectorAll('video');
                 for(var j = 0; j < videos.length; j++) {
@@ -286,16 +286,14 @@ function parseDetailResponse(html, url) {
                 }
             }, 200);
 
-            // Tự động phóng to toàn màn hình mượt mà sau khi người dùng bấm chọn 1 tập cụ thể
+            // Lắng nghe chính xác thao tác click của người dùng lên nút chọn tập hoặc server để phóng to mượt mà
             document.addEventListener('click', function(e) {
-                var actionTarget = e.target.closest('a, button, .streaming-server');
-                if (actionTarget) {
-                    setTimeout(function() {
-                        var playerBox = document.querySelector('video') || document.querySelector('iframe');
-                        if (playerBox && playerBox.requestFullscreen) {
-                            playerBox.requestFullscreen().catch(function(){});
-                        }
-                    }, 1000);
+                var clickedElement = e.target.closest('a, button, .streaming-server');
+                if (clickedElement && clickedElement.href && clickedElement.href.indexOf('tap-') !== -1) {
+                    var playerNode = document.querySelector('video') || document.querySelector('iframe');
+                    if (playerNode && playerNode.requestFullscreen) {
+                        playerNode.requestFullscreen().catch(function(){});
+                    }
                 }
             });
         })();
@@ -306,7 +304,7 @@ function parseDetailResponse(html, url) {
         "isEmbed": true,
         "headers": {},
         "subtitles": [],
-        "injectScript": webviewFixScript
+        "injectScript": eventDrivenScript
     });
 }
 
