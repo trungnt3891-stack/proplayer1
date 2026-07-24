@@ -9,12 +9,12 @@ function getManifest() {
         "id": "phimchill",          
         "name": "Phim Chill",
         "description": "Phim online chất lượng cao",
-        "version": "2.0.7",             
+        "version": "2.0.8",             
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/motherless_logo.jpgphimchill.ico", 
         "isEnabled": true,
         "type": "MOVIE",
-        "playerType": "webview" // Chuyển sang Webview để hiển thị toàn bộ giao diện gốc của web khi xem phim
+        "playerType": "webview"
     });
 }
 
@@ -214,7 +214,6 @@ function parseMovieDetail(htmlContent, url) {
         rmatch = htmlContent.match(/meta\s+property="og:description"\s+content="([^"]+)"/i);
         if (rmatch && rmatch[1]) ldes = rmatch[1];
 
-        // Lấy link nút "Xem Phim" để trỏ thẳng sang Webview chứa giao diện tập phim đầy đủ của web
         var xemPhimMatch = htmlContent.match(/href="([^"]+\/phim\/[^"]+\/tap-[^"]*\.html)"/i) || 
                            htmlContent.match(/href="([^"]+\/tap-[^"]*)"/i) ||
                            htmlContent.match(/href="([^"]+)"[^>]*>[^<]*Xem Phim/i);
@@ -231,7 +230,7 @@ function parseMovieDetail(htmlContent, url) {
             name: "Mở Giao Diện Webview Chọn Tập",
             episodes: [{
                 id: targetUrl,
-                name: "Xem phim trên Webview",
+                name: "Chọn tập thoải mái trên Webview",
                 slug: "webview"
             }]
         }];
@@ -257,12 +256,14 @@ function parseMovieDetail(htmlContent, url) {
     }
 }
 
+// Chặn Autoplay và phóng to màn hình bằng Script tiêm vào Webview
 function parseDetailResponse(html, url) {
     return JSON.stringify({
         "url": url,
-        "isEmbed": true, // Kích hoạt trình phát Webview nhúng trực tiếp
+        "isEmbed": true,
         "headers": {},
-        "subtitles": []
+        "subtitles": [],
+        "injectScript": "window.addEventListener('DOMContentLoaded', function() { var vids = document.querySelectorAll('video, iframe'); for(var i=0; i<vids.length; i++) { try { vids[i].pause(); } catch(e){} } });"
     });
 }
 
