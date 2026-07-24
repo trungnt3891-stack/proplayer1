@@ -9,7 +9,7 @@ function getManifest() {
         "id": "phimchill",          
         "name": "Phim Chill",
         "description": "Phim online chất lượng cao",
-        "version": "2.0.9",             
+        "version": "2.1.0",             
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/motherless_logo.jpgphimchill.ico", 
         "isEnabled": true,
@@ -256,9 +256,14 @@ function parseMovieDetail(htmlContent, url) {
     }
 }
 
-// Chặn Autoplay khi vào trang chọn tập, và tự động phóng to màn hình ngay sau khi người dùng bấm chọn một tập phim bất kỳ
+// Xử lý webview: Chặn autoplay, cho phép cuộn toàn bộ danh sách tập dài và tự động phóng to khi chọn tập
 function parseDetailResponse(html, url) {
     var smartScript = `
+        // Ép mở rộng khung nhìn và cho phép cuộn toàn trang webview để xem hết danh sách tập dài
+        var fixStyle = document.createElement('style');
+        fixStyle.innerHTML = 'html, body { height: auto !important; min-height: 100% !important; overflow: auto !important; }';
+        document.head.appendChild(fixStyle);
+
         window.addEventListener('DOMContentLoaded', function() {
             var allVideos = document.querySelectorAll('video, iframe');
             for(var i = 0; i < allVideos.length; i++) {
@@ -278,7 +283,7 @@ function parseDetailResponse(html, url) {
             }
         }, 300);
 
-        // Lắng nghe thao tác bấm chọn tập bên trong webview để tự động phóng to màn hình
+        // Lắng nghe sự kiện click chọn tập phim để kích hoạt tự động phóng to
         document.addEventListener('click', function(e) {
             var target = e.target.closest('a, button, .streaming-server');
             if (target) {
