@@ -254,6 +254,35 @@ Khi đăng ký plugin trên file JSON hoặc thêm nguồn tùy chỉnh, đườ
     }
 }
 ```
+
+#### 💡 QUY TẮC XỬ LÝ ĐUÔI FILE KHÔNG CHUẨN (`.vl`, `.xyz`, `.stream`...) & MIME TYPE:
+Khi trang web sử dụng link stream có đuôi mở rộng lạ (ví dụ: luồng HLS m3u8 nhưng trang web đặt đuôi file là `.vl`, `.m3u`, `.xyz`, `.stream`...), Plugin **KHÔNG CẦN YÊU CẦU SỬA APP**, chỉ cần khai báo chuẩn 1 trong 2 cách sau:
+
+1. **Khai báo `mimeType` trực tiếp khi trả về link**:
+   ```json
+   {
+       "url": "https://play.vlstream.net/hls/video_sample.vl",
+       "isEmbed": false,
+       "mimeType": "application/x-mpegURL",
+       "headers": { "Referer": "https://play.vlstream.net/" }
+   }
+   ```
+   *Các kiểu `mimeType` phổ biến:*
+   - HLS m3u8 (kể cả bị đổi đuôi thành `.vl`, `.xyz`): `"application/x-mpegURL"`
+   - Video MP4: `"video/mp4"`
+   - DASH stream: `"application/dash+xml"`
+
+2. **Khai báo `Stream-Regex` khi dùng WebView ngầm (`isEmbed: true`)**:
+   ```json
+   {
+       "url": "https://embed.site.com/player/123",
+       "isEmbed": true,
+       "headers": {
+           "Stream-Regex": "https?:\\/\\/[^\"']+\\.(?:vl|m3u8|xyz)[^\"']*"
+       }
+   }
+   ```
+   👉 *App Core sẽ ưu tiên 100% `mimeType` và `Stream-Regex` do plugin định nghĩa để phát video mà không cần quan tâm đuôi file.*
 App sẽ POST tới URL đó → nhận response → gọi `parseEmbedResponse(html, url)` → lặp lại nếu `isEmbed` vẫn = `true`.
 
 ---
