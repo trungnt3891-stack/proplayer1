@@ -9,8 +9,8 @@ function getManifest() {
     return JSON.stringify({
         "id": "motchill",
         "name": "Nguồn Phim Motchill",
-        "description": "Bản Native 12.0: Bắt đúng 100% ID Phim, loại bỏ tập thừa, mô tả sạch sẽ.",
-        "version": "12.0.0",
+        "description": "Bản Native 13.0: Target-Lock ID phim chuẩn xác 100%, không dư/thiếu tập.",
+        "version": "13.0.0",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/motchill.png",
         "isEnabled": true,
@@ -147,6 +147,7 @@ function parseListResponse(html, $url) {
         var cleanHtml = html.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
         var jsonRegex = /"slug"\s*:\s*"([^"]+)","name"\s*:\s*"([^"]+)"(?:,"origin_name":"[^"]+")?,"thumb_url"\s*:\s*"([^"]+)"/gi;
         var jMatch;
+        
         while ((jMatch = jsonRegex.exec(cleanHtml)) !== null) {
             var jUrl = BASEURL + "/phim/" + jMatch[1];
             var jTitle = unescape(jMatch[2].replace(/\\u/g, '%u'));
@@ -164,7 +165,7 @@ function parseListResponse(html, $url) {
             }
         }
 
-        // Cứu cánh quyét giao diện
+        // Cứu cánh quyét giao diện nếu JSON thất bại
         if (items.length === 0) {
             var htmlRegex = /<a([^>]+href=["'][^"']*\/phim\/[^"']*["'][^>]*)>([\s\S]*?)<\/a>/gi;
             var match;
@@ -214,54 +215,16 @@ function parseListResponse(html, $url) {
 function parseSearchResponse(html) { return parseListResponse(html); }
 
 // =============================================================================
-// THUẬT TOÁN LÕI CHI TIẾT: KHÓA MỤC TIÊU MOVIE_ID & DỌN DẸP UNICODE
+// THUẬT TOÁN LÕI CHI TIẾT: KHÓA MỤC TIÊU MOVIE_ID & LOẠI BỎ TẬP RÁC
 // =============================================================================
 
 var cachedMovieDetailId = ""; 
-
-function transformMovieData(data) {
-    const servers = [];
-    if (!data || !data.servers) return servers;
-
-    data.servers.forEach(function(server) {
-        const episodeMap = {};
-        server.items.forEach(function(item) {
-            var link = item.link;
-            if (!link) return;
-            if (link.startsWith("//")) link = "https:" + link;
-            if (link.indexOf('http://') !== 0 && link.indexOf('https://') !== 0 && link.indexOf('/') !== 0) return;
-            
-            const slug = item.slug;
-            if (!episodeMap[slug] || (item.type === 'm3u8' && episodeMap[slug].type === 'embed')) {
-                episodeMap[slug] = {
-                    id: link,
-                    name: item.name,
-                    slug: item.slug,
-                    type: item.type
-                };
-            }
-        });
-        
-        const items = Object.values(episodeMap).map(function(ep) {
-            var cleanName = ep.name;
-            if (!cleanName.toLowerCase().includes("tập") && !isNaN(parseInt(cleanName))) {
-                cleanName = "Tập " + cleanName;
-            }
-            return { id: ep.id, name: cleanName, slug: ep.slug };
-        });
-        
-        if (items.length > 0) {
-            servers.push({ name: server.name, episodes: items });
-        }
-    });
-    return servers;
-}
+var cachedMovieObj = {};
 
 function parseMovieDetail(html, url) {
     try {
         log(url);
         var isJsonCall = html && /^\s*[\{\[]/s.test(html);
-        
         var id = url;
         var lname = "Đang cập nhật...";
         var limg = "";
@@ -272,92 +235,150 @@ function parseMovieDetail(html, url) {
         var extra = "";
         
         if (!isJsonCall) {
+            // LƯỢT 1: ĐỌC TRANG THÔNG TIN PHIM
             cachedMovieDetailId = id; 
-            
-            // 1. Dọn dẹp chuỗi HTML & JSON
             var cleanHtml = html.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
             
-            // Lấy Tên & Ảnh
-            var titleMatch = cleanHtml.match(/"movie"\s*:\s*\{"id"\s*:\s*"\d+","name"\s*:\s*"([^"]+)"/i) || html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i);
+            // 1. TÌM CHÍNH XÁC ID CỦA PHIM (KHÓA MỤC TIÊU)
+            var currentSlug = url.split('/').filter(Boolean).pop().split('?')[0]; // ex: co-meo-nghien-thuoc-la-1784858422
+            var exactMovieId = "";
+            
+            // Tìm block ID liên kết trực tiếp với Slug của url
+            var idLockRegex = new RegExp('"id"\\s*:\\s*"(\\d+)"[^}]*?"slug"\\s*:\\s*"' + currentSlug + '"', 'i');
+            var idMatch = cleanHtml.match(idLockRegex);
+            
+            if (!idMatch) { // Thử đảo ngược vị trí
+                idLockRegex = new RegExp('"slug"\\s*:\\s*"' + currentSlug + '"[^}]*?"id"\\s*:\\s*"(\\d+)"', 'i');
+                idMatch = cleanHtml.match(idLockRegex);
+            }
+            
+            if (idMatch) {
+                exactMovieId = idMatch[1];
+            } else {
+                // Dự phòng quét id bọc trong thẻ <MovieComments>
+                var altIdMatch = cleanHtml.match(/"movieId"\s*:\s*"(\d+)"/i);
+                if (altIdMatch) exactMovieId = altIdMatch[1];
+            }
+
+            // 2. LẤY THÔNG TIN CƠ BẢN
+            var titleMatch = cleanHtml.match(/"name"\s*:\s*"([^"]+)"[^}]*?"slug"\s*:\s*"/i) || html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i);
             if (titleMatch) lname = titleMatch[1].split('-')[0].trim();
             
             var imgMatch = cleanHtml.match(/"thumb_url"\s*:\s*"([^"]+)"/i) || html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i);
             if (imgMatch) limg = imgMatch[1];
             if (limg && limg.indexOf('http') === -1) limg = BASEURL + limg;
             
-            // 2. KHẮC PHỤC LỖI HIỂN THỊ MÔ TẢ (\u003cp\u003e)
+            // 3. XỬ LÝ MÔ TẢ & LÀM SẠCH UNICODE (\u003cp\u003e)
             var descMatch = cleanHtml.match(/"content2"\s*:\s*"([^"]+)"/i) || html.match(/<meta\s+name="description"\s+content="([^"]+)"/i);
             if (descMatch) {
                 var rawDesc = descMatch[1];
-                // Chuyển mã unicode HTML thành thẻ HTML thật, sau đó xóa thẻ
-                rawDesc = rawDesc.replace(/\\u003c/gi, '<').replace(/\\u003e/gi, '>');
+                // Giải mã unicode thẻ HTML (\u003c -> <)
+                rawDesc = rawDesc.replace(/\\u003c/gi, '<').replace(/\\u003e/gi, '>').replace(/\\u0026/gi, '&');
+                // Decode ký tự tiếng việt
+                try { rawDesc = unescape(rawDesc.replace(/\\u/g, '%u')); } catch(e){}
+                // Tẩy sạch thẻ HTML dư thừa
                 ldes = rawDesc.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\\n/g, ' ').trim();
             }
-            
-            // 3. XÁC ĐỊNH CHÍNH XÁC ID CỦA BỘ PHIM ĐANG XEM (TARGET LOCK)
-            var internalMovieId = "";
-            var movieIdMatch = cleanHtml.match(/"movie"\s*:\s*\{"id"\s*:\s*"(\d+)"/i) || cleanHtml.match(/"id"\s*:\s*"(\d+)",\s*"name"/i);
-            if (movieIdMatch) {
-                internalMovieId = movieIdMatch[1];
-            }
 
-            // 4. CHỈ QUÉT CÁC TẬP THUỘC VỀ ID PHIM ĐANG XEM (Loại bỏ tập của phim đề xuất)
-            if (internalMovieId) {
-                // Biểu thức Regex ép buộc phải chứa đúng movie_id của bộ phim
-                var epRegex = new RegExp('\\{"id":"\\d+","movie_id":"' + internalMovieId + '","server":"([^"]+)","name":"([^"]+)","slug":"([^"]+)","type":"([^"]+)","link":"([^"]+)"', 'gi');
+            // 4. QUÉT CÁC TẬP PHIM CHỈ THUỘC VỀ ID ĐÃ KHÓA (CHỐNG LỌT TẬP 16)
+            var foundEps = false;
+            
+            if (exactMovieId) {
+                // Regex chỉ khớp với cụm json có "movie_id" === exactMovieId
+                var epRegex = /\{"id":"[^"]+","movie_id":"(\d+)","server":"([^"]+)","name":"([^"]+)","slug":"([^"]+)","type":"([^"]+)","link":"([^"]+)"/gi;
                 var epMatch;
-                var foundEps = false;
                 
                 while ((epMatch = epRegex.exec(cleanHtml)) !== null) {
+                    var epMovieId = epMatch[1];
+                    
+                    // CHỐT CHẶN AN TOÀN: Bỏ qua tập của phim đề xuất
+                    if (epMovieId !== exactMovieId) continue; 
+                    
                     foundEps = true;
-                    var sName = epMatch[1].trim();
-                    var eName = epMatch[2].trim();
-                    var eSlug = epMatch[3].trim();
-                    var eType = epMatch[4].trim(); // m3u8 hoặc embed
-                    var eLink = epMatch[5].trim();
+                    var sName = epMatch[2].trim();
+                    var eName = epMatch[3].trim();
+                    var eSlug = epMatch[4].trim();
+                    var eType = epMatch[5].trim(); 
+                    var eLink = epMatch[6].trim();
                     
                     if (eLink.indexOf('http') === -1) eLink = BASEURL + (eLink.startsWith('/') ? '' : '/') + eLink;
 
                     if (!serversMap[sName]) serversMap[sName] = {};
                     
-                    // Ưu tiên m3u8 thay vì embed
+                    // Ưu tiên m3u8 (Native) để chống lỗi Player webview
                     if (!serversMap[sName][eSlug] || eType === 'm3u8') {
                         serversMap[sName][eSlug] = {
-                            id: eLink, // Truyền thẳng Link thành ID để App xử lý
+                            id: eLink, 
                             name: isNaN(eName) ? eName : "Tập " + eName,
                             slug: eSlug,
                             type: eType
                         };
                     }
                 }
+            }
 
-                // Chuyển Object Map thành Array
-                if (foundEps) {
-                    for (var srv in serversMap) {
-                        var eps = Object.values(serversMap[srv]);
-                        // Sắp xếp tập hợp lý
-                        eps.sort((a, b) => {
-                            var nA = parseFloat(a.name.replace(/[^\d.]/g, '')) || 0;
-                            var nB = parseFloat(b.name.replace(/[^\d.]/g, '')) || 0;
-                            return nA - nB;
-                        });
-                        servers.push({ name: srv, episodes: eps });
-                    }
-                } else {
-                    // Nếu JSON bị ẩn quá kỹ, gọi API phụ để cào
-                    extra = BASEURL + "/baseapi/episodes?movie_id=" + internalMovieId;
+            // 5. GÓI DỮ LIỆU HOẶC GỌI API DỰ PHÒNG
+            if (foundEps) {
+                for (var srv in serversMap) {
+                    var eps = Object.values(serversMap[srv]);
+                    eps.sort((a, b) => {
+                        var nA = parseFloat(a.name.replace(/[^\d.]/g, '')) || 0;
+                        var nB = parseFloat(b.name.replace(/[^\d.]/g, '')) || 0;
+                        return nA - nB;
+                    });
+                    servers.push({ name: srv, episodes: eps });
                 }
+            } else if (exactMovieId) {
+                // Kích hoạt Lượt 2 nếu không tìm thấy array episodes trong HTML
+                extra = BASEURL + "/baseapi/episodes?movie_id=" + exactMovieId;
+                // Lưu lại thông tin cơ bản cho Lượt 2 xài
+                cachedMovieObj = { title: lname, posterUrl: limg, backdropUrl: limg, description: ldes };
             } else {
                 // Cứu cánh phim lẻ nếu mất tích ID
-                servers.push({ name: "Phim Lẻ", episodes: [{ id: url, name: "Full", slug: "full" }] });
+                var m3u8Fallback = cleanHtml.match(/(https?:\/\/[^"'\s]+\.m3u8)/i);
+                if (m3u8Fallback) {
+                    servers.push({ name: "H.VIP", episodes: [{ id: m3u8Fallback[1], name: "Full", slug: "full" }] });
+                } else {
+                    servers.push({ name: "Dự phòng", episodes: [{ id: url, name: "Full", slug: "full" }] });
+                }
             }
             
         } else {
             // LƯỢT 2: RÁP DANH SÁCH TẬP TỪ API
             id = cachedMovieDetailId || url;
+            lname = cachedMovieObj.title || lname;
+            limg = cachedMovieObj.posterUrl || limg;
+            ldes = cachedMovieObj.description || ldes;
+            
             var data = JSON.parse(html);
-            servers = transformMovieData(data);
-            extra = ""; // Cắt vòng lặp
+            if (data && data.servers) {
+                data.servers.forEach(server => {
+                    var episodeMap = {};
+                    server.items.forEach(item => {
+                        var link = item.link;
+                        if (link && link.startsWith("//")) link = "https:" + link;
+                        if (!link || link.indexOf('http') !== 0) return;
+                        
+                        var slug = item.slug;
+                        if (!episodeMap[slug] || item.type === 'm3u8') {
+                            episodeMap[slug] = {
+                                id: link,
+                                name: isNaN(item.name) ? item.name : "Tập " + item.name,
+                                slug: item.slug
+                            };
+                        }
+                    });
+                    var eps = Object.values(episodeMap);
+                    // Sắp xếp
+                    eps.sort((a, b) => {
+                        var nA = parseFloat(a.name.replace(/[^\d.]/g, '')) || 0;
+                        var nB = parseFloat(b.name.replace(/[^\d.]/g, '')) || 0;
+                        return nA - nB;
+                    });
+                    if (eps.length > 0) servers.push({ name: server.name, episodes: eps });
+                });
+            }
+            extra = ""; 
         }
         
         return JSON.stringify({
