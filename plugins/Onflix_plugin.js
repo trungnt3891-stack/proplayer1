@@ -9,13 +9,13 @@ function getManifest() {
 	return JSON.stringify({
 		"id": "onflix",
 		"name": "Onflix",
-		"description": "Trang xem phim siêu hay - Fix triệt để folder rỗng và tìm kiếm.",
-		"version": "1.8.3",
+		"description": "Trang xem phim siêu hay - Đồng bộ danh mục thể loại và lọc sạch folder rỗng.",
+		"version": "1.8.4",
 		"BASEURL": BASEURL,
 		"iconUrl": BASEURL + "/app/asset/logo.png",
 		"isEnabled": true,
 		"isAdult": false,
-		"type": "VIDEO",
+		"type": "MOVIE",
 		"layoutType": "VERTICAL",
 		"playerType": "auto"
 	});
@@ -226,7 +226,6 @@ function parseNextPayload(raw) {
     }
 }
 
-// Thuật toán quét sạch dữ liệu, ngăn việc nhận diện nhầm mảng episodes rỗng từ phần gợi ý
 function extractCleanData(data) {
     let result = {
         movie: null,
@@ -285,7 +284,6 @@ function parseMovieDetail(html, $url) {
         var rawVDEmbed = parseNextPayload(scriptEmbed);
         var embedData = extractCleanData(rawVDEmbed);
         
-        // Nếu extractCleanData từ scriptEmbed không lấy được episodes, dùng lại dataVD.episodes
         var $listEpi = (embedData.episodes && embedData.episodes.length > 0) ? embedData.episodes : dataVD.episodes;
         var serversMap = {};
 
@@ -336,7 +334,6 @@ function parseMovieDetail(html, $url) {
                 return numA - numB;
             });
 
-            // CHỐT CHẶN BẢO VỆ: Tuyệt đối chỉ tạo server khi có ít nhất 1 tập phim thật bên trong
             if (epsArray.length > 0) {
                 servers.push({
                     name: sName,
@@ -539,24 +536,6 @@ function parseYearsResponse(html) { return "[]"; }
 
 function getLISTmenu() {
     return `
-/themes/de-xuat-cho-ban@@Đề Xuất
-/themes/dang-chieu-phat@@Đang Chiếu
-/movies?sort=year_desc&limit=24&category=kinh-di@@Kinh Dị
-/movies?sort=year_desc&limit=24&category=co-trang@@Cổ Trang
-/movies?sort=year_desc&limit=24&category=18-plus@@Phim 18+
-/themes/phim-chat-luong-cao-va-phu-de-song-ngu@@Song Ngữ
-/themes/hoat-hinh-chon-loc@@Hoạt hình
-/themes/phieu-luu-mao-hiem@@Phiêu Lưu
-/themes/phim-truyen-hinh-trung-quoc-dai-luc@@Phim Trung Quốc
-/themes/tinh-yeu-la-nhung-gi-trai-tim-muon@@Tình Yêu
-/themes/phim-han-quoc@@Hàn Quốc
-/themes/thanh-xuan@@Thanh xuân
-/themes/phim-chua-lanh-tam-hon@@Phim Chữa Lành
-/themes/phim-chuyen-the-tu-tac-pham-van-hoc@@Phim Chuyển Thể
-/themes/phim-4 k@@Phim 4 K
-/themes/phim-cong-so@@Phim Công Sở
-/themes/hinh-su-toi-pham-han-quoc@@Hình Sự
-/themes/dien-anh-au-my@@Âu Mỹ
 /movies?sort=year_desc&limit=24&category=action-&-adventure@@Action & Adventure
 /movies?sort=year_desc&limit=24&category=am-nhac@@Âm Nhạc
 /movies?sort=year_desc&limit=24&category=bi-an@@Bí Ẩn
@@ -575,15 +554,17 @@ function getLISTmenu() {
 /movies?sort=year_desc&limit=24&category=hoc-duong@@Học Đường
 /movies?sort=year_desc&limit=24&category=huyen-huyen@@Huyền Huyễn
 /movies?sort=year_desc&limit=24&category=khoa-hoc@@Khoa Học
+/movies?sort=year_desc&limit=24&category=khoa-hoc-vien-tuong@@Khoa Học Viễn Tưởng
+/movies?sort=year_desc&limit=24&category=kinh-di@@Kinh Dị
 /movies?sort=year_desc&limit=24&category=kinh-dien@@Kinh Điển
 /movies?sort=year_desc&limit=24&category=lang-man@@Lãng Mạn
 /movies?sort=year_desc&limit=24&category=lgbt@@LGBT
 /movies?sort=year_desc&limit=24&category=lich-su@@Lịch Sử
 /movies?sort=year_desc&limit=24&category=mien-tay@@Miền Tây
 /movies?sort=year_desc&limit=24&category=phieu-luu@@Phiêu Lưu
-/movies?sort=year_desc&limit=24&category=hai@@Phim Hài
-/movies?sort=year_desc&limit=24&category=ngan@@Phim Ngắn
-/movies?sort=year_desc&limit=24&category=nhac@@Phim Nhạc
+/movies?sort=year_desc&limit=24&category=phim-18@@Phim 18+
+/movies?sort=year_desc&limit=24&category=phim-hai@@Phim Hài
+/movies?sort=year_desc&limit=24&category=phim-ngan@@Phim Ngắn
 /movies?sort=year_desc&limit=24&category=sci-fi-&-fantasy@@Sci-Fi & Fantasy
 /movies?sort=year_desc&limit=24&category=short-drama@@Short Drama
 /movies?sort=year_desc&limit=24&category=sitcom@@Sitcom
