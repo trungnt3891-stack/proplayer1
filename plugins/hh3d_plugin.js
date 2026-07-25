@@ -2,14 +2,16 @@
 // CONFIGURATION & METADATA
 // =============================================================================
 
+// CHỈ CẦN THAY ĐỔI TÊN MIỀN Ở ĐÂY NẾU WEB ĐỔI ĐỊA CHỈ MỚI
+var DOMAIN = "https://yanhh3d.love"; 
+
 function getManifest() {
     return JSON.stringify({
         "id": "yanhh3d",
         "name": "YanHH3D",
-        "version": "4.1.0", // Cập nhật: Tự động bắt link độ phân giải cao nhất (Ưu tiên 4K)
-        "baseUrl": "https://yanhh3d.love
-            ", 
-        "iconUrl": "https://yanhh3d.ac/storage/settings/August2024/YOoAwtlobLbwKhiFwRZv.png",
+        "version": "4.0.1", // Bản cập nhật quy chuẩn hóa thay đổi Domain
+        "baseUrl": DOMAIN, 
+        "iconUrl": DOMAIN + "/storage/settings/August2024/YOoAwtlobLbwKhiFwRZv.png",
         "isEnabled": true,
         "isAdult": false,
         "type": "MOVIE",
@@ -54,7 +56,7 @@ function getFilterConfig() { return JSON.stringify({}); }
 function getUrlList(slug, filtersJson) {
     var filters = JSON.parse(filtersJson || "{}");
     var page = filters.page || 1;
-    var baseUrl = "https://yanhh3d.ac";
+    var baseUrl = DOMAIN;
     
     if (!slug || slug === 'home') {
         if (page === 1) return baseUrl + "/";
@@ -69,22 +71,23 @@ function getUrlList(slug, filtersJson) {
     }
 }
 
+// ĐÃ FIX 100% DỰA TRÊN HTML: Web sử dụng /search?keysearch=...
 function getUrlSearch(keyword, filtersJson) {
     var filters = JSON.parse(filtersJson || "{}");
     var page = filters.page || 1;
     var cleanKeyword = encodeURIComponent(keyword.trim());
     
     if (page === 1) {
-        return "https://yanhh3d.ac/search?keysearch=" + cleanKeyword;
+        return DOMAIN + "/search?keysearch=" + cleanKeyword;
     } else {
-        return "https://yanhh3d.ac/search?keysearch=" + cleanKeyword + "&page=" + page;
+        return DOMAIN + "/search?keysearch=" + cleanKeyword + "&page=" + page;
     }
 }
 
 function getUrlDetail(slug) {
     if (!slug) return "";
     if (slug.indexOf("http") === 0) return slug;
-    return "https://yanhh3d.ac/" + slug.replace(/^\//, "");
+    return DOMAIN + "/" + slug.replace(/^\//, "");
 }
 
 function getUrlCategories() { return ""; }
@@ -107,18 +110,22 @@ var PluginUtils = {
     }
 };
 
+// ĐÃ CẬP NHẬT: Quét chính xác class hiển thị của YanHH3D (flw-item, item-top, swiper-slide)
 function parseListResponse(html) {
     try {
         var movies = [];
         var seen = {};
         var allBlocks = [];
 
+        // 1. Cắt lấy Phim ở Slider ngang trên cùng (nếu có)
         var swiperBlocks = html.split('class="swiper-slide');
         for (var i = 1; i < swiperBlocks.length; i++) allBlocks.push(swiperBlocks[i]);
 
+        // 2. Cắt lấy Phim ở phần Danh sách chính (flw-item)
         var flwBlocks = html.split('class="flw-item');
         for (var i = 1; i < flwBlocks.length; i++) allBlocks.push(flwBlocks[i]);
 
+        // 3. Cắt lấy Phim ở Bảng Xếp Hạng cột phải (item-top)
         var topBlocks = html.split('class="item-top');
         for (var i = 1; i < topBlocks.length; i++) allBlocks.push(topBlocks[i]);
 
@@ -130,6 +137,7 @@ function parseListResponse(html) {
             var imgMatch = block.match(/data-src=["']([^"']+)["']/i) || block.match(/src=["']([^"']+)["']/i);
             var titleMatch = block.match(/title=["']([^"']+)["']/i) || block.match(/alt=["']([^"']+)["']/i) || block.match(/<h[234][^>]*>([^<]+)<\/h[234]>/i);
             
+            // Dựa vào HTML bạn gửi, số tập nằm ở class "tick-rate"
             var epMatch = block.match(/class=["'][^"']*(tick-rate|ep|episode|label|status)[^"']*["'][^>]*>([^<]+)</i);
 
             if (urlMatch && imgMatch && titleMatch) {
@@ -144,6 +152,7 @@ function parseListResponse(html) {
 
                 var slug = url.replace(/https?:\/\/[^\/]+\//i, "").replace(/^\//, "").replace(/\/$/, "");
                 
+                // Lọc chống trùng lặp
                 if (title && slug && !seen[slug]) {
                     movies.push({
                         id: slug,
@@ -178,6 +187,7 @@ function parseListResponse(html) {
     }
 }
 
+// ĐÃ FIX: Chỉ quét phim chuẩn từ kết quả (flw-item), BỎ QUA Bảng xếp hạng để tránh loãng kết quả
 function parseSearchResponse(html) {
     try {
         var movies = [];
@@ -320,53 +330,13 @@ function parseMovieDetail(html) {
     }
 }
 
-// ĐÃ CẬP NHẬT: Tự động quét khung HTML để nhặt link có ưu tiên cao nhất 4K > 1080 > HD
 function parseDetailResponse(html) {
     try {
         var streamUrl = "";
-        var isEmbed = false;
         
-        // Quét tìm tất cả các nút chất lượng (nhặt từ data-src="...")
-        var regex = /data-src=["']([^"']+)["'][^>]*>([^<]+)<\/a>/gi;
-        var match;
-        var sources = {};
-        
-        while ((match = regex.exec(html)) !== null) {
-            var url = match[1].replace(/\\/g, "");
-            var label = match[2].trim().toUpperCase();
-            sources[label] = url;
-        }
-        
-        // Xếp hạng ưu tiên theo Tên chất lượng nhặt được
-        var labels = Object.keys(sources);
-        if (labels.length > 0) {
-            var bestLabel = "";
-            // 1. Ưu tiên 4K
-            for (var i = 0; i < labels.length; i++) {
-                if (labels[i].indexOf("4K") !== -1) { bestLabel = labels[i]; break; }
-            }
-            // 2. Nếu ko có 4K, tìm 1080
-            if (!bestLabel) {
-                for (var i = 0; i < labels.length; i++) {
-                    if (labels[i].indexOf("1080") !== -1) { bestLabel = labels[i]; break; }
-                }
-            }
-            // 3. Nếu ko có 1080, tìm HD
-            if (!bestLabel) {
-                for (var i = 0; i < labels.length; i++) {
-                    if (labels[i].indexOf("HD") !== -1) { bestLabel = labels[i]; break; }
-                }
-            }
-            // 4. Nếu ko có các chữ trên, lấy bản có sẵn đầu tiên
-            if (!bestLabel) bestLabel = labels[0];
-            
-            streamUrl = sources[bestLabel];
-        }
-
-        // Fallback dự phòng nếu web có thay đổi cấu trúc nút
-        if (!streamUrl) {
-            var m3u8Match = html.match(/(https?:\/\/[^"'\s<>]*\.m3u8[^"'\s<>]*)/i);
-            if (m3u8Match) streamUrl = m3u8Match[1].replace(/\\/g, "");
+        var m3u8Match = html.match(/(https?:\/\/[^"'\s<>]*\.m3u8[^"'\s<>]*)/i);
+        if (m3u8Match) {
+            streamUrl = m3u8Match[1].replace(/\\/g, "");
         }
         
         if (!streamUrl) {
@@ -379,23 +349,23 @@ function parseDetailResponse(html) {
             if (iframeMatch) {
                 streamUrl = iframeMatch[1];
                 if (streamUrl.indexOf("//") === 0) streamUrl = "https:" + streamUrl;
+                return JSON.stringify({
+                    url: streamUrl,
+                    headers: { "Referer": DOMAIN + "/" },
+                    isEmbed: true
+                });
             }
         }
-        
+
         if (streamUrl) {
-            // Tự động nhận diện Embed (Link không phải định dạng stream trực tiếp)
-            if (streamUrl.indexOf(".m3u8") === -1 && streamUrl.indexOf(".mp4") === -1) {
-                isEmbed = true;
-            }
-            
             return JSON.stringify({
                 url: streamUrl,
                 headers: { 
-                    "Referer": "https://yanhh3d.ac/",
-                    "Origin": "https://yanhh3d.ac",
+                    "Referer": DOMAIN + "/",
+                    "Origin": DOMAIN,
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
                 },
-                isEmbed: isEmbed 
+                isEmbed: false 
             });
         }
         
