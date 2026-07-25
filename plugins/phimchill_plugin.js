@@ -9,8 +9,8 @@ function getManifest() {
     return JSON.stringify({
         "id": "phimchill",          
         "name": "Phim Chill",
-        "description": "Giao diện Player VIP: Chống Autoplay 100%, có thời gian chọn tập.",
-        "version": "4.1.0",             
+        "description": "Giao diện Player VIP: Chống Autoplay 100%, chọn tập trực quan.",
+        "version": "4.1.1",             
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/motherless_logo.jpgphimchill.ico", 
         "isEnabled": true,
@@ -195,7 +195,7 @@ function parseMovieDetail(htmlContent, url) {
 }
 
 // =============================================================================
-// BÓC TÁCH LINK STREAM VÀ ĐIỀU HƯỚNG WEBVIEW VÀO SAFE ZONE
+// BÓC TÁCH LINK STREAM VÀ ĐIỀU HƯỚNG WEBVIEW
 // =============================================================================
 
 function parseDetailResponse(html, url) {
@@ -226,12 +226,9 @@ function parseDetailResponse(html, url) {
         var episodes = [];
         var seenEp = {};
         
-        var listEpMatch = html.match(/class=["'][^"']*list-episode[^"']*["'][^>]*>([\s\S]*?)<\/ul>/i);
-        var searchArea = listEpMatch ? listEpMatch[1] : html;
-        
         var aRegex = /<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
         var match;
-        while ((match = aRegex.exec(searchArea)) !== null) {
+        while ((match = aRegex.exec(html)) !== null) {
             var epUrl = match[1].trim();
             var epText = match[2].replace(/<[^>]*>/g, '').trim();
 
@@ -267,13 +264,9 @@ function parseDetailResponse(html, url) {
 
         var customJS = rawJS(dataSV);
 
-        // QUAN TRỌNG NHẤT Ở ĐÂY:
-        // Trả về một URL hoàn toàn trống (Safe Zone) của web để cắt đứt mã độc của trang gốc
-        // Trình duyệt sẽ chỉ chạy trang trắng và injectJS của chúng ta!
-        var safeZoneUrl = BASEURL + "/?search=vax_safe_player_zone";
-
+        // Vẫn giữ lại URL gốc của tập phim để trình duyệt không bị đứt kết nối (Không dùng url ảo nữa)
         return JSON.stringify({
-            url: safeZoneUrl,
+            url: url,
             isEmbed: false,
             headers: { "Referer": BASEURL + "/", "Custom-Js": customJS },
             subtitles: [],
@@ -286,32 +279,56 @@ function parseDetailResponse(html, url) {
 }
 
 // =============================================================================
-// ENGINE GIAO DIỆN PLAYER (CLICK-TO-PLAY + SAFE ZONE)
+// ENGINE GIAO DIỆN PLAYER (MUTATION OBSERVER + CLICK TO PLAY)
 // =============================================================================
 function rawJS(config) {
     return `
 (function() {
-    // Làm sạch trang tuyệt đối
-    document.documentElement.style.cssText = 'margin:0 !important; padding:0 !important; width:100vw !important; height:100vh !important; overflow:hidden !important; background:#000 !important;';
-    document.body.innerHTML = '';
-    document.body.style.cssText = 'margin:0 !important; padding:0 !important; width:100vw !important; height:100vh !important; overflow:hidden !important; background:#000 !important; position:fixed !important; top:0 !important; left:0 !important; z-index:0 !important;';
+    // ---------------------------------------------------------
+    // LỚP BẢO VỆ 1: KẺ HỦY DIỆT MUTATION OBSERVER
+    // Giám sát và tiêu diệt mọi Iframe/Video rác của trang gốc ngay khi nó vừa xuất hiện
+    // ---------------------------------------------------------
+    const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            mutation.addedNodes.forEach(function(node) {
+                if (node.tagName === 'IFRAME' || node.tagName === 'VIDEO') {
+                    if (node.id !== 'framePlay') {
+                        node.src = '';
+                        node.remove(); // Bóp nghẹt không cho chạy
+                    }
+                }
+            });
+        });
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
 
+    // ---------------------------------------------------------
+    // LỚP BẢO VỆ 2: CHE KHUẤT HOÀN TOÀN TRANG GỐC
+    // ---------------------------------------------------------
+    var styleTagHide = document.createElement('style');
+    styleTagHide.innerHTML = 'body > *:not(#custom-ui-container) { display: none !important; opacity: 0 !important; pointer-events: none !important; width: 0 !important; height: 0 !important; } html, body { background: #000 !important; margin: 0 !important; padding: 0 !important; width: 100vw !important; height: 100vh !important; overflow: hidden !important; }';
+    document.documentElement.appendChild(styleTagHide);
+
+    // ---------------------------------------------------------
+    // KHỞI TẠO BIẾN CONFIG & CHỨC NĂNG CHÍNH
+    // ---------------------------------------------------------
     const DATA = ${JSON.stringify(config)};
     const SERVERS = Array.isArray(DATA.servers) ? DATA.servers : [];
-    const AUTO_HIDE_TIME = 15000; 
     const storageKey = "pc_hist_" + DATA.movieId;
-    const widthStorageKey = "pc_player_iframe_width";
-    const heightStorageKey = "pc_player_iframe_height";
-    const scaleStorageKey = "pc_player_iframe_scale";
 
-    let currentServerIndex = 0;
     let currentEpisodeIndex = 0;
     let hideTimer = null;
+
+    // TẠO CONTAINER RIÊNG BIỆT KHÔNG ĐỤNG CHẠM ĐẾN PHẦN CÒN LẠI CỦA WEB
+    let uiContainer = document.createElement('div');
+    uiContainer.id = 'custom-ui-container';
+    Object.assign(uiContainer.style, { position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", zIndex: 999999, background: "#000" });
+    document.body.appendChild(uiContainer);
 
     let styleTag = document.createElement('style');
     styleTag.textContent = "\\
         * { box-sizing: border-box !important; font-family: sans-serif !important; }\\
-        .player-wrapper { position: fixed !important; top: 50% !important; left: 50% !important; transform-origin: center center !important; z-index: 1 !important; display: flex !important; align-items: center !important; justify-content: center !important; background:#000 !important; transition: all 0.15s ease !important; border: 1px solid #222 !important; border-radius: 8px !important; overflow: hidden !important; }\\
+        .player-wrapper { position: absolute !important; top: 50% !important; left: 50% !important; transform-origin: center center !important; display: flex !important; align-items: center !important; justify-content: center !important; background:#000 !important; transition: all 0.15s ease !important; border-radius: 8px !important; overflow: hidden !important; }\\
         .floating-control-ui { opacity: 0 !important; pointer-events: none !important; transition: opacity 0.4s ease !important; }\\
         .floating-control-ui.active-show { opacity: 1 !important; pointer-events: auto !important; }\\
         .dim-btn { background: rgba(255, 255, 255, 0.12) !important; color: #fff !important; border: none !important; border-radius: 4px !important; width: 22px !important; height: 22px !important; cursor: pointer !important; font-size: 13px !important; font-weight: bold !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; }\\
@@ -321,13 +338,13 @@ function rawJS(config) {
         .ep-grid-btn.inactive { background-color: rgba(255, 255, 255, 0.08) !important; }\\
         .play-overlay-btn { padding: 16px 36px !important; background: #e50914 !important; color: #fff !important; border-radius: 40px !important; font-size: 16px !important; font-weight: bold !important; cursor: pointer !important; box-shadow: 0 4px 20px rgba(229,9,20,0.5) !important; letter-spacing: 0.5px !important; text-transform: uppercase !important; transition: transform 0.2s !important; }\\
         .play-overlay-btn:active { transform: scale(0.95) !important; }\\
-        #center-play-notice { position: fixed !important; top: 20px !important; left: 50% !important; transform: translateX(-50%) !important; z-index: 999999 !important; background: rgba(15, 15, 18, 0.92) !important; color: #fff !important; padding: 8px 16px !important; border-radius: 20px !important; font-size: 13px !important; pointer-events: none !important; transition: opacity 0.3s !important; opacity: 0; }\\
+        #center-play-notice { position: absolute !important; top: 20px !important; left: 50% !important; transform: translateX(-50%) !important; z-index: 999999 !important; background: rgba(15, 15, 18, 0.92) !important; color: #fff !important; padding: 8px 16px !important; border-radius: 20px !important; font-size: 13px !important; pointer-events: none !important; transition: opacity 0.3s !important; opacity: 0; }\\
     ";
-    document.head.appendChild(styleTag);
+    uiContainer.appendChild(styleTag);
 
     let overlay = document.createElement('div');
-    Object.assign(overlay.style, { position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh', backgroundColor: '#000', zIndex: '999998', display: 'none', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff' });
-    document.body.appendChild(overlay);
+    Object.assign(overlay.style, { position: 'absolute', top: '0', left: '0', width: '100%', height: '100%', backgroundColor: '#000', zIndex: '999998', display: 'none', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff' });
+    uiContainer.appendChild(overlay);
 
     function showLoading(msg) {
         overlay.innerHTML = '<div style="font-size: 14px; font-weight: bold; color: #aaa;">' + (msg || 'Đang tải...') + '</div>';
@@ -338,7 +355,7 @@ function rawJS(config) {
     }
     function showNotice(text) {
         let notice = document.getElementById('center-play-notice');
-        if (!notice) { notice = document.createElement('div'); notice.id = 'center-play-notice'; document.body.appendChild(notice); }
+        if (!notice) { notice = document.createElement('div'); notice.id = 'center-play-notice'; uiContainer.appendChild(notice); }
         notice.textContent = text; notice.style.opacity = '1';
         setTimeout(() => { notice.style.opacity = '0'; }, 3000);
     }
@@ -363,7 +380,7 @@ function rawJS(config) {
         if (scaleTrigger) scaleTrigger.textContent = "Scale " + s.toFixed(1) + "x ▼";
     }
 
-    // CƠ CHẾ BẤM-MỚI-PHÁT (CHẶN 100% AUTOPLAY/FULLSCREEN)
+    // CƠ CHẾ CLICK-TO-PLAY (CHỐNG AUTOPLAY/FULLSCREEN)
     function buildClickToPlay(stream, isEmbed) {
         let oldWrapper = document.getElementById("playerWrapper");
         if (oldWrapper) oldWrapper.remove();
@@ -374,7 +391,7 @@ function rawJS(config) {
         
         if (!stream) {
             wrapper.innerHTML = '<div style="color:#e50914; font-weight:bold;">❌ Không tìm thấy link phát! Vui lòng chọn tập khác.</div>';
-            document.body.appendChild(wrapper);
+            uiContainer.appendChild(wrapper);
             applyIframeDimensions(localStorage.getItem("pc_w"), localStorage.getItem("pc_h"), localStorage.getItem("pc_s"));
             return;
         }
@@ -385,7 +402,7 @@ function rawJS(config) {
         
         playBtn.onclick = function(e) {
             e.stopPropagation();
-            wrapper.innerHTML = ""; // Xóa nút bấm, bắt đầu tiêm iframe/video
+            wrapper.innerHTML = ""; 
 
             let mediaEl;
             if (isEmbed) {
@@ -394,8 +411,6 @@ function rawJS(config) {
                 mediaEl.src = safeStream;
                 mediaEl.setAttribute("allowfullscreen", "true");
                 mediaEl.setAttribute("scrolling", "no");
-                // Giới hạn quyền iframe để chặn nó mở tab mới hoặc tự bật popup quảng cáo
-                mediaEl.setAttribute("sandbox", "allow-scripts allow-same-origin allow-presentation"); 
             } else {
                 mediaEl = document.createElement("video");
                 mediaEl.src = stream;
@@ -404,12 +419,13 @@ function rawJS(config) {
                 mediaEl.setAttribute("webkit-playsinline", "true");
                 mediaEl.autoplay = true; 
             }
+            mediaEl.id = "framePlay";
             Object.assign(mediaEl.style, { width: "100%", height: "100%", border: "none", outline: "none", background: "#000" });
             wrapper.appendChild(mediaEl);
         };
 
         wrapper.appendChild(playBtn);
-        document.body.appendChild(wrapper);
+        uiContainer.appendChild(wrapper);
         applyIframeDimensions(localStorage.getItem("pc_w"), localStorage.getItem("pc_h"), localStorage.getItem("pc_s"));
     }
 
@@ -454,7 +470,7 @@ function rawJS(config) {
     }
 
     function resetAutoHideTimer() {
-        let elements = document.querySelectorAll('.floating-control-ui');
+        let elements = uiContainer.querySelectorAll('.floating-control-ui');
         elements.forEach(el => el.classList.add('active-show'));
         if (hideTimer) clearTimeout(hideTimer);
         hideTimer = setTimeout(() => {
@@ -482,15 +498,15 @@ function rawJS(config) {
         }
 
         let eventOverlay = document.createElement("div");
-        Object.assign(eventOverlay.style, { position: "fixed", top: "0", left: "0", width: "100vw", height: "100vh", zIndex: "10" });
+        Object.assign(eventOverlay.style, { position: "absolute", top: "0", left: "0", width: "100%", height: "100%", zIndex: "10" });
         eventOverlay.addEventListener('mousemove', resetAutoHideTimer);
         eventOverlay.addEventListener('click', resetAutoHideTimer);
         eventOverlay.addEventListener('touchstart', resetAutoHideTimer, { passive: true });
-        document.body.appendChild(eventOverlay);
+        uiContainer.appendChild(eventOverlay);
 
         let container = document.createElement("div");
         container.className = "floating-control-ui active-show";
-        Object.assign(container.style, { position: "fixed", top: "16px", right: "20px", zIndex: "999999", backgroundColor: "rgba(22, 22, 26, 0.92)", backdropFilter: "blur(16px)", padding: "5px 8px", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.15)", display: "flex", gap: "6px" });
+        Object.assign(container.style, { position: "absolute", top: "16px", right: "20px", zIndex: "999999", backgroundColor: "rgba(22, 22, 26, 0.92)", backdropFilter: "blur(16px)", padding: "5px 8px", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.15)", display: "flex", gap: "6px" });
 
         function createDim(type) {
             let isW = type === 'W';
@@ -530,8 +546,8 @@ function rawJS(config) {
         let epPopup = document.createElement("div"); epPopup.id = "episode-grid-popup";
         [scalePopup, epPopup].forEach(p => {
             p.className = "floating-control-ui active-show";
-            Object.assign(p.style, { position: "fixed", top: "58px", right: "20px", zIndex: "1000000", backgroundColor: "rgba(22, 22, 26, 0.95)", border: "1px solid rgba(255, 255, 255, 0.15)", padding: "10px", borderRadius: "10px", maxHeight: "250px", overflowY: "auto", display: "none", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" });
-            document.body.appendChild(p);
+            Object.assign(p.style, { position: "absolute", top: "58px", right: "20px", zIndex: "1000000", backgroundColor: "rgba(22, 22, 26, 0.95)", border: "1px solid rgba(255, 255, 255, 0.15)", padding: "10px", borderRadius: "10px", maxHeight: "250px", overflowY: "auto", display: "none", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" });
+            uiContainer.appendChild(p);
         });
         scalePopup.style.width = "240px";
         epPopup.style.width = "340px";
@@ -570,7 +586,7 @@ function rawJS(config) {
             let btn = document.createElement("span");
             btn.className = "floating-control-ui active-show";
             btn.innerHTML = arrow;
-            Object.assign(btn.style, { position: "fixed", top: "50%", zIndex: "999999", transform: "translateY(-50%)", width: "42px", height: "42px", borderRadius: "50%", backgroundColor: "rgba(20,20,20,0.6)", color: "#fff", fontSize: "16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" });
+            Object.assign(btn.style, { position: "absolute", top: "50%", zIndex: "999999", transform: "translateY(-50%)", width: "42px", height: "42px", borderRadius: "50%", backgroundColor: "rgba(20,20,20,0.6)", color: "#fff", fontSize: "16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" });
             btn.style[side] = "20px";
             return btn;
         }
@@ -579,9 +595,9 @@ function rawJS(config) {
         navPrev.onclick = (e) => { e.stopPropagation(); if (currentEpisodeIndex > 0) fetchAndPlayEpisode(currentEpisodeIndex - 1); };
         navNext.onclick = (e) => { e.stopPropagation(); if (currentEpisodeIndex < SERVERS[0].episodes.length - 1) fetchAndPlayEpisode(currentEpisodeIndex + 1); };
         
-        document.body.appendChild(container);
-        document.body.appendChild(navPrev);
-        document.body.appendChild(navNext);
+        uiContainer.appendChild(container);
+        uiContainer.appendChild(navPrev);
+        uiContainer.appendChild(navNext);
 
         renderEpisodeGrid();
         resetAutoHideTimer();
