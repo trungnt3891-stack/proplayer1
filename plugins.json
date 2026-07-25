@@ -80,7 +80,7 @@
     },
     {
             "id": "motchill",
-            "name": "Phim Chill",
+            "name": "motchill",
             "version": "3.7.9",
             "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/phimchill_plugin.js",
             "iconUrl": "https://motchille.cx/motchill.png",
