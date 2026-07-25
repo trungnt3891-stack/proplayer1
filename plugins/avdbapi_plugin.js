@@ -6,7 +6,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "avdbapi",
         "name": "AVDB JAV",
-        "version": "1.0.3",
+        "version": "1.0.4",
         "baseUrl": "https://avdbapi.com/api.php/provide/vod",
         "iconUrl": "https://avdbapi.com/favicon.ico",
         "isEnabled": true,
@@ -239,6 +239,7 @@ function parseDetailResponse(embedHtml, pageUrl) {
                 isEmbed: false,
                 headers: {
                     "Referer": "https://upload18.org/",
+                    "Block-Ads": "true";
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
                 },
                 subtitles: []
