@@ -8,13 +8,13 @@ function getManifest() {
     return JSON.stringify({
         "id": "phimchill",          
         "name": "Phim Chill",
-        "description": "Bản Webview thuần túy: Load mượt mà 100%, không lo lỗi gãy link.",
-        "version": "7.0.0",             
+        "description": "Full Webview chuẩn xác: Tự động chặn sạch quảng cáo và popup.",
+        "version": "7.1.0",             
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/favicon.ico", 
         "isEnabled": true,
         "type": "MOVIE",
-        "playerType": "webview" // Chạy hoàn toàn trên Webview để tương thích tuyệt đối
+        "playerType": "webview" // Sử dụng hoàn toàn chế độ Webview
     });
 }
 
@@ -112,6 +112,31 @@ function parseListResponse(html) {
             }
         }
 
+        if (items.length === 0) {
+            var articleRegex = /<article[\s\S]*?<\/article>/gi;
+            var articles = html.match(articleRegex) || [];
+            for (var j = 0; j < articles.length; j++) {
+                var block = articles[j];
+                var hMatch = block.match(/href="([^"]+\/phim\/[^"]+)"/i);
+                var tMatch = block.match(/title="([^"]+)"/i);
+                var iMatch = block.match(/(?:src|data-src)="([^"]+)"/i);
+
+                if (hMatch && tMatch) {
+                    var link = hMatch[1].trim();
+                    var name = tMatch[1].trim();
+                    var img = iMatch ? iMatch[1].trim() : "";
+
+                    if (img.indexOf('/') === 0 && img.indexOf('//') !== 0) img = BASEURL + img;
+                    if (link.indexOf("tap-") !== -1) continue;
+
+                    if (!seen[link]) {
+                        items.push({ "id": link, "title": name, "posterUrl": img, "backdropUrl": img, "quality": "HD" });
+                        seen[link] = true;
+                    }
+                }
+            }
+        }
+
         return JSON.stringify({
             "items": items,
             "pagination": { "currentPage": 1, "totalPages": 50, "totalItems": items.length * 50, "itemsPerPage": 24 }
@@ -124,7 +149,7 @@ function parseListResponse(html) {
 function parseSearchResponse(html) { return parseListResponse(html); }
 
 // =============================================================================
-// PARSER CHI TIẾT PHIM
+// PARSER CHI TIẾT PHIM (MỞ TRỰC TIẾP WEBVIEW CHỌN TẬP)
 // =============================================================================
 
 function parseMovieDetail(htmlContent, url) {
@@ -134,18 +159,20 @@ function parseMovieDetail(htmlContent, url) {
         
         var lname = "Xem Phim PhimChill";
         var limg = "";
-        var ldes = "Bấm để mở giao diện xem phim trực tiếp trên Webview.";
+        var ldes = "Bấm để mở giao diện webview chọn tập trực tiếp.";
         
         var rmatch = htmlContent.match(/meta\s+property="og:image"\s+content="([^"]+)"/i);
         if (rmatch && rmatch[1]) limg = rmatch[1];
         rmatch = htmlContent.match(/meta\s+property="og:title"\s+content="([^"]+)"/i);
-        if (rmatch && rmatch[1]) lname = rmatch[1].split('-')[0].trim();
+        if (rmatch && rmatch[1]) lname = rmatch[1].split('-')[0].split('|')[0].trim();
+        rmatch = htmlContent.match(/meta\s+property="og:description"\s+content="([^"]+)"/i);
+        if (rmatch && rmatch[1]) ldes = rmatch[1];
 
         var servers = [{
             name: "Server Trực Tiếp",
             episodes: [{
                 id: id,
-                name: "Mở Trình Phát Webview",
+                name: "Mở Giao Diện Webview",
                 slug: "webview"
             }]
         }];
@@ -160,10 +187,34 @@ function parseMovieDetail(htmlContent, url) {
 }
 
 // =============================================================================
-// WEBVIEW HANDLER
+// WEBVIEW HANDLER & CHẶN SẠCH QUẢNG CÁO, POPUP
 // =============================================================================
 
 function parseDetailResponse(html, url) {
+    var antiAdScript = `
+        (function() {
+            // Chặn toàn bộ hành vi mở tab mới / popup quảng cáo
+            window.open = function() { return null; };
+            document.addEventListener('click', function(e) {
+                var target = e.target.closest('a');
+                if (target && target.target === '_blank') {
+                    target.target = '_self';
+                }
+            }, true);
+
+            // Tự động quét và xóa các khối quảng cáo ngầm định kỳ
+            setInterval(function() {
+                var badSelectors = ['iframe[src*="ads"]', 'div[id*="ads"]', '.popup-ads', 'div[class*="popup"]', 'div[id*="popunder"]'];
+                badSelectors.forEach(function(sel) {
+                    var els = document.querySelectorAll(sel);
+                    for (var i = 0; i < els.length; i++) {
+                        els[i].remove();
+                    }
+                });
+            }, 500);
+        })();
+    `;
+
     return JSON.stringify({
         "url": url,
         "isEmbed": true,
@@ -171,7 +222,8 @@ function parseDetailResponse(html, url) {
             "Referer": BASEURL + "/",
             "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
         },
-        "subtitles": []
+        "subtitles": [],
+        "injectScript": antiAdScript
     });
 }
 
