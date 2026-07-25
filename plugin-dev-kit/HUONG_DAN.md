@@ -256,10 +256,13 @@ Khi plugin khai báo `"playerType": "embedtoexoplay"` trong `getManifest()`, ứ
 
 | Header Key | Mục đích | Ví dụ |
 |------------|----------|-------|
-| `Block-Ads` | Bật bộ chặn quảng cáo cho WebView. Chỉ khi khai báo `"true"` (hoặc `"1"`, `"yes"`): Mới bật bộ chặn quảng cáo (chặn 50+ mạng quảng cáo, khóa popunder `window.open`, chèn Anti-Ad CSS). Nếu KHÔNG KHAI BÁO (bỏ trống) hoặc đặt `"false"`: Mặc định TẮT hoàn toàn AdBlocker. | `"true"` |
+| `Block-Ads` | Bật bộ chặn quảng cáo cho WebView. Khi khai báo `"true"` (hoặc `"1"`, `"yes"`): Bật AdBlocker (chặn 50+ mạng quảng cáo, khóa popunder `window.open`, chèn Anti-Ad CSS). Nếu bỏ trống hoặc `"false"`: Mặc định TẮT. | `"true"` |
+| `Block-Domains` | Danh sách tên miền quảng cáo bổ sung do Plugin tự định nghĩa (phân cách bằng dấu phẩy) | `"bad-domain.com, ad-server.net"` |
+| `Block-Keywords` | Danh sách từ khóa URL quảng cáo bổ sung do Plugin tự định nghĩa (phân cách bằng dấu phẩy) | `"/popunder, /popup.js"` |
+| `Block-Css` | Chuỗi CSS Selectors bổ sung do Plugin tự định nghĩa để ẩn các phần tử quảng cáo cụ thể | `".my-ad-banner, #popunder-layer"` |
+| `Block-Scripts` | Danh sách từ khóa/mẫu đường dẫn script cần chặn trong WebView (phân cách bằng dấu phẩy) | `"adsterra,popads,clickadu"` |
 | `Custom-Js` | Chuỗi JavaScript được inject vào WebView **ngay khi bắt đầu tải trang** (`onPageStarted` — trước khi script của web gốc chạy). Có thể chủ động trích xuất link và gọi `SnifferBridge.play(url, headers)` | `"(function() { SnifferBridge.play(url); })();"` |
 | `Stream-Regex` | Chuỗi RegEx tùy chỉnh để EmbedSniffer lọc bắt link mạng thay cho mẫu mặc định (.m3u8, .mp4...) | `"https?:\\/\\/[^\"'\\s]+\\/index\\.m3u8"` |
-| `Block-Scripts` | Danh sách từ khóa/mẫu đường dẫn script cần chặn trong WebView (phân cách bằng dấu phẩy) | `"adsterra,popads,clickadu"` |
 | `User-Agent` | Đặt User-Agent cho WebView | `"Mozilla/5.0 ..."` |
 | `Referer` | Đặt Referer cho WebView | `"https://site.com/"` |
 
