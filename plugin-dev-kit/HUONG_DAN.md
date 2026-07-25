@@ -257,14 +257,29 @@ Khi plugin khai báo `"playerType": "embedtoexoplay"` trong `getManifest()`, ứ
 | Header Key | Mục đích | Ví dụ |
 |------------|----------|-------|
 | `Block-Ads` | Bật bộ chặn quảng cáo cho WebView. Khi khai báo `"true"` (hoặc `"1"`, `"yes"`): Bật AdBlocker (chặn 50+ mạng quảng cáo, khóa popunder `window.open`, chèn Anti-Ad CSS). Nếu bỏ trống hoặc `"false"`: Mặc định TẮT. | `"true"` |
+| `Block-Redirects` | Bật/Tắt chặn chuyển hướng main frame khi click (`"true"` = bật chặn, `"false"` = cho phép). Mặc định `"true"` khi `Block-Ads: true`. | `"true"` hoặc `"false"` |
 | `Block-Domains` | Danh sách tên miền quảng cáo bổ sung do Plugin tự định nghĩa (phân cách bằng dấu phẩy) | `"bad-domain.com, ad-server.net"` |
 | `Block-Keywords` | Danh sách từ khóa URL quảng cáo bổ sung do Plugin tự định nghĩa (phân cách bằng dấu phẩy) | `"/popunder, /popup.js"` |
-| `Block-Css` | Chuỗi CSS Selectors bổ sung do Plugin tự định nghĩa để ẩn các phần tử quảng cáo cụ thể | `".my-ad-banner, #popunder-layer"` |
+| `Block-Css` | Chuỗi CSS Selectors bổ sung do Plugin tự định nghĩa để ẩn các phần tử/thẻ div quảng cáo cụ thể | `".my-ad-banner, #popunder-layer, div[class*='custom-ad']"` |
 | `Block-Scripts` | Danh sách từ khóa/mẫu đường dẫn script cần chặn trong WebView (phân cách bằng dấu phẩy) | `"adsterra,popads,clickadu"` |
 | `Custom-Js` | Chuỗi JavaScript được inject vào WebView **ngay khi bắt đầu tải trang** (`onPageStarted` — trước khi script của web gốc chạy). Có thể chủ động trích xuất link và gọi `SnifferBridge.play(url, headers)` | `"(function() { SnifferBridge.play(url); })();"` |
 | `Stream-Regex` | Chuỗi RegEx tùy chỉnh để EmbedSniffer lọc bắt link mạng thay cho mẫu mặc định (.m3u8, .mp4...) | `"https?:\\/\\/[^\"'\\s]+\\/index\\.m3u8"` |
 | `User-Agent` | Đặt User-Agent cho WebView | `"Mozilla/5.0 ..."` |
 | `Referer` | Đặt Referer cho WebView | `"https://site.com/"` |
+
+> ℹ️ **LƯU Ý VỀ ANTI-AD CSS TỰ ĐỘNG:**
+> Khi `Block-Ads: true`, App đã tự động áp dụng bộ quy tắc CSS tổng quát để diệt toàn bộ thẻ `div`, `iframe`, `a`, `popunder` quảng cáo:
+> ```css
+> iframe[src*="ad"], iframe[src*="pop"], iframe[src*="banner"],
+> div[class*="ad-"], div[class*="ad_"], div[id*="ad-"], div[id*="ad_"],
+> div[class*="banner"], div[id*="banner"], div[class*="popup"], div[id*="popup"],
+> div[class*="popunder"], div[id*="popunder"],
+> div[style*="z-index: 2147483647"]:not(.jw-controls):not(.plyr__controls),
+> div[style*="z-index: 999999"]:not(.jw-controls):not(.plyr__controls),
+> a[href*="bet"], a[href*="casino"], a[href*="click"],
+> .popunder, .popup, .ad-box, .ad-container, .adsbygoogle
+> ```
+> Dev Plugin chỉ cần khai báo thêm thuộc tính `Block-Css` nếu trang web đó sử dụng class/id quảng cáo đặc thù.
 
 ---
 
@@ -281,22 +296,19 @@ Khi viết `Custom-Js` hoặc mã xử lý trong WebView, plugin có thể sử 
 | `SnifferBridge.sendToPlayer(url, headersJson)` | Bí danh | Giống `play()` |
 | `SnifferBridge.onVideoDetected(url)` | `url`: String | Hàm callback cũ (tương thích ngược) |
 
-#### Ví dụ 1: Inject `Custom-Js` chạy sớm và truyền Header JSON về ExoPlayer
+#### Ví dụ ĐẦY ĐỦ CẤU HÌNH 6 MỤC CHẶN QUẢNG CÁO + `Custom-Js`:
 ```javascript
 function parseDetailResponse(html, url) {
     var customJsCode = `(function() {
         if (window._vaapp_custom) return;
         window._vaapp_custom = true;
         
-        // Custom JS chạy ở onPageStarted (trước khi script của web gốc thực thi)
-        // Bạn có thể override window.fetch, XMLHttpRequest hoặc tìm thẻ video:
         var v = document.querySelector('video');
         if (v && v.src && v.src.indexOf('http') === 0) {
             var headers = JSON.stringify({
                 "Referer": "https://gamomephim.com/",
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
             });
-            // Gửi link + header về cho ExoPlayer phát
             SnifferBridge.play(v.src, headers);
         }
     })();`;
@@ -305,9 +317,17 @@ function parseDetailResponse(html, url) {
         "url": "https://gamomephim.com/embed/123",
         "isEmbed": true,
         "headers": {
-            "Block-Ads": "true",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Referer": "https://gamomephim.com/",
+            
+            // ⭐ ĐẦY ĐỦ 6 NỘI DUNG ĐIỀU KHIỂN CHẶN QUẢNG CÁO DÀNH CHO DEV PLUGIN
+            "Block-Ads": "true",                                       // 1. Bật bộ AdBlock tổng thể
+            "Block-Redirects": "true",                                 // 2. Chặn chuyển hướng main frame khi click
+            "Block-Domains": "streamc-ads.com, popunder.xyz",          // 3. Chặn thêm các tên miền quảng cáo riêng
+            "Block-Keywords": "/pop.js, /vast_xml",                   // 4. Chặn thêm từ khóa URL quảng cáo riêng
+            "Block-Css": ".streamc-ad-banner, #popunder-dialog",       // 5. Ẩn thêm thẻ div/element quảng cáo riêng
+            "Block-Scripts": "popads,exoclick",                        // 6. Chặn các script riêng do dev chỉ định
+            
             "Custom-Js": customJsCode
         }
     });
