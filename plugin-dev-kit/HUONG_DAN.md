@@ -341,18 +341,45 @@ Khi viết `Custom-Js` hoặc mã xử lý trong WebView, plugin có thể sử 
 
 Dành riêng cho các **Plugin cài đặt trực tiếp từ file `.js` qua nút dấu (`+`)** trong màn hình Quản lý Plugin:
 
-#### 1. Sử dụng hàm `print(...)` & `console.log(...)`:
-Bạn có thể in bất kỳ giá trị, biến, JSON object hoặc lỗi nào trực tiếp trong file JS của plugin bằng cách gọi:
+#### 1. Trong hàm xử lý dữ liệu của file JS (Engine QuickJS):
+*(Các hàm `parseDetailResponse`, `parseListResponse`, `parseSearchResponse`...)*
+Bạn có thể in bất kỳ giá trị, biến, JSON object hoặc lỗi nào trực tiếp bằng cách gọi `print(...)` hoặc `console.log(...)`:
 ```javascript
+// In dữ liệu hoặc JSON Object
 print("Dữ liệu bóc tách được:", result);
 print("Link stream:", streamUrl);
+
+// Hoặc dùng console.log chuẩn
 console.log("Chiều dài HTML:", html.length);
 ```
 
-#### 2. Khung Nổi Toast Console (Có thể Sao Chép 1 Động Tác 📋):
+#### 2. Trong mã `Custom-Js` chèn vào WebView (`embedtoexoplay`):
+*(Đoạn JS chạy ngầm bên trong WebView)*
+Gửi log trực tiếp từ WebView về Khung Console Nổi bằng `SnifferBridge.log(...)` hoặc `SnifferBridge.toast(...)`:
+```javascript
+(function() {
+    try {
+        var video = document.querySelector('video');
+        if (video && video.src) {
+            // In log ra Khung Console Nổi
+            if (window.SnifferBridge) window.SnifferBridge.log("Đã bắt được link video: " + video.src);
+            // Truyền link cho ExoPlayer phát
+            if (window.SnifferBridge) window.SnifferBridge.play(video.src);
+        } else {
+            if (window.SnifferBridge) window.SnifferBridge.log("Đang chờ thẻ video xuất hiện...");
+        }
+    } catch (err) {
+        // In lỗi nếu bị crash script trong WebView
+        if (window.SnifferBridge) window.SnifferBridge.log("Lỗi CustomJS: " + err.message);
+    }
+})();
+```
+
+#### 3. Khung Nổi Toast Console (Có thể Sao Chép 1 Động Tác 📋):
 - Khi bạn chạy bất kỳ hàm nào của plugin local cài từ nút `+`, App sẽ **tự động bật một Khung Nổi Console (Toast Console Overlay)** đè lên góc dưới màn hình.
-- Khung này hiển thị thời gian, loại log (`[PRINT]`, `[LOG]`, `[ERROR]`) và nội dung chi tiết.
+- Khung này hiển thị thời gian, loại log (`[PRINT]`, `[LOG]`, `[ERROR]`, `[TOAST]`) và nội dung chi tiết.
 - Trên thanh công cụ của Khung Nổi có **Nút Sao Chép (📋)**: Chỉ cần bấm 1 phát là **toàn bộ dữ liệu log/lỗi được chép vào Clipboard** để bạn dán sang chỗ khác kiểm tra cực kỳ nhanh chóng mà không cần mở Chrome DevTools hay máy tính!
+- **Lỗi Cú Pháp & Exception Tự Động**: Nếu mã JS hoặc `Custom-Js` bị lỗi cú pháp (`SyntaxError`) hay exception, App sẽ tự động hiển thị dòng màu đỏ `[ERROR]` kèm chi tiết lỗi lên Khung Nổi ngay lập tức!
 
 ---
 
