@@ -2,7 +2,7 @@
 // CONFIGURATION & METADATA
 // =============================================================================
 
-var BASEURL = "https://motchille.cx";
+var BASEURL = "https://motchillw.blue/";
 
 function getManifest() {
     return JSON.stringify({
