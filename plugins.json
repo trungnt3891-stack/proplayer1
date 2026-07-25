@@ -72,6 +72,13 @@
       "iconUrl": "https://thuvienvector.vn/wp-content/uploads/2025/09/logo-vtv-png.jpg"
     },
     {
+            "id": "phimfun",
+            "name": "Nguồn Phim Fun",
+            "version": "1.0.4",
+            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/phimfun_plugin.js",
+            "iconUrl": "https://phimfun.net/Content/PhimFun/Imgs/phimFun.png",
+    },
+    {
       "id": "Anime09",
       "name": "Anime09",
       "version": "1.0.3",
