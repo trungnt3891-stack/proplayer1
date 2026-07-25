@@ -9,13 +9,13 @@ function getManifest() {
 	return JSON.stringify({
 		"id": "onflix",
 		"name": "Onflix",
-		"description": "Trang xem phim siêu hay - Đồng bộ danh mục thể loại và lọc sạch folder rỗng.",
-		"version": "1.8.4",
+		"description": "Trang xem phim siêu hay - Fix triệt để folder rỗng và tìm kiếm đa tầng.",
+		"version": "1.8.5",
 		"BASEURL": BASEURL,
 		"iconUrl": BASEURL + "/app/asset/logo.png",
 		"isEnabled": true,
 		"isAdult": false,
-		"type": "MOVIE",
+		"type": "VIDEO",
 		"layoutType": "VERTICAL",
 		"playerType": "auto"
 	});
@@ -142,11 +142,11 @@ function parseListResponse(html, $url) {
         if (html.trim().indexOf("<") === 0) {
             _$(html).find("a").each(function() {
                 var href = this.attr("href");
-                if (href && href.indexOf("/phim/") > -1) {
+                if (href && (href.indexOf("/phim/") > -1 || href.indexOf("/xem-phim/") > -1)) {
                     var title = this.attr("title") || this.text();
-                    var img = this.find("img").attr("src");
-                    if (href.indexOf("http") === -1) href = BASEURL + href;
-                    if (img && img.indexOf("http") === -1) img = BASEURL + img;
+                    var img = this.find("img").attr("src") || this.find("img").attr("data-src");
+                    if (href.indexOf("http") === -1) href = BASEURL + (href.startsWith('/') ? '' : '/') + href;
+                    if (img && img.indexOf("http") === -1) img = BASEURL + (img.startsWith('/') ? '' : '/') + img;
                     
                     if (title && href) {
                         items.push({
@@ -168,12 +168,13 @@ function parseListResponse(html, $url) {
             if (Array.isArray(dataList)) {
                 for (var $j = 0; $j < dataList.length; $j++) {
                     var $block = dataList[$j];
-                    var itemUrl = BASEURL + "/phim/" + ($block.slug || "");
+                    var itemSlug = $block.slug || ($block.link_url ? $block.link_url.replace(/^\//, "") : "");
+                    var itemUrl = itemSlug.indexOf("http") === 0 ? itemSlug : BASEURL + "/phim/" + itemSlug.replace(/^phim\//, "");
                     items.push({
                         "id": itemUrl,
                         "title": ($block.title || "").trim(),
-                        "posterUrl": $block.poster_url || "",
-                        "backdropUrl": $block.thumb_url || "",
+                        "posterUrl": $block.poster_url || $block.image_url || "",
+                        "backdropUrl": $block.thumb_url || $block.background_url || "",
                         "year": $block.year || 2026,
                         "quality": $block.quality || "HD",
                         "episode_current": $block.episode_current || "Cập nhật",
@@ -262,32 +263,49 @@ function extractCleanData(data) {
 
 function parseMovieDetail(html, $url) {
     try {
-        var script = _$(html).find("script:content('original_name')").text();
-        if (!script) {
-            script = _$(html).find("script:content('episode_current')").text();
+        let movie = null;
+        let episodesList = [];
+
+        // 1. Quét thẻ __NEXT_DATA__
+        let nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/i);
+        if (nextDataMatch) {
+            try {
+                let nextJson = JSON.parse(nextDataMatch[1]);
+                let extracted = extractCleanData(nextJson);
+                if (extracted.movie) movie = extracted.movie;
+                if (extracted.episodes) episodesList = extracted.episodes;
+            } catch (err) {}
         }
-        var rawVD = parseNextPayload(script);
-        var dataVD = extractCleanData(rawVD);
-        var movie = dataVD.movie;
+
+        // 2. Quét Next.js RSC payload nếu __NEXT_DATA__ chưa đủ
+        if (!movie || episodesList.length === 0) {
+            var scripts = _$(html).find("script").elements;
+            for (let i = 0; i < scripts.length; i++) {
+                let scrText = _$(scripts[i]).text();
+                if (scrText.indexOf("self.__next_f.push") > -1) {
+                    let parsedPayload = parseNextPayload(scrText);
+                    if (parsedPayload) {
+                        let clean = extractCleanData(parsedPayload);
+                        if (!movie && clean.movie) movie = clean.movie;
+                        if (episodesList.length === 0 && clean.episodes && clean.episodes.length > 0) {
+                            episodesList = clean.episodes;
+                        }
+                    }
+                }
+            }
+        }
+
         var actors = "";
-        
         if (movie && movie.actors) {
             movie.actors.forEach(actor => {
                 actors += actor.name + ", ";
             });
         }
 
-        var scriptEmbed = _$(html).find("script:content('\"link_embed\\\":\\\"http')").text();
-        if (!scriptEmbed) {
-            scriptEmbed = _$(html).find("script:content('\"link_m3u8\\\":\\\"http')").text();
-        }
-        var rawVDEmbed = parseNextPayload(scriptEmbed);
-        var embedData = extractCleanData(rawVDEmbed);
-        
-        var $listEpi = (embedData.episodes && embedData.episodes.length > 0) ? embedData.episodes : dataVD.episodes;
         var serversMap = {};
 
-        if ($listEpi && Array.isArray($listEpi)) {$listEpi.forEach(episode => {
+        if (episodesList && Array.isArray(episodesList)) {
+            episodesList.forEach(episode => {
                 var rawServerName = episode.server_name || "Vietsub";
                 
                 var cleanServerName = "Vietsub";
@@ -314,11 +332,11 @@ function parseMovieDetail(html, $url) {
                     }
                 }
 
-                var epSlug = "tap-" + episode.slug;
+                var epSlug = "tap-" + (episode.slug || episode.name || "1");
                 if (streamLink && streamLink !== "undefined" && !serversMap[cleanServerName][epSlug]) {
                     serversMap[cleanServerName][epSlug] = {
                         id: streamLink,            
-                        name: "Tập " + episode.slug,     
+                        name: "Tập " + (episode.slug || episode.name || "1"),     
                         slug: epSlug        
                     };
                 }
@@ -342,6 +360,29 @@ function parseMovieDetail(html, $url) {
             }
         }
 
+        // Fallback quét thẻ <a> nếu không tìm thấy server từ payload
+        if (servers.length === 0) {
+            var fallbackEps = [];
+            _$(html).find("a").each(function() {
+                var href = this.attr("href");
+                var txt = this.text().trim();
+                if (href && (href.indexOf("/xem-phim/") > -1 || href.indexOf("tap-") > -1)) {
+                    let fullLink = href.indexOf("http") === 0 ? href : BASEURL + (href.startsWith('/') ? '' : '/') + href;
+                    fallbackEps.push({
+                        id: fullLink,
+                        name: txt || "Xem phim",
+                        slug: "tap-1"
+                    });
+                }
+            });
+            if (fallbackEps.length > 0) {
+                servers.push({
+                    name: "Vietsub",
+                    episodes: fallbackEps
+                });
+            }
+        }
+
         servers.sort((a, b) => {
             const getPriority = (name) => {
                 if (name.includes("KK Phim")) return 1;  
@@ -353,21 +394,39 @@ function parseMovieDetail(html, $url) {
             return getPriority(a.name) - getPriority(b.name);
         });
 
+        let title = movie ? movie.title : "";
+        if (!title) {
+            let mTitle = html.match(/<meta property="og:title" content="([^"]+)"/i);
+            title = mTitle ? mTitle[1].split('|')[0].trim() : "Phim Onflix";
+        }
+
+        let poster = movie ? movie.poster_url : "";
+        if (!poster) {
+            let mImg = html.match(/<meta property="og:image" content="([^"]+)"/i);
+            poster = mImg ? mImg[1] : "";
+        }
+
+        let desc = movie ? movie.content : "";
+        if (!desc) {
+            let mDesc = html.match(/<meta name="description" content="([^"]+)"/i);
+            desc = mDesc ? mDesc[1] : "";
+        }
+
         return JSON.stringify({
             id: $url,
-            title: movie ? movie.title : "Đang cập nhật",
-            posterUrl: movie ? movie.poster_url : "",
-            backdropUrl: movie ? movie.poster_url : "",
-            description: movie ? movie.content : "",
+            title: title,
+            posterUrl: poster,
+            backdropUrl: poster,
+            description: desc,
             servers: servers,
             quality: movie ? movie.quality : "HD",
             year: movie ? movie.year : 2026,
-            status: movie ? movie.episode_status : "",
+            status: movie ? movie.episode_status : "Cập nhật",
             duration: movie ? movie.time : "",
             casts: actors,
             director: movie ? movie.directors : "",
             category: movie && movie.categories && movie.categories[0] ? movie.categories[0].name : "",
-            lang: movie ? movie.lang : "",
+            lang: movie ? movie.lang : "Vietsub",
             country: movie && movie.countries && movie.countries[0] ? movie.countries[0].name : ""
         });
     } 
