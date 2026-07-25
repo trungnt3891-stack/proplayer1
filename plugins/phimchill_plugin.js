@@ -8,13 +8,13 @@ function getManifest() {
     return JSON.stringify({
         "id": "phimchill",          
         "name": "Phim Chill",
-        "description": "Bản Webview thông minh: Tự động cào tập bên trong, không lỗi.",
-        "version": "6.0.0",             
+        "description": "Bản Webview thuần túy: Load mượt mà 100%, không lo lỗi gãy link.",
+        "version": "7.0.0",             
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/favicon.ico", 
         "isEnabled": true,
         "type": "MOVIE",
-        "playerType": "webview" // Dùng Webview để hiển thị web gốc, kết hợp script trích xuất
+        "playerType": "webview" // Chạy hoàn toàn trên Webview để tương thích tuyệt đối
     });
 }
 
@@ -124,7 +124,7 @@ function parseListResponse(html) {
 function parseSearchResponse(html) { return parseListResponse(html); }
 
 // =============================================================================
-// PARSER CHI TIẾT PHIM (TRỎ THẲNG VÀO WEBVIEW)
+// PARSER CHI TIẾT PHIM
 // =============================================================================
 
 function parseMovieDetail(htmlContent, url) {
@@ -132,20 +132,17 @@ function parseMovieDetail(htmlContent, url) {
         var idMatch = htmlContent.match(/<link\s+rel="canonical"\s+href="([^"]+)"/i) || htmlContent.match(/<meta\s+property="og:url"\s+content="([^"]+)"/i);
         var id = idMatch ? idMatch[1] : (url || "");
         
-        var lname = "Đang cập nhật...";
+        var lname = "Xem Phim PhimChill";
         var limg = "";
-        var ldes = "Không có mô tả.";
+        var ldes = "Bấm để mở giao diện xem phim trực tiếp trên Webview.";
         
         var rmatch = htmlContent.match(/meta\s+property="og:image"\s+content="([^"]+)"/i);
         if (rmatch && rmatch[1]) limg = rmatch[1];
         rmatch = htmlContent.match(/meta\s+property="og:title"\s+content="([^"]+)"/i);
         if (rmatch && rmatch[1]) lname = rmatch[1].split('-')[0].trim();
-        rmatch = htmlContent.match(/meta\s+property="og:description"\s+content="([^"]+)"/i);
-        if (rmatch && rmatch[1]) ldes = rmatch[1];
 
-        // Trỏ thẳng ID về URL trang web để Webview load trực tiếp
         var servers = [{
-            name: "Xem Phim Trực Tiếp",
+            name: "Server Trực Tiếp",
             episodes: [{
                 id: id,
                 name: "Mở Trình Phát Webview",
@@ -163,25 +160,10 @@ function parseMovieDetail(htmlContent, url) {
 }
 
 // =============================================================================
-// WEBVIEW HANDLER & INJECT SCRIPT (MỞ KHÓA CUỘN, CHẶN QUẢNG CÁO/ZOOM LỖI)
+// WEBVIEW HANDLER
 // =============================================================================
 
 function parseDetailResponse(html, url) {
-    var injectionScript = `
-        (function() {
-            // Mở khóa cuộn trang mượt mà
-            var style = document.createElement('style');
-            style.innerHTML = 'html, body { height: auto !important; min-height: 100% !important; overflow: auto !important; -webkit-overflow-scrolling: touch !important; }';
-            document.head.appendChild(style);
-
-            // Dọn dẹp các pop-up quảng cáo phiền toái định kỳ
-            setInterval(function() {
-                var ads = document.querySelectorAll('iframe[src*="ads"], div[id*="ads"], .popup-ads');
-                for(var i=0; i<ads.length; i++) { ads[i].remove(); }
-            }, 1000);
-        })();
-    `;
-
     return JSON.stringify({
         "url": url,
         "isEmbed": true,
@@ -189,8 +171,7 @@ function parseDetailResponse(html, url) {
             "Referer": BASEURL + "/",
             "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
         },
-        "subtitles": [],
-        "injectScript": injectionScript
+        "subtitles": []
     });
 }
 
