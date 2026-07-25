@@ -2,21 +2,19 @@
 // CONFIGURATION & METADATA
 // =============================================================================
 
-// Đổi tên miền PhimChill tại đây nếu web thay đổi
-var DOMAIN = "https://phimchillhdb.im/";
-var BASEURL = DOMAIN;
+var BASEURL = "https://phimchillhdf.im";
 
 function getManifest() {
     return JSON.stringify({
-        "id": "phimchill_custom_ui",
-        "name": "Phim Chill (Custom UI)",
-        "description": "Giao diện Player thông minh: Lưu lịch sử, chuyển tập không cần thoát.",
-        "version": "4.0.0",
-        "baseUrl": DOMAIN,
-        "iconUrl": DOMAIN + "/favicon.ico",
+        "id": "phimchill",          
+        "name": "Phim Chill",
+        "description": "Giao diện Player thông minh: Lưu lịch sử, chuyển tập trực tiếp.",
+        "version": "4.0.0",             
+        "baseUrl": BASEURL,
+        "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/motherless_logo.jpgphimchill.ico", 
         "isEnabled": true,
         "type": "MOVIE",
-        "playerType": "webview" // Bắt buộc dùng webview để inject giao diện JS
+        "playerType": "webview" // Bắt buộc webview để tiêm giao diện JS
     });
 }
 
@@ -39,7 +37,9 @@ function getPrimaryCategories() {
 function getFilterConfig() {
     var listurl = getLISTmenu();
     var menulist = buildMenu(listurl);
-    return JSON.stringify({ category: menulist });
+    return JSON.stringify({
+        category: menulist
+    });
 }
 
 // =============================================================================
@@ -47,7 +47,9 @@ function getFilterConfig() {
 // =============================================================================
 
 function getUrlList(slug, filtersJson) {
-    if (slug && slug.indexOf("http") > -1) return slug;
+    if (slug && slug.indexOf("http") > -1) {
+        return slug;
+    }
     try {
         var filters = typeof filtersJson === "string" ? JSON.parse(filtersJson || "{}") : (filtersJson || {});
         var page = parseInt(filters.page) || 1;
@@ -60,9 +62,10 @@ function getUrlList(slug, filtersJson) {
                 path = filters.category;
             }
         }
-
         var url = BASEURL + (path ? "/" + path : "");
-        if (page > 1) url += "?page=" + page;
+        if (page > 1) {
+            url += "?page=" + page;
+        }
         return url.replace(/([^:]\/)\/+/g, "$1");
     } catch (e) {
         var fallback = BASEURL + (slug ? "/" + slug : "");
@@ -78,7 +81,9 @@ function getUrlSearch(keyword, filtersJson) {
         page = parseInt(filters.page) || 1;
     } catch (e) {}
     var url = BASEURL + "/?search=" + encodedKeyword;
-    if (page > 1) url += "&page=" + page;
+    if (page > 1) {
+        url += "&page=" + page;
+    }
     return url;
 }
 
@@ -93,7 +98,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSERS: LIST & SEARCH
+// PARSERS - LOAD TRANG CHỦ & THƯ MỤC
 // =============================================================================
 
 function parseListResponse(html) {
@@ -111,18 +116,16 @@ function parseListResponse(html) {
 
             if (!title || title === "Video không tiêu đề") continue;
 
-            if (posterUrl.indexOf('/') === 0 && posterUrl.indexOf('//') !== 0) posterUrl = BASEURL + posterUrl;
-            else if (posterUrl.indexOf('http') !== 0 && posterUrl.indexOf('//') !== 0) posterUrl = BASEURL + "/" + posterUrl;
-
+            if (posterUrl.indexOf('/') === 0 && posterUrl.indexOf('//') !== 0) {
+                posterUrl = BASEURL + posterUrl;
+            } else if (posterUrl.indexOf('http') !== 0 && posterUrl.indexOf('//') !== 0) {
+                posterUrl = BASEURL + "/" + posterUrl;
+            }
             if (url.indexOf("tap-") !== -1) continue;
 
             if (!seen[url]) {
                 items.push({
-                    "id": url,
-                    "title": title,
-                    "posterUrl": posterUrl,
-                    "backdropUrl": posterUrl,
-                    "quality": "HD"
+                    "id": url, "title": title, "posterUrl": posterUrl, "backdropUrl": posterUrl, "quality": "HD"
                 });
                 seen[url] = true;
             }
@@ -167,12 +170,13 @@ function parseListResponse(html) {
 function parseSearchResponse(html) { return parseListResponse(html); }
 
 // =============================================================================
-// PARSER: MOVIE DETAIL (GỬI DANH SÁCH TẬP VỀ GIAO DIỆN NATIVE ĐỂ BẤM CHỌN)
+// PARSER CHI TIẾT PHIM (TRẢ VỀ LINK ĐỂ NẠP WEBVIEW)
 // =============================================================================
 
 function parseMovieDetail(htmlContent, url) {
     try {
-        var idMatch = htmlContent.match(/<link\s+rel="canonical"\s+href="([^"]+)"/i) || htmlContent.match(/<meta\s+property="og:url"\s+content="([^"]+)"/i);
+        var idMatch = htmlContent.match(/<link\s+rel="canonical"\s+href="([^"]+)"/i) ||
+                      htmlContent.match(/<meta\s+property="og:url"\s+content="([^"]+)"/i);
         var id = idMatch ? idMatch[1] : (url || "");
         
         var lname = "Đang cập nhật...";
@@ -186,39 +190,27 @@ function parseMovieDetail(htmlContent, url) {
         rmatch = htmlContent.match(/meta\s+property="og:description"\s+content="([^"]+)"/i);
         if (rmatch && rmatch[1]) ldes = rmatch[1];
 
-        var episodes = [];
-        var seenEp = {};
+        // Lấy link xem phim để kích hoạt webview
+        var xemPhimMatch = htmlContent.match(/href="([^"]+\/phim\/[^"]+\/tap-[^"]*\.html)"/i) || 
+                           htmlContent.match(/href="([^"]+\/tap-[^"]*)"/i) ||
+                           htmlContent.match(/href="([^"]+)"[^>]*>[^<]*Xem Phim/i);
         
-        var epRegex = /href=["']([^"']+\/phim\/[^"']+\/tap-[^"']+\.html)["'][^>]*>([\s\S]*?)<\/a>/gi;
-        var match;
-        while ((match = epRegex.exec(htmlContent)) !== null) {
-            var epUrl = match[1].trim();
-            var epText = match[2].replace(/<[^>]*>/g, '').trim();
-
-            if (epUrl.indexOf('http') !== 0) epUrl = BASEURL + (epUrl.startsWith('/') ? '' : '/') + epUrl;
-
-            if (epText && !seenEp[epUrl]) {
-                var cleanName = isNaN(epText) ? epText : ("Tập " + epText);
-                episodes.push({
-                    id: epUrl,
-                    name: cleanName,
-                    slug: epUrl.split('/').pop()
-                });
-                seenEp[epUrl] = true;
+        var targetUrl = id;
+        if (xemPhimMatch) {
+            targetUrl = xemPhimMatch[1];
+            if (targetUrl.indexOf('http') !== 0) {
+                targetUrl = BASEURL + (targetUrl.startsWith('/') ? '' : '/') + targetUrl;
             }
         }
 
-        var servers = [];
-        if (episodes.length > 0) {
-            episodes.sort(function(a, b) {
-                var numA = parseInt(a.name.replace(/\D/g, '')) || 0;
-                var numB = parseInt(b.name.replace(/\D/g, '')) || 0;
-                return numA - numB;
-            });
-            servers.push({ name: "Phim Chill VIP", episodes: episodes });
-        } else {
-            servers.push({ name: "Phim Lẻ", episodes: [{ id: id, name: "Full", slug: "full" }] });
-        }
+        var servers = [{
+            name: "Mở Giao Diện Webview Chọn Tập",
+            episodes: [{
+                id: targetUrl,
+                name: "Chọn tập thoải mái trên Webview",
+                slug: "webview"
+            }]
+        }];
 
         return JSON.stringify({
             id: id, title: lname, posterUrl: limg, backdropUrl: limg, description: ldes,
@@ -231,24 +223,27 @@ function parseMovieDetail(htmlContent, url) {
 }
 
 // =============================================================================
-// PARSER: PLAY DETAIL & INJECT GIAO DIỆN JAVASCRIPT CUSTOM (THEO CHUẨN PHIMFUN)
+// PARSER DETAIL & INJECT GIAO DIỆN PLAYER (ĐÃ FIX LỖI TẬP)
 // =============================================================================
 
 function parseDetailResponse(html, url) {
     try {
         var dataSV = {};
         
-        // 1. Trích xuất stream gốc hiện tại
+        // 1. Trích xuất link stream video
         var streamUrl = "";
         var m3u8Match = html.match(/data-type="m3u8"[^>]*data-link="([^"]+)"/i) || html.match(/data-link="([^"]+\.m3u8[^"]*)"/i);
         if (m3u8Match) streamUrl = m3u8Match[1];
-        
         if (!streamUrl) {
             var embedMatch = html.match(/data-type="embed"[^>]*data-link="([^"]+)"/i);
             if (embedMatch) streamUrl = embedMatch[1];
         }
+        if (!streamUrl) {
+            var iframeMatch = html.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+            if (iframeMatch) streamUrl = iframeMatch[1];
+        }
 
-        // 2. Tạo Movie ID để lưu lịch sử
+        // 2. Trích xuất Movie ID để lưu lịch sử độc lập
         var movieIdMatch = html.match(/<link\s+rel="canonical"\s+href="([^"]+)"/i);
         var movieId = "phimchill_default";
         if (movieIdMatch) {
@@ -256,52 +251,78 @@ function parseDetailResponse(html, url) {
             movieId = mUrl.replace(/\/tap-[^/]+$/, "").split('/').pop() || "phimchill_movie";
         }
 
-        // 3. Quét TẤT CẢ các tập ở trang hiện tại để nạp vào Menu Giao diện Javascript
+        // 3. BÓC TÁCH DANH SÁCH TẬP PHIM CHILL (ĐÃ SỬA CHUẨN XÁC)
         var episodes = [];
         var seenEp = {};
-        var aRegex = /<a[^>]*href=["']([^"']+\/phim\/[^"']+\/tap-[^"']+\.html)["'][^>]*>([\s\S]*?)<\/a>/gi;
+        
+        // Quét cẩn thận các thẻ a có chứa "tap-"
+        var aTagRegex = /<a([^>]+href=["'][^"']+\/tap-[^"']+["'][^>]*)>([\s\S]*?)<\/a>/gi;
         var match;
-        while ((match = aRegex.exec(html)) !== null) {
-            var epUrl = match[1].trim();
-            var epText = match[2].replace(/<[^>]*>/g, '').trim();
-            if (epUrl.indexOf('http') !== 0) epUrl = BASEURL + (epUrl.startsWith('/') ? '' : '/') + epUrl;
-
-            if (!seenEp[epUrl]) {
-                var numMatch = epUrl.match(/tap-([^_]+)/i) || epUrl.match(/tap-(\d+)/i);
-                var formattedName = numMatch ? ("Tập " + numMatch[1].replace(/-/g, ' ')) : (!isNaN(epText) ? ("Tập " + epText) : (epText || "Tập"));
-                episodes.push({ id: epUrl, name: formattedName, slug: epUrl.split('/').pop() });
-                seenEp[epUrl] = true;
+        
+        while ((match = aTagRegex.exec(html)) !== null) {
+            var attrs = match[1];
+            var innerText = match[2].replace(/<[^>]*>/g, '').trim();
+            
+            var hrefMatch = attrs.match(/href=["']([^"']+)["']/i);
+            var href = hrefMatch ? hrefMatch[1].trim() : "";
+            
+            var titleMatch = attrs.match(/title=["']([^"']+)["']/i);
+            var titleAttr = titleMatch ? titleMatch[1].trim() : "";
+            
+            if (href && href.indexOf('javascript') === -1) {
+                if (href.indexOf('http') !== 0) {
+                    href = BASEURL + (href.startsWith('/') ? '' : '/') + href;
+                }
+                
+                if (!seenEp[href]) {
+                    var name = titleAttr || innerText;
+                    // Format lại thành "Tập X" nếu chưa có chữ tập
+                    if (!name.toLowerCase().includes("tập") && !isNaN(parseInt(name))) {
+                        name = "Tập " + name;
+                    }
+                    
+                    episodes.push({
+                        id: href,
+                        name: name || "Tập",
+                        slug: href.split('/').pop()
+                    });
+                    seenEp[href] = true;
+                }
             }
         }
         
+        var servers = [];
         if(episodes.length > 0) {
+            // Sắp xếp thứ tự tập
             episodes.sort(function(a, b) {
-                var numA = parseInt(a.name.replace(/\D/g, '')) || 0;
-                var numB = parseInt(b.name.replace(/\D/g, '')) || 0;
+                var numA = parseFloat(a.name.replace(/[^\d.]/g, '')) || 0;
+                var numB = parseFloat(b.name.replace(/[^\d.]/g, '')) || 0;
                 return numA - numB;
             });
+            servers.push({
+                name: "Phim Chill VIP",
+                episodes: episodes
+            });
         } else {
-            episodes.push({id: url, name: "Full", slug: "full"});
+            servers.push({
+                name: "Phim Lẻ",
+                episodes: [{id: url, name: "Full", slug: "full"}]
+            });
         }
 
-        // 4. Build config để đẩy vào JS
         dataSV.stream = streamUrl || url;
         dataSV.current = url;
         dataSV.movieId = movieId;
-        dataSV.servers = [{
-            name: "Phim Chill VIP",
-            episodes: episodes
-        }];
+        dataSV.servers = servers;
 
-        // Tạo chuỗi JS
         var customJS = rawJS(dataSV);
 
         return JSON.stringify({
             url: url,
             isEmbed: false,
             headers: {
-                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15",
-                "Referer": DOMAIN + "/",
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)",
+                "Referer": BASEURL + "/",
                 "Custom-Js": customJS
             },
             subtitles: []
@@ -312,13 +333,10 @@ function parseDetailResponse(html, url) {
     }
 }
 
-// =============================================================================
-// GIAO DIỆN JAVASCRIPT CUSTOM (PHIMFUN PORTED TO PHIMCHILL)
-// =============================================================================
 function rawJS(config) {
     return `
 (function() {
-    // 1. DIỆT SẠCH HEAD VÀ BODY CỦA WEB GỐC
+    // 1. DIỆT SẠCH GIAO DIỆN CŨ ĐỂ DỰNG PLAYER CUSTOM
     if (document.head) {
         document.head.innerHTML = '<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">';
     }
@@ -326,14 +344,13 @@ function rawJS(config) {
     document.body.innerHTML = '';
     document.body.style.cssText = 'margin:0 !important; padding:0 !important; width:100vw !important; height:100vh !important; overflow:hidden !important; background:#000 !important; position:fixed !important; top:0 !important; left:0 !important; z-index:0 !important;';
 
-    // 2. DỮ LIỆU & BIẾN KHỞI TẠO
+    // 2. KHỞI TẠO BIẾN
     const DATA = ${JSON.stringify(config)};
     const INITIAL_STREAM = DATA.stream || "";
     const CURRENT_URL = DATA.current || "";
     const SERVERS = Array.isArray(DATA.servers) ? DATA.servers : [];
-    const AUTO_HIDE_TIME = 15000;
-    const movieId = DATA.movieId || "phimchill_default_id";
-    const storageKey = "phimchill_history_" + movieId;
+    const AUTO_HIDE_TIME = 15000; 
+    const storageKey = "phimchill_history_" + (DATA.movieId || "default");
     const widthStorageKey = "pc_player_iframe_width";
     const heightStorageKey = "pc_player_iframe_height";
     const scaleStorageKey = "pc_player_iframe_scale";
@@ -342,7 +359,7 @@ function rawJS(config) {
     let currentEpisodeIndex = 0;
     let hideTimer = null;
 
-    // 3. INJECT CSS CLEAN MỚI
+    // 3. CSS CHO PLAYER GIAO DIỆN ĐẸP
     let styleTag = document.createElement('style');
     styleTag.textContent = \`
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -423,7 +440,6 @@ function rawJS(config) {
         }
         .toast-action-btn:hover { background: rgba(255, 255, 255, 0.3) !important; }
         .toast-action-btn.primary { background: #007bff !important; border-color: #007bff !important; }
-        .toast-action-btn.primary:hover { background: #0056b3 !important; }
     \`;
     document.head.appendChild(styleTag);
 
@@ -541,7 +557,7 @@ function rawJS(config) {
         }, AUTO_HIDE_TIME);
     }
 
-    // 6. XỬ LÝ LỊCH SỬ XEM
+    // 5. XỬ LÝ LỊCH SỬ XEM
     function matchCurrentEpisode() {
         let foundServer = 0;
         let foundEpisode = 0;
@@ -595,7 +611,7 @@ function rawJS(config) {
         localStorage.setItem(storageKey, JSON.stringify({ serverIndex: currentServerIndex, episodeIndex: currentEpisodeIndex, timestamp: Date.now() }));
     }
 
-    // 7. KÍCH THƯỚC IFRAME
+    // 6. KÍCH THƯỚC IFRAME
     function getSavedWidth() { return parseInt(localStorage.getItem(widthStorageKey), 10) || window.innerWidth; }
     function getSavedHeight() { return parseInt(localStorage.getItem(heightStorageKey), 10) || window.innerHeight; }
     function getSavedScale() { return parseFloat(localStorage.getItem(scaleStorageKey)) || 1.0; }
@@ -625,7 +641,7 @@ function rawJS(config) {
         if (scaleTrigger) scaleTrigger.textContent = "Scale " + s.toFixed(1) + "x ▼";
     }
 
-    // XỬ LÝ FETCH TẬP MỚI CHO PHIMCHILL
+    // XỬ LÝ ĐỔI TẬP VÀ FETCH LINK MỚI TỪ PHIMCHILL
     function fetchAndPlayEpisode(serverIdx, epIdx) {
         currentServerIndex = serverIdx;
         currentEpisodeIndex = epIdx;
@@ -642,13 +658,17 @@ function rawJS(config) {
         fetch(activeEpisode.id, { headers: { 'Accept': 'text/html' } })
             .then(function(res) { return res.text(); })
             .then(function(htmlText) {
-                // Bóc tách link phim từ mã HTML trả về
+                // Bóc tách link stream ngay từ trong mã nguồn HTML của tập vừa click
                 var streamUrl = "";
-                var m3u8Match = htmlText.match(/data-type="m3u8"[^>]*data-link="([^"]+)"/i) || htmlText.match(/data-link="([^"]+\.m3u8[^"]*)"/i);
+                var m3u8Match = htmlText.match(/data-type="m3u8"[^>]*data-link="([^"]+)"/i) || htmlText.match(/data-link="([^"]+\\.m3u8[^"]*)"/i);
                 if (m3u8Match) streamUrl = m3u8Match[1];
                 if (!streamUrl) {
                     var embedMatch = htmlText.match(/data-type="embed"[^>]*data-link="([^"]+)"/i);
                     if (embedMatch) streamUrl = embedMatch[1];
+                }
+                if (!streamUrl) {
+                    var iframeMatch = htmlText.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+                    if (iframeMatch) streamUrl = iframeMatch[1];
                 }
 
                 if (streamUrl) {
@@ -668,7 +688,6 @@ function rawJS(config) {
                 }
             })
             .catch(function(err) {
-                console.error(err);
                 hideLoading();
                 showCenterPlayNotice('❌ Lỗi kết nối!');
             })
@@ -679,12 +698,12 @@ function rawJS(config) {
             });
     }
 
-    // 8. LAYOUT BẢNG CÔNG CỤ VÀ LỚP PHỦ EVENTS
+    // 7. LAYOUT GIAO DIỆN
     function initBaseLayout() {
         matchCurrentEpisode();
         showLoading("Đang tải...");
 
-        // 1. Tạo IFRAME Video
+        // 1. Tạo IFRAME
         let framePlay = document.createElement("iframe");
         framePlay.id = "framePlay";
         framePlay.scrolling = "no";
@@ -703,32 +722,27 @@ function rawJS(config) {
         };
         document.body.appendChild(framePlay);
 
-        // 2. Tạo Lớp phủ bắt sự kiện Hover / Click đè lên iframe
+        // 2. Tạo Lớp phủ bắt sự kiện Hover
         let eventOverlay = document.createElement("div");
         eventOverlay.id = "iframe-event-overlay";
-        
         function handleOverlayTrigger() {
             resetAutoHideTimer();
             hideCenterPlayNotice(); 
         }
-
         eventOverlay.addEventListener('mousemove', handleOverlayTrigger);
         eventOverlay.addEventListener('click', handleOverlayTrigger);
         eventOverlay.addEventListener('touchstart', handleOverlayTrigger, { passive: true });
         document.body.appendChild(eventOverlay);
 
-        // 3. Thanh điều hướng công cụ (Top Right)
+        // 3. Thanh điều hướng công cụ 
         let container = document.createElement("div");
         container.id = "floating-select-box";
         container.className = "floating-control-ui active-show";
-        
         Object.assign(container.style, {
             position: "fixed", top: "16px", right: "20px", zIndex: "999999",
-            backgroundColor: "rgba(22, 22, 26, 0.92)", backdropFilter: "blur(16px)", webkitBackdropFilter: "blur(16px)",
+            backgroundColor: "rgba(22, 22, 26, 0.92)", backdropFilter: "blur(16px)",
             padding: "5px 8px", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.15)",
-            boxShadow: "0 6px 24px rgba(0,0,0,0.6)", color: "#fff",
-            fontSize: "12px", display: "flex", flexDirection: "row", alignItems: "center",
-            gap: "6px", boxSizing: "border-box", flexWrap: "nowrap"
+            boxShadow: "0 6px 24px rgba(0,0,0,0.6)", color: "#fff", display: "flex", gap: "6px"
         });
 
         function createDimensionControl(type) {
@@ -737,7 +751,7 @@ function rawJS(config) {
             Object.assign(group.style, {
                 display: "flex", alignItems: "center", gap: "2px",
                 backgroundColor: "rgba(255, 255, 255, 0.08)", padding: "2px 5px",
-                borderRadius: "5px", border: "1px solid rgba(255,255,255,0.1)", boxSizing: "border-box"
+                borderRadius: "5px", border: "1px solid rgba(255,255,255,0.1)"
             });
 
             let lbl = document.createElement("span");
@@ -785,27 +799,6 @@ function rawJS(config) {
         scaleTrigger.textContent = "Scale " + getSavedScale().toFixed(1) + "x ▼";
         styleClickable(scaleTrigger, "rgba(255, 255, 255, 0.08)");
 
-        let serverSelect = document.createElement("select");
-        serverSelect.id = "server-select-box";
-        styleSelect(serverSelect);
-
-        SERVERS.forEach(function(srv, idx) {
-            let opt = document.createElement("option");
-            opt.value = idx;
-            opt.textContent = srv.name || ("Server " + (idx + 1));
-            opt.style.backgroundColor = "#1c1c1e";
-            opt.style.color = "#fff";
-            serverSelect.appendChild(opt);
-        });
-        serverSelect.value = currentServerIndex;
-
-        serverSelect.onchange = function(e) {
-            let newSrvIdx = parseInt(e.target.value, 10) || 0;
-            currentServerIndex = newSrvIdx;
-            renderEpisodeGrid();
-            fetchAndPlayEpisode(currentServerIndex, currentEpisodeIndex);
-        };
-
         let epTrigger = document.createElement("span");
         epTrigger.id = "ep-select-trigger";
         styleClickable(epTrigger, "#007bff");
@@ -813,7 +806,6 @@ function rawJS(config) {
         container.appendChild(widthCtrl);
         container.appendChild(heightCtrl);
         container.appendChild(scaleTrigger);
-        container.appendChild(serverSelect);
         container.appendChild(epTrigger);
 
         let scalePopupGrid = createPopup("scale-grid-popup", "240px");
@@ -891,8 +883,7 @@ function rawJS(config) {
             position: "fixed", top: "50%", zIndex: "999999",
             transform: "translateY(-50%)", width: "42px", height: "42px", borderRadius: "50%",
             backgroundColor: "rgba(20, 20, 20, 0.6)", backdropFilter: "blur(8px)",
-            border: "1px solid rgba(255, 255, 255, 0.12)", color: "#fff",
-            fontSize: "16px", fontWeight: "bold", cursor: "pointer", display: "flex",
+            color: "#fff", fontSize: "16px", cursor: "pointer", display: "flex",
             alignItems: "center", justifyContent: "center", userSelect: "none"
         });
         btn.style[side] = offset;
@@ -961,21 +952,12 @@ function rawJS(config) {
         }
     }
 
-    function styleSelect(el) {
-        Object.assign(el.style, {
-            padding: "4px 8px", borderRadius: "5px", border: "1px solid rgba(255, 255, 255, 0.12)",
-            backgroundColor: "rgba(255, 255, 255, 0.08)", color: "#fff", cursor: "pointer",
-            fontSize: "12px", outline: "none", boxSizing: "border-box", fontWeight: "600"
-        });
-    }
-
     function styleClickable(el, bgColor) {
         Object.assign(el.style, {
             padding: "4px 10px", borderRadius: "5px", border: "1px solid rgba(255, 255, 255, 0.1)",
             backgroundColor: bgColor, color: "#fff", cursor: "pointer",
             fontSize: "12px", fontWeight: "700", textAlign: "center",
-            transition: "background 0.2s", display: "inline-block", userSelect: "none",
-            boxSizing: "border-box", flexShrink: "0"
+            display: "inline-block", userSelect: "none"
         });
     }
 
@@ -985,8 +967,17 @@ function rawJS(config) {
 }
 
 // =============================================================================
-// MENUS
+// MENUS THỂ LOẠI
 // =============================================================================
+
+function parseCategoriesResponse(apiResponseJson) {
+    var listurl = getLISTmenu();
+    var menulist = buildMenu(listurl);
+    return JSON.stringify(menulist);
+}
+
+function parseCountriesResponse(html) { return "[]"; }
+function parseYearsResponse(html) { return "[]"; }
 
 function getLISTmenu() {
     return `
