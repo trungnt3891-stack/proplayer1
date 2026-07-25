@@ -133,6 +133,16 @@ Khi đăng ký plugin trên file JSON hoặc thêm nguồn tùy chỉnh, đườ
 }
 ```
 
+**`type` options:**
+| Giá trị | Loại nội dung & Trình phát |
+|---------|----------------------------|
+| `"MOVIE"` | Phim điện ảnh / Phim bộ truyền thống (Trình phát màn hình ngang) |
+| `"VIDEO"` | Video clip / Youtube |
+| `"shortfilm"` | Phim ngắn / Drama ngắn / Reels / Shortflix (Trình phát xoay đứng Portrait Zoom, hỗ trợ vuốt LÊN/XUỐNG chuyển tập kiểu TikTok trên Mobile) |
+| `"MANGA"` | Truyện tranh (Trình đọc manga) |
+| `"NOVEL"` | Truyện chữ |
+| `"IPTV"` | Truyền hình trực tiếp (Bỏ qua màn hình Chi tiết, phát thẳng kênh) |
+
 **`playerType` options:**
 | Giá trị | Khi nào dùng |
 |---------|-------------|
@@ -509,6 +519,34 @@ function parseDetailResponse(html, url) {
             "User-Agent": "Mozilla/5.0 ...",
             "Referer": "https://example.com/"
         }
+    });
+}
+```
+
+---
+
+### 📱 Hướng Dẫn Viết Plugin Phim Ngắn / Short Drama (`"type": "shortfilm"`)
+
+Khi viết plugin cho các nguồn phim ngắn (Short Drama / Reels / Shortflix), khai báo `"type": "shortfilm"` để kích hoạt trải nghiệm trình phát xoay dọc và cử chỉ vuốt chuyển tập.
+
+#### Đặc điểm của Plugin `"shortfilm"` trong App:
+- Trình phát ExoPlayer tự động **xoay đứng màn hình (Portrait Mode)** và phóng to vừa khít chiều dọc điện thoại (`resizeMode = ZOOM`).
+- Hỗ trợ **cử chỉ vuốt dạng TikTok / Short Reels** trên Mobile:
+  - **Vuốt LÊN (Swipe UP)**: Chuyển sang **Tập tiếp theo**.
+  - **Vuốt XUỐNG (Swipe DOWN)**: Lùi về **Tập trước đó**.
+- Tự động bảo toàn trạng thái xoay đứng và vuốt tay chuyển tập liên tục xuyên suốt từ Tập 1 tới toàn bộ các tập tiếp theo.
+
+#### 1. Khai báo Manifest:
+```javascript
+function getManifest() {
+    return JSON.stringify({
+        "id": "shortflix",
+        "name": "Phim Ngắn Shortflix",
+        "description": "Kênh phim ngắn vietsub lồng tiếng",
+        "version": "1.0.0",
+        "baseUrl": "https://shortflix.net",
+        "type": "shortfilm",        // ⭐ Đánh dấu plugin loại Phim Ngắn
+        "playerType": "exoplayer"  // Khuyến nghị dùng exoplayer
     });
 }
 ```
