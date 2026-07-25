@@ -79,11 +79,12 @@
             "iconUrl": "https://phimfun.net/Content/PhimFun/Imgs/phimFun.png",
     },
     {
-            "id": "phimchill",
+            "id": "motchill",
             "name": "Phim Chill",
             "version": "3.7.9",
             "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/phimchill_plugin.js",
-            "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/phimchill.ico",
+            "iconUrl": "https://motchille.cx/motchill.png",
+            "info": "Phim hay, xem mượt. Nếu nguồn không vào được hãy thử truy cập bằng nút đăng nhập ở kho plugin để xem họ đổi domain gì và bạn tự đổi lại trên app và báo cho tác giả biết."
     },
     {
       "id": "Anime09",
