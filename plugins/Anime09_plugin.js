@@ -2,13 +2,16 @@
 // CONFIGURATION & METADATA
 // =============================================================================
 
+// CHỈ CẦN THAY ĐỔI TÊN MIỀN Ở ĐÂY NẾU WEB ĐỔI ĐỊA CHỈ MỚI
+var DOMAIN = "https://animehay09.site";
+
 function getManifest() {
     return JSON.stringify({
         "id": "animehay",
         "name": "AnimeHay",
-        "version": "1.8.0", // Hoàn thiện tính năng Tìm kiếm bằng cách chuẩn hóa URL kết quả trang chủ/danh mục
-        "baseUrl": "https://animehay09.site",
-        "iconUrl": "https://animehay09.site/themes/img/favicon.ico",
+        "version": "1.8.1", // Cập nhật biến DOMAIN toàn cục để dễ bảo trì
+        "baseUrl": DOMAIN,
+        "iconUrl": DOMAIN + "/themes/img/favicon.ico",
         "isEnabled": true,
         "isAdult": false,
         "type": "MOVIE",
@@ -51,7 +54,7 @@ function getFilterConfig() { return JSON.stringify({}); }
 function getUrlList(slug, filtersJson) {
     var filters = JSON.parse(filtersJson || "{}");
     var page = filters.page || 1;
-    var baseUrl = "https://animehay09.site";
+    var baseUrl = DOMAIN;
     
     if (page > 1) {
         return baseUrl + "/" + slug.replace(".html", "") + "/trang-" + page + ".html";
@@ -67,14 +70,14 @@ function getUrlSearch(keyword, filtersJson) {
     
     // Trỏ vào danh mục bộ lọc tìm kiếm của website qua tham số GET
     if (page > 1) {
-        return "https://animehay09.site/tim-kiem/trang-" + page + ".html?q=" + encoded + "&keyword=" + encoded;
+        return DOMAIN + "/tim-kiem/trang-" + page + ".html?q=" + encoded + "&keyword=" + encoded;
     }
-    return "https://animehay09.site/tim-kiem/?q=" + encoded + "&keyword=" + encoded;
+    return DOMAIN + "/tim-kiem/?q=" + encoded + "&keyword=" + encoded;
 }
 
 function getUrlDetail(slug) {
     if (slug.indexOf("http") === 0) return slug;
-    return "https://animehay09.site/" + slug.replace(/^\//, "");
+    return DOMAIN + "/" + slug.replace(/^\//, "");
 }
 
 function getUrlCategories() { return ""; }
@@ -316,8 +319,8 @@ function parseDetailResponse(html) {
             return JSON.stringify({
                 url: streamUrl,
                 headers: { 
-                    "Referer": "https://animehay09.site/",
-                    "Origin": "https://animehay09.site",
+                    "Referer": DOMAIN + "/",
+                    "Origin": DOMAIN,
                     "User-Agent": "Mozilla/5.0"
                 },
                 isEmbed: true 
@@ -355,7 +358,7 @@ function parseEmbedResponse(html, sourceUrl) {
                 isEmbed: false,
                 mimeType: "application/x-mpegURL",
                 headers: {
-                    "Referer": "https://ahay.stream/",
+                    "Referer": "https://ahay.stream/", // Chú ý: Embed player vẫn giữ domain mặc định của ahay.stream để tránh chặn referer
                     "Origin": "https://ahay.stream",
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
                 }
