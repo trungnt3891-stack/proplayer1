@@ -2,19 +2,20 @@
 // CONFIGURATION & METADATA
 // =============================================================================
 
-var BASEURL = "https://phimchillhdf.im";
+var DOMAIN = "https://phimchillhdf.im";
+var BASEURL = DOMAIN;
 
 function getManifest() {
     return JSON.stringify({
         "id": "phimchill",          
         "name": "Phim Chill",
-        "description": "Giao diện Player VIP: Chọn tập trực tiếp, lưu lịch sử, không quảng cáo.",
-        "version": "4.0.0",             
+        "description": "Giao diện Player VIP: Chọn tập trực tiếp, chống Autoplay tuyệt đối.",
+        "version": "4.0.1",             
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/motherless_logo.jpgphimchill.ico", 
         "isEnabled": true,
         "type": "MOVIE",
-        "playerType": "webview" // Bắt buộc dùng Webview để tiêm giao diện Player Custom
+        "playerType": "webview" 
     });
 }
 
@@ -181,7 +182,6 @@ function parseMovieDetail(htmlContent, url) {
         rmatch = htmlContent.match(/meta\s+property="og:description"\s+content="([^"]+)"/i);
         if (rmatch && rmatch[1]) ldes = rmatch[1];
 
-        // Lấy link xem phim gốc để nạp vào hệ thống webview Custom
         var xemPhimMatch = htmlContent.match(/href="([^"]+\/phim\/[^"]+\/tap-[^"]*\.html)"/i) || 
                            htmlContent.match(/href="([^"]+\/tap-[^"]*)"/i) ||
                            htmlContent.match(/href="([^"]+)"[^>]*>[^<]*Xem Phim/i);
@@ -221,7 +221,6 @@ function parseDetailResponse(html, url) {
     try {
         var dataSV = {};
         
-        // 1. Trích xuất link Stream
         var streamUrl = "";
         var isEmbed = false;
         
@@ -239,14 +238,11 @@ function parseDetailResponse(html, url) {
             isEmbed = true;
         }
 
-        // 2. Tạo Movie ID để lưu lịch sử cục bộ
         var movieIdMatch = url.match(/\/phim\/([^/]+)/i) || html.match(/\/phim\/([^/]+)/i);
         var movieId = movieIdMatch ? movieIdMatch[1] : "phimchill_movie";
 
-        // 3. Quét TẤT CẢ các tập ở trang web
         var episodes = [];
         var seenEp = {};
-        
         var aRegex = /<a[^>]*href=["']([^"']+\/tap-[^"']+\.html)["'][^>]*>([\s\S]*?)<\/a>/gi;
         var match;
         while ((match = aRegex.exec(html)) !== null) {
@@ -270,7 +266,6 @@ function parseDetailResponse(html, url) {
             }
         }
         
-        // Quét dự phòng diện rộng
         if (episodes.length === 0) {
             var generalRegex = /href=["']([^"']+\/phim\/[^"']+\/tap-[^"']+\.html)["']/gi;
             while ((match = generalRegex.exec(html)) !== null) {
@@ -295,7 +290,6 @@ function parseDetailResponse(html, url) {
             episodes.push({ id: url, name: "Full", slug: "full" });
         }
 
-        // 4. Build config để đẩy vào bộ Engine JS
         dataSV.stream = streamUrl || url;
         dataSV.isEmbed = isEmbed;
         dataSV.current = url;
@@ -316,7 +310,7 @@ function parseDetailResponse(html, url) {
                 "Custom-Js": customJS
             },
             subtitles: [],
-            injectScript: customJS // Đảm bảo hoạt động hoàn hảo trên mọi module Webview
+            injectScript: customJS
         });
 
     } catch (e) {
@@ -325,12 +319,29 @@ function parseDetailResponse(html, url) {
 }
 
 // =============================================================================
-// ENGINE GIAO DIỆN PLAYER THÔNG MINH (PORT TỪ PHIMFUN -> PHIMCHILL)
+// ENGINE GIAO DIỆN PLAYER THÔNG MINH KÈM KHIÊN CHỐNG AUTOPLAY/FULLSCREEN
 // =============================================================================
 function rawJS(config) {
     return `
 (function() {
-    // 1. DỌN SẠCH DOM GỐC (BỎ QUẢNG CÁO, RÁC, AUTOPLAY LỖI)
+    // ---------------------------------------------------------
+    // LỚP KHIÊN BẢO VỆ 1: CHẶN ĐỨNG TRANG GỐC TẢI & THỰC THI NGẦM
+    // ---------------------------------------------------------
+    if(window.stop) window.stop();
+
+    // LỚP KHIÊN BẢO VỆ 2: VÔ HIỆU HÓA HÀM ÉP FULLSCREEN CỦA IOS
+    const _reqFS = Element.prototype.requestFullscreen;
+    const _wkEnterFS = HTMLVideoElement.prototype.webkitEnterFullscreen;
+    Element.prototype.requestFullscreen = function() { return Promise.resolve(); };
+    if (_wkEnterFS) HTMLVideoElement.prototype.webkitEnterFullscreen = function() {};
+    
+    // Nhả lại quyền Fullscreen sau 3.5 giây để người dùng chủ động bấm
+    setTimeout(() => {
+        Element.prototype.requestFullscreen = _reqFS;
+        if (_wkEnterFS) HTMLVideoElement.prototype.webkitEnterFullscreen = _wkEnterFS;
+    }, 3500);
+
+    // XÓA SẠCH GIAO DIỆN CŨ
     if (document.head) {
         document.head.innerHTML = '<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">';
     }
@@ -338,16 +349,34 @@ function rawJS(config) {
     document.body.innerHTML = '';
     document.body.style.cssText = 'margin:0 !important; padding:0 !important; width:100vw !important; height:100vh !important; overflow:hidden !important; background:#000 !important; position:fixed !important; top:0 !important; left:0 !important; z-index:0 !important;';
 
-    // 2. KHỞI TẠO BIẾN CONFIG
+    // XÓA SẠCH VIDEO/IFRAME ĐANG CỐ CHẠY NGẦM KHÁC
+    setInterval(() => {
+        document.querySelectorAll('video, iframe').forEach(v => {
+            if(v.id !== 'framePlay') {
+                try { if(v.pause) v.pause(); } catch(e){}
+                v.removeAttribute('autoplay');
+                v.src = ''; v.remove();
+            }
+        });
+    }, 500);
+
+    // ---------------------------------------------------------
+    // KHỞI TẠO BIẾN CONFIG & CHỨC NĂNG CHÍNH
+    // ---------------------------------------------------------
     const DATA = ${JSON.stringify(config)};
-    const SERVERS = DATA.servers || [];
+    const INITIAL_STREAM = DATA.stream || "";
+    const CURRENT_URL = DATA.current || "";
+    const SERVERS = Array.isArray(DATA.servers) ? DATA.servers : [];
+    const AUTO_HIDE_TIME = 15000; 
     const storageKey = "pc_hist_" + DATA.movieId;
+    const widthStorageKey = "pc_player_iframe_width";
+    const heightStorageKey = "pc_player_iframe_height";
+    const scaleStorageKey = "pc_player_iframe_scale";
 
     let currentServerIndex = 0;
     let currentEpisodeIndex = 0;
     let hideTimer = null;
 
-    // 3. TIÊM CSS GIAO DIỆN MỚI
     let styleTag = document.createElement('style');
     styleTag.textContent = "\\
         * { box-sizing: border-box !important; font-family: sans-serif !important; }\\
@@ -363,34 +392,26 @@ function rawJS(config) {
     ";
     document.head.appendChild(styleTag);
 
-    // 4. OVERLAY LOADING & THÔNG BÁO
     let overlay = document.createElement('div');
     Object.assign(overlay.style, { position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh', backgroundColor: '#000', zIndex: '999998', display: 'none', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff' });
     document.body.appendChild(overlay);
 
     function showLoading(msg) {
         overlay.innerHTML = '<div style="font-size: 14px; font-weight: bold; color: #aaa;">' + (msg || 'Đang tải...') + '</div>';
-        overlay.style.display = 'flex';
-        overlay.style.opacity = '1';
+        overlay.style.display = 'flex'; overlay.style.opacity = '1';
     }
     function hideLoading() {
-        overlay.style.opacity = '0';
-        setTimeout(() => { overlay.style.display = 'none'; }, 250);
+        overlay.style.opacity = '0'; setTimeout(() => { overlay.style.display = 'none'; }, 250);
     }
-
     function showNotice(text) {
         let notice = document.getElementById('center-play-notice');
         if (!notice) {
-            notice = document.createElement('div');
-            notice.id = 'center-play-notice';
-            document.body.appendChild(notice);
+            notice = document.createElement('div'); notice.id = 'center-play-notice'; document.body.appendChild(notice);
         }
-        notice.textContent = text;
-        notice.style.opacity = '1';
+        notice.textContent = text; notice.style.opacity = '1';
         setTimeout(() => { notice.style.opacity = '0'; }, 3000);
     }
 
-    // 5. QUẢN LÝ KÍCH THƯỚC TRÌNH PHÁT
     function applyIframeDimensions(w, h, s) {
         w = Math.max(150, parseInt(w, 10) || window.innerWidth);
         h = Math.max(100, parseInt(h, 10) || window.innerHeight);
@@ -401,9 +422,7 @@ function rawJS(config) {
             player.style.setProperty('height', h + 'px', 'important');
             player.style.setProperty('transform', 'translate(-50%, -50%) scale(' + s + ')', 'important');
         }
-        localStorage.setItem("pc_w", w);
-        localStorage.setItem("pc_h", h);
-        localStorage.setItem("pc_s", s);
+        localStorage.setItem("pc_w", w); localStorage.setItem("pc_h", h); localStorage.setItem("pc_s", s);
 
         let wInput = document.getElementById("iframe-w-input");
         let hInput = document.getElementById("iframe-h-input");
@@ -413,7 +432,7 @@ function rawJS(config) {
         if (scaleTrigger) scaleTrigger.textContent = "Scale " + s.toFixed(1) + "x ▼";
     }
 
-    // 6. KIẾN TẠO TRÌNH PHÁT (VIDEO CHO M3U8 HOẶC IFRAME CHO EMBED)
+    // TẠO TRÌNH PHÁT AN TOÀN
     function createPlayer(stream, isEmbed) {
         let oldMedia = document.getElementById("framePlay");
         if (oldMedia) oldMedia.remove();
@@ -421,16 +440,20 @@ function rawJS(config) {
         let mediaEl;
         if (isEmbed) {
             mediaEl = document.createElement("iframe");
-            mediaEl.src = stream;
+            // LỚP KHIÊN BẢO VỆ 3: XÓA SẠCH AUTOPLAY TRÊN LINK NHÚNG
+            let safeStream = stream.replace(/[?&]autoplay=[01a-zA-Z]+/gi, '').replace(/[?&]autoPlay=[01a-zA-Z]+/gi, '');
+            mediaEl.src = safeStream;
             mediaEl.setAttribute("allowfullscreen", "true");
             mediaEl.setAttribute("scrolling", "no");
+            // Cấm autoplay qua Content Security Policy gián tiếp
+            mediaEl.setAttribute("allow", "fullscreen; picture-in-picture"); 
         } else {
             mediaEl = document.createElement("video");
             mediaEl.src = stream;
             mediaEl.controls = true;
             mediaEl.playsInline = true;
-            // Chặn tính năng ép Fullscreen khó chịu của iOS
             mediaEl.setAttribute("webkit-playsinline", "true");
+            mediaEl.autoplay = false; // Tuyệt đối không cho autoplay
         }
         mediaEl.id = "framePlay";
         document.body.appendChild(mediaEl);
@@ -441,7 +464,6 @@ function rawJS(config) {
         applyIframeDimensions(savedW, savedH, savedS);
     }
 
-    // 7. XỬ LÝ CHUYỂN TẬP
     function fetchAndPlayEpisode(epIdx) {
         currentEpisodeIndex = epIdx;
         localStorage.setItem(storageKey, epIdx);
@@ -453,22 +475,14 @@ function rawJS(config) {
         fetch(ep.id)
             .then(res => res.text())
             .then(htmlText => {
+                var streamUrl = ""; var isEmbed = false;
                 var m3u8Match = htmlText.match(/data-type="m3u8"[^>]*data-link="([^"]+)"/i) || htmlText.match(/data-link="([^"]+\\.m3u8[^"]*)"/i);
                 var embedMatch = htmlText.match(/data-type="embed"[^>]*data-link="([^"]+)"/i);
                 var iframeMatch = htmlText.match(/<iframe[^>]+src=["']([^"']+)["']/i);
                 
-                var streamUrl = "";
-                var isEmbed = false;
-                
-                if (m3u8Match) {
-                    streamUrl = m3u8Match[1];
-                } else if (embedMatch) {
-                    streamUrl = embedMatch[1];
-                    isEmbed = true;
-                } else if (iframeMatch) {
-                    streamUrl = iframeMatch[1];
-                    isEmbed = true;
-                }
+                if (m3u8Match) { streamUrl = m3u8Match[1]; } 
+                else if (embedMatch) { streamUrl = embedMatch[1]; isEmbed = true; } 
+                else if (iframeMatch) { streamUrl = iframeMatch[1]; isEmbed = true; }
 
                 if (streamUrl) {
                     if (streamUrl.startsWith("//")) streamUrl = window.location.protocol + streamUrl;
@@ -476,21 +490,13 @@ function rawJS(config) {
                     hideLoading();
                     showNotice('▶ Đã chuyển ' + ep.name);
                 } else {
-                    hideLoading();
-                    showNotice('❌ Không tìm thấy link stream!');
+                    hideLoading(); showNotice('❌ Không tìm thấy link!');
                 }
             })
-            .catch(err => {
-                hideLoading();
-                showNotice('❌ Lỗi kết nối máy chủ!');
-            })
-            .finally(() => {
-                renderEpisodeGrid();
-                resetAutoHideTimer();
-            });
+            .catch(err => { hideLoading(); showNotice('❌ Lỗi kết nối!'); })
+            .finally(() => { renderEpisodeGrid(); resetAutoHideTimer(); });
     }
 
-    // 8. TỰ ĐỘNG ẨN GIAO DIỆN
     function resetAutoHideTimer() {
         let elements = document.querySelectorAll('.floating-control-ui');
         elements.forEach(el => el.classList.add('active-show'));
@@ -504,7 +510,6 @@ function rawJS(config) {
         }, 12000);
     }
 
-    // 9. DỰNG LAYOUT CHÍNH
     function initLayout() {
         let savedEp = parseInt(localStorage.getItem(storageKey), 10);
         if (!isNaN(savedEp) && savedEp < SERVERS[0].episodes.length) {
@@ -634,7 +639,7 @@ function rawJS(config) {
 }
 
 // =============================================================================
-// MENUS
+// MENUS THỂ LOẠI
 // =============================================================================
 
 function parseCategoriesResponse(apiResponseJson) {
