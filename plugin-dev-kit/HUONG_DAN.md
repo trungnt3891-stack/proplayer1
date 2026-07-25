@@ -296,7 +296,7 @@ Khi viết `Custom-Js` hoặc mã xử lý trong WebView, plugin có thể sử 
 | `SnifferBridge.sendToPlayer(url, headersJson)` | Bí danh | Giống `play()` |
 | `SnifferBridge.onVideoDetected(url)` | `url`: String | Hàm callback cũ (tương thích ngược) |
 
-#### Ví dụ ĐẦY ĐỦ CẤU HÌNH 6 MỤC CHẶN QUẢNG CÁO + `Custom-Js`:
+#### Ví dụ ĐẦY ĐỦ VỚI TOÀN BỘ DANH SÁCH TÊN MIỀN, KEYWORD & CSS SELECTORS:
 ```javascript
 function parseDetailResponse(html, url) {
     var customJsCode = `(function() {
@@ -306,7 +306,7 @@ function parseDetailResponse(html, url) {
         var v = document.querySelector('video');
         if (v && v.src && v.src.indexOf('http') === 0) {
             var headers = JSON.stringify({
-                "Referer": "https://gamomephim.com/",
+                "Referer": "https://embed18.streamc.xyz/",
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
             });
             SnifferBridge.play(v.src, headers);
@@ -314,20 +314,30 @@ function parseDetailResponse(html, url) {
     })();`;
 
     return JSON.stringify({
-        "url": "https://gamomephim.com/embed/123",
+        "url": "https://embed18.streamc.xyz/embed.php?hash=c9e5230c3e65847df88fc05ea66cbbb6",
         "isEmbed": true,
         "headers": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Referer": "https://gamomephim.com/",
+            "Referer": "https://embed18.streamc.xyz",
             
-            // ⭐ ĐẦY ĐỦ 6 NỘI DUNG ĐIỀU KHIỂN CHẶN QUẢNG CÁO DÀNH CHO DEV PLUGIN
-            "Block-Ads": "true",                                       // 1. Bật bộ AdBlock tổng thể
-            "Block-Redirects": "true",                                 // 2. Chặn chuyển hướng main frame khi click
-            "Block-Domains": "streamc-ads.com, popunder.xyz",          // 3. Chặn thêm các tên miền quảng cáo riêng
-            "Block-Keywords": "/pop.js, /vast_xml",                   // 4. Chặn thêm từ khóa URL quảng cáo riêng
-            "Block-Css": ".streamc-ad-banner, #popunder-dialog",       // 5. Ẩn thêm thẻ div/element quảng cáo riêng
-            "Block-Scripts": "popads,exoclick",                        // 6. Chặn các script riêng do dev chỉ định
-            
+            // 🛡️ 1. BẬT BỘ CHẶN QUẢNG CÁO TỔNG THỂ
+            "Block-Ads": "true",
+
+            // 🛑 2. BẬT CHẶN CHUYỂN HƯỚNG MAIN FRAME KHI CLICK
+            "Block-Redirects": "true",
+
+            // 🌐 3. CHẶN MẠNG CẤP THẤP: TOÀN BỘ TÊN MIỀN QUẢNG CÁO / CASINO / BETTING (Nối dài bằng dấu phẩy)
+            "Block-Domains": "googlesyndication.com, doubleclick.net, googleadservices.com, adnxs.com, imasdk.googleapis.com, popads.net, popcash.net, propellerads.com, exoclick.com, acscdn.com, attirecideryeah.com, trafficjunky.com, juicyads.com, bidvertiser.com, clickadu.com, pubmatic.com, rubiconproject.com, openx.net, casalemedia.com, smartadserver.com, criteo.com, taboola.com, outbrain.com, adroll.com, scorecardresearch.com, zedo.com, adstir.com, popmyads.com, adsterra.com, hilltopads.com, monetag.com, a-ads.com, clksite.com, ad-delivery.net, ad-maven.com, yandex.ru/ads, vidoomy.com, targetfirst.com, betting, casino, gamead, adtrace, adform, adservice, adsystem, adtech, adthrive, adtrqt, adzerk, amazon-adsystem, applovin, unity3d.com/ads, chartboost, inmobi, fyber, tapjoy, vungle, adcolony, mopub",
+
+            // 🔍 4. CHẶN KEYWORD URL SCRIPT QUẢNG CÁO / VAST XML / POPUP
+            "Block-Keywords": "/adserv/, /adstream/, /popunder, /popup.js, /ads.js, ad_provider, pop_under, pop_up, vast.xml, vpaid.js, ads/vpaid, bidder, tracking.js, analytics.js, banner.js, adserver, ad_script, ad_loader",
+
+            // 🧹 5. ANTI-AD CSS: ẨN TOÀN BỘ THẺ DIV, IFRAME, POPUP, BANNER VÀ VỚI LỚP PHỦ Z-INDEX CỦA WEB NÀY
+            "Block-Css": "iframe[src*='ad'], iframe[src*='pop'], iframe[src*='banner'], div[class*='ad-'], div[class*='ad_'], div[id*='ad-'], div[id*='ad_'], div[class*='banner'], div[id*='banner'], div[class*='popup'], div[id*='popup'], div[class*='popunder'], div[id*='popunder'], div[style*='z-index: 2147483647']:not(.jw-controls):not(.plyr__controls), div[style*='z-index: 999999']:not(.jw-controls):not(.plyr__controls), a[href*='bet'], a[href*='casino'], a[href*='click'], .popunder, .popup, .ad-box, .ad-container, .adsbygoogle",
+
+            // 🚫 6. CHẶN SCRIPT RIÊNG DO DEV CHỈ ĐỊNH
+            "Block-Scripts": "popads,exoclick,adsterra,clickadu",
+
             "Custom-Js": customJsCode
         }
     });
