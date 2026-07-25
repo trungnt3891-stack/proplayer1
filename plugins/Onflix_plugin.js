@@ -6,19 +6,19 @@ var BASEURL = "https://onflix.lat";
 var BASEAPI = "https://k8s.onflixcdn.com/api";
 
 function getManifest() {
-    return JSON.stringify({
-        "id": "onflix",
-        "name": "Onflix",
-        "description": "Trang xem phim siêu hay.",
-        "version": "1.8.1",
-        "BASEURL": BASEURL,
-        "iconUrl": BASEURL + "/app/asset/logo.png",
-        "isEnabled": true,
-        "isAdult": false,
-        "type": "MOVIE",
-        "layoutType": "VERTICAL",
-        "playerType": "auto"
-    });
+	return JSON.stringify({
+		"id": "onflix",
+		"name": "Onflix",
+		"description": "Trang xem phim siêu hay - Fix lỗi folder rỗng và tìm kiếm.",
+		"version": "1.8.2",
+		"BASEURL": BASEURL,
+		"iconUrl": BASEURL + "/app/asset/logo.png",
+		"isEnabled": true,
+		"isAdult": false,
+		"type": "MOVIE",
+		"layoutType": "VERTICAL",
+		"playerType": "auto"
+	});
 }
 
 function log(msg) {
@@ -29,7 +29,6 @@ function log(msg) {
     }
 }
 
-// https://onflix.lat/kham-pha?page=2
 function getHomeSections() {
     var listurl = `
 /movies?sort=newest&limit=24@@Phim Mới Cập Nhật@@true
@@ -59,56 +58,69 @@ function getFilterConfig() {
 // =============================================================================
 
 function getUrlList(slug, filtersJson) {
-    try {
-        if (slug && (slug.indexOf("http") > -1 || slug.indexOf("search") > -1)) {
-            return slug;
-        }
-        let page = 1;
-        let path = slug || "";
-        
-        if (filtersJson) {
-            let fixedJson = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":')
-                .replace(/:,/g, ':');
-            
-            try {
-                let filters = JSON.parse(fixedJson);
-                page = parseInt(filters.page) || 1;
-                
-                if (filters.category) {
-                    if (Array.isArray(filters.category) && filters.category.length > 0) {
-                        path = filters.category[0].slug;
-                    } else if (typeof filters.category === 'string') {
-                        path = filters.category;
-                    }
-                }
-            } catch (jsonErr) {}
-        }
-        
-        let resultUrl = BASEAPI;
+	try {
+		if (slug && (slug.indexOf("http") > -1 || slug.indexOf("search") > -1)) {
+			return slug;
+		}
+		let page = 1;
+		let path = slug || "";
+		
+		if (filtersJson) {
+			let fixedJson = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":')
+				.replace(/:,/g, ':');
+			
+			try {
+				let filters = JSON.parse(fixedJson);
+				page = parseInt(filters.page) || 1;
+				
+				if (filters.category) {
+					if (Array.isArray(filters.category) && filters.category.length > 0) {
+						path = filters.category[0].slug;
+					} else if (typeof filters.category === 'string') {
+						path = filters.category;
+					}
+				}
+			} catch (jsonErr) {}
+		}
+		
+		let resultUrl = BASEAPI;
         if (path && path.indexOf("/themes/") === 0) {
             resultUrl = BASEURL + path;
         } else if (path) {
-            resultUrl += path;
-        }
+			resultUrl += path;
+		}
 
-        if (page > 1) {
-            if (resultUrl.indexOf("?") > -1) {
-                resultUrl += "&page=" + page;
-            } else {
-                resultUrl += "?page=" + page;
-            }
-        }
-        
-        return resultUrl.replace(/([^:]\/)\/+/g, "$1");
-        
-    } catch (e) {
-        let fallback = BASEURL + (slug ? "/" + slug : "");
-        return fallback.replace(/([^:]\/)\/+/g, "$1");
-    }
+		if (page > 1) {
+			if (resultUrl.indexOf("?") > -1) {
+				resultUrl += "&page=" + page;
+			}
+			else {
+				resultUrl += "?page=" + page;
+			}
+		}
+		
+		return resultUrl.replace(/([^:]\/)\/+/g, "$1");
+		
+	} catch (e) {
+		let fallback = BASEURL + (slug ? "/" + slug : "");
+		return fallback.replace(/([^:]\/)\/+/g, "$1");
+	}
 }
 
 function getUrlSearch(keyword, filtersJson) {
-    return BASEAPI + "/search?q=" + encodeURIComponent(keyword) + "&type=all";
+	let page = 1;
+	if (filtersJson) {
+		try {
+			let fixedJson = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
+			let filters = JSON.parse(fixedJson);
+			page = parseInt(filters.page) || 1;
+		} catch (e) {}
+	}
+	let searchUrl = BASEAPI + "/search?q=" + encodeURIComponent(keyword.trim()) + "&type=all";
+	if (page > 1) {
+		searchUrl += "&page=" + page;
+	}
+	return searchUrl;
 }
 
 function getUrlDetail(slug) {
@@ -124,10 +136,9 @@ function getUrlYears() { return ""; }
 // =============================================================================
 // PARSERS
 // =============================================================================
-
 function parseListResponse(html, $url) {
-    try {
-        var items = [];
+	try {
+		var items = [];
         if (html.trim().indexOf("<") === 0) {
             _$(html).find("a").each(function() {
                 var href = this.attr("href");
@@ -173,33 +184,67 @@ function parseListResponse(html, $url) {
                 }
             }
         }
+		
+		return JSON.stringify({
+			"items": items,
+			"pagination": {
+				"currentPage": 1,
+				"totalPages": 99
+			}
+		});
+		
+	} catch (e) {
+		return JSON.stringify({
+			"items": [{
+				"id": $url,
+				"title": "Lỗi: " + e,
+				"posterUrl": "",
+				"backdropUrl": ""
+			}],
+			"pagination": {
+				"currentPage": 1,
+				"totalPages": 1
+			}
+		});
+	}
+}
+
+function parseSearchResponse(html, $url) {
+    try {
+        var items = [];
+        if (html.trim().indexOf("<") === 0) {
+            return parseListResponse(html, $url);
+        }
         
+        var searchData = JSON.parse(html);
+        var dataList = searchData.data || searchData;
+        if (Array.isArray(dataList)) {
+            for (var i = 0; i < dataList.length; i++) {
+                var $block = dataList[i];
+                var itemUrl = BASEURL + "/phim/" + $block.slug;
+                items.push({
+                    "id": itemUrl,
+                    "title": ($block.title || "").trim(),
+                    "posterUrl": $block.poster_url || "",
+                    "backdropUrl": $block.thumb_url || "",
+                    "year": $block.year || 2026,
+                    "quality": $block.quality || "HD",
+                    "episode_current": $block.episode_current || "Cập nhật",
+                    "lang": $block.lang || "Vietsub"
+                });
+            }
+        }
+
         return JSON.stringify({
             "items": items,
             "pagination": {
                 "currentPage": 1,
-                "totalPages": 99
+                "totalPages": 10
             }
         });
-        
     } catch (e) {
-        return JSON.stringify({
-            "items": [{
-                "id": $url,
-                "title": "Lỗi: " + e,
-                "posterUrl": "",
-                "backdropUrl": ""
-            }],
-            "pagination": {
-                "currentPage": 1,
-                "totalPages": 1
-            }
-        });
+        return parseListResponse(html, $url);
     }
-}
-
-function parseSearchResponse(html) {
-    return parseListResponse(html);
 }
 
 function parseNextPayload(raw) {
@@ -290,7 +335,6 @@ function parseMovieDetail(html, $url) {
             $listEpi.forEach(episode => {
                 var rawServerName = episode.server_name || "Vietsub";
                 
-                // Chuẩn hóa và gom nhóm các server bị chia nhỏ tránh việc tạo folder rỗng
                 var cleanServerName = "Vietsub";
                 if (rawServerName.includes("PA") || rawServerName.toLowerCase().includes("kk")) {
                     cleanServerName = "KK Phim";
@@ -309,12 +353,16 @@ function parseMovieDetail(html, $url) {
                 }
 
                 var streamLink = episode.link_m3u8;
+                // Nếu link m3u8 bị lỗi chuyển hướng streamsite, ưu tiên dùng link_embed sạch sẽ hơn nếu có
                 if (!streamLink || streamLink.indexOf("https://ss.onflixstream.site/playlist?url") > -1) {
-                    streamLink = episode.link_embed;
+                    if (episode.link_embed) {
+                        streamLink = episode.link_embed;
+                    }
                 }
 
                 var epSlug = "tap-" + episode.slug;
-                if (streamLink && !serversMap[cleanServerName][epSlug]) {
+                // Chỉ nhận link stream hợp lệ và không bị rỗng/undefined
+                if (streamLink && streamLink !== "undefined" && !serversMap[cleanServerName][epSlug]) {
                     serversMap[cleanServerName][epSlug] = {
                         id: streamLink,            
                         name: "Tập " + episode.slug,     
@@ -333,7 +381,7 @@ function parseMovieDetail(html, $url) {
                 return numA - numB;
             });
 
-            // LOẠI BỎ TRIỆT ĐỂ: Chỉ thêm server nếu có chứa tập phim hợp lệ bên trong
+            // LOẠI BỎ TRIỆT ĐỂ: Chỉ đẩy server vào danh sách khi có từ 1 tập phim trở lên
             if (epsArray.length > 0) {
                 servers.push({
                     name: sName,
@@ -390,35 +438,37 @@ function parseMovieDetail(html, $url) {
 }
 
 function parseDetailResponse(html, url) {
-    try {
-        var $stream = "";
-        var $type = "application/x-mpegURL";
-        if(url.indexOf("embed") > -1){
+	try {
+		var $stream = "";
+		var $type = "application/x-mpegURL";
+		if(url.indexOf("embed") > -1){
+			$stream = url;
+			$type = "";
+		} else {
             $stream = url;
-            $type = "";
         }
-        var customjs = textJS(url);
-        return JSON.stringify({
-            "url": $stream,
-            "mimeType": $type,
-            "headers": {
-                "Referer": BASEURL,
-                "Origin": BASEURL,
-                "User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-                "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-                "Sec-Ch-Ua-Mobile": "?1",
-                "Sec-Ch-Ua-Platform": '"Android"',
-                "Accept": "*/*",
-                "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
-                "X-Requested-With": "com.android.chrome",
-                "Custom-Js": customjs.trim()
-            },
-            "subtitles": []
-        });
-        
-    } catch (e) {
-        return JSON.stringify({ "url": "", "headers": {} });
-    }
+		var customjs = textJS(url);
+		return JSON.stringify({
+			"url": $stream,
+			"mimeType": $type,
+			"headers": {
+				"Referer": BASEURL,
+				"Origin": BASEURL,
+				"User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+				"Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+				"Sec-Ch-Ua-Mobile": "?1",
+				"Sec-Ch-Ua-Platform": '"Android"',
+				"Accept": "*/*",
+				"Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+				"X-Requested-With": "com.android.chrome",
+				"Custom-Js": customjs.trim()
+			},
+			"subtitles": []
+		});
+		
+	} catch (e) {
+		return JSON.stringify({ "url": "", "headers": {} });
+	}
 }
 
 function sortEpisodesByName(data) {
