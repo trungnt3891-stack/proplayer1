@@ -1,3 +1,7 @@
+// =============================================================================
+// CONFIGURATION & METADATA
+// =============================================================================
+
 var BASEURL = "https://onflix.lat";
 var BASEAPI = "https://k8s.onflixcdn.com/api";
 
@@ -5,14 +9,22 @@ function getManifest() {
 	return JSON.stringify({
 		"id": "onflix",
 		"name": "Onflix",
-		"description": "Trang xem phim siêu hay.",
-		"version": "1.7.6",
+		"description": "Trang xem phim siêu hay - Lọc sạch folder rỗng.",
+		"version": "1.8.0",
 		"BASEURL": BASEURL,
 		"iconUrl": BASEURL + "/app/asset/logo.png",
 		"isEnabled": true,
 		"type": "VIDEO",
 		"playerType": "auto"
 	});
+}
+
+function log(msg) {
+    if (typeof nativeLog !== 'undefined') {
+        nativeLog("[onflix] " + msg);
+    } else if (typeof console !== 'undefined' && console.log) {
+        console.log("[onflix] " + msg);
+    }
 }
 
 function getHomeSections() {
@@ -36,6 +48,10 @@ function getFilterConfig() {
         category: menulist
     });
 }
+
+// =============================================================================
+// URL GENERATION
+// =============================================================================
 
 function getUrlList(slug, filtersJson) {
 	try {
@@ -64,9 +80,12 @@ function getUrlList(slug, filtersJson) {
 		}
 		
 		let resultUrl = BASEAPI;
-		if (path) {
+        if (path && path.indexOf("/themes/") === 0) {
+            resultUrl = BASEURL + path;
+        } else if (path) {
 			resultUrl += path;
 		}
+
 		if (page > 1) {
 			if (resultUrl.indexOf("?") > -1) {
 				resultUrl += "&page=" + page;
@@ -98,32 +117,63 @@ function getUrlCategories() { return BASEURL; }
 function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
+// =============================================================================
+// PARSERS
+// =============================================================================
 function parseListResponse(html, $url) {
 	try {
 		var items = [];
-		var videoData = JSON.parse(html);
-		var currentpg = videoData.pagination.current_page;
-		var total_pages = videoData.pagination.total_pages;
-		for (var $j = 0; $j < videoData.data.length; $j++) {
-			var $block = videoData.data[$j];
-			var itemUrl = BASEURL + "/phim/" + $block.slug;
-			items.push({
-				"id": itemUrl,
-				"title": $block.title.trim(),
-				"posterUrl": $block.poster_url,
-				"backdropUrl": $block.thumb_url,
-				"year": $block.year,
-				"quality": $block.quality,
-				"episode_current": $block.episode_current,
-				"lang": $block.lang
-			});
-		}
+        if (html.trim().indexOf("<") === 0) {
+            _$(html).find("a").each(function() {
+                var href = this.attr("href");
+                if (href && href.indexOf("/phim/") > -1) {
+                    var title = this.attr("title") || this.text();
+                    var img = this.find("img").attr("src");
+                    if (href.indexOf("http") === -1) href = BASEURL + href;
+                    if (img && img.indexOf("http") === -1) img = BASEURL + img;
+                    
+                    if (title && href) {
+                        items.push({
+                            "id": href,
+                            "title": title.trim(),
+                            "posterUrl": img || "",
+                            "backdropUrl": img || "",
+                            "quality": "HD",
+                            "lang": "Vietsub",
+                            "episode_current": "Cập nhật"
+                        });
+                    }
+                }
+            });
+        } else {
+            var videoData = JSON.parse(html);
+            var currentpg = videoData.pagination ? videoData.pagination.current_page : 1;
+            var total_pages = videoData.pagination ? videoData.pagination.total_pages : 1;
+            var dataList = videoData.data || videoData;
+            
+            if (Array.isArray(dataList)) {
+                for (var $j = 0; $j < dataList.length; $j++) {
+                    var $block = dataList[$j];
+                    var itemUrl = BASEURL + "/phim/" + $block.slug;
+                    items.push({
+                        "id": itemUrl,
+                        "title": ($block.title || "").trim(),
+                        "posterUrl": $block.poster_url || "",
+                        "backdropUrl": $block.thumb_url || "",
+                        "year": $block.year || 2026,
+                        "quality": $block.quality || "HD",
+                        "episode_current": $block.episode_current || "Cập nhật",
+                        "lang": $block.lang || "Vietsub"
+                    });
+                }
+            }
+        }
 		
 		return JSON.stringify({
 			"items": items,
 			"pagination": {
-				"currentPage": currentpg,
-				"totalPages": total_pages
+				"currentPage": 1,
+				"totalPages": 99
 			}
 		});
 		
@@ -229,57 +279,71 @@ function parseMovieDetail(html, $url) {
         dataVD = extractCleanData(rawVDEmbed);
         
         var $listEpi = dataVD.episodes;
-        var servers = [];
+        var serversMap = {};
 
         if ($listEpi) {
             $listEpi.forEach(episode => {
-                let server = servers.find(s => s.name === episode.server_name);
+                var rawServerName = episode.server_name || "Vietsub";
+                
+                var cleanServerName = "Vietsub";
+                if (rawServerName.includes("PA") || rawServerName.toLowerCase().includes("kk")) {
+                    cleanServerName = "KK Phim";
+                } else if (rawServerName.includes("OP") || rawServerName.toLowerCase().includes("ổ phim")) {
+                    cleanServerName = "Ổ Phim";
+                } else if (rawServerName.includes("NC") || rawServerName.toLowerCase().includes("nguồn c")) {
+                    cleanServerName = "Nguồn C";
+                } else if (rawServerName.toLowerCase().includes("thuyết minh")) {
+                    cleanServerName = "Thuyết Minh";
+                } else {
+                    cleanServerName = rawServerName;
+                }
 
-                if (!server) {
-                    var serverName = episode.server_name;
-                    server = {
-                        name: serverName,
-                        episodes: []
-                    };
-                    servers.push(server);
+                if (!serversMap[cleanServerName]) {
+                    serversMap[cleanServerName] = {};
                 }
 
                 var streamLink = episode.link_m3u8;
-                if (episode.link_m3u8.indexOf("https://ss.onflixstream.site/playlist?url") > -1) {
+                if (!streamLink || streamLink.indexOf("https://ss.onflixstream.site/playlist?url") > -1) {
                     streamLink = episode.link_embed;
                 }
-                server.episodes.push({
-                    id: streamLink,            
-                    name: "Tập " + episode.slug,     
-                    slug: "tap-" + episode.slug        
-                });
+
+                var epSlug = "tap-" + episode.slug;
+                if (streamLink && !serversMap[cleanServerName][epSlug]) {
+                    serversMap[cleanServerName][epSlug] = {
+                        id: streamLink,            
+                        name: "Tập " + episode.slug,     
+                        slug: epSlug        
+                    };
+                }
             });
         }
 
-        function renameServer(originalName) {
-            let newName = originalName;
-            if (originalName.includes("PA")) {
-                newName = originalName.replace("PA", "KK Phim");
-            } else if (originalName.includes("OP")) {
-                newName = originalName.replace("OP", "Ổ Phim");
-            } else if (originalName.includes("NC")) {
-                newName = originalName.replace("NC", "Nguồn C");
-            }
-            return newName;
-        }
+        var servers = [];
+        for (var sName in serversMap) {
+            var epsArray = Object.values(serversMap[sName]);
+            epsArray.sort((a, b) => {
+                const numA = parseInt(a.name.replace(/[^\d]/g, '')) || 0;
+                const numB = parseInt(b.name.replace(/[^\d]/g, '')) || 0;
+                return numA - numB;
+            });
 
-        servers.forEach(server => {
-            server.name = renameServer(server.name);
-        });
+            // CHỐT CHẶN QUAN TRỌNG: Chỉ thêm vào danh sách nếu server thực sự có tập phim bên trong
+            if (epsArray.length > 0) {
+                servers.push({
+                    name: sName,
+                    episodes: epsArray
+                });
+            }
+        }
 
         servers.sort((a, b) => {
             const getPriority = (name) => {
                 if (name.includes("KK Phim")) return 1;  
                 if (name.includes("Ổ Phim")) return 2;    
-                if (name.includes("Nguồn C")) return 4;  
-                return 3;                                        
+                if (name.includes("Vietsub")) return 3;
+                if (name.includes("Thuyết Minh")) return 4;
+                return 5;                                        
             };
-
             return getPriority(a.name) - getPriority(b.name);
         });
 
@@ -304,13 +368,13 @@ function parseMovieDetail(html, $url) {
     catch (e) {
         return JSON.stringify({
             id: $url,
-            title: "Lỗi rồi bạn ơi. Tên miền đã bị đổi",
+            title: "Lỗi chi tiết phim",
             posterUrl: "",
             backdropUrl: "",
             description: e.message || e,
             servers: [],
             quality: "HD",
-            year: 2030,
+            year: 2026,
             status: "",
             duration: "",
             casts: "",
