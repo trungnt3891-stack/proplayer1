@@ -8,13 +8,13 @@ function getManifest() {
     return JSON.stringify({
         "id": "phimchill",          
         "name": "Phim Chill",
-        "description": "Giao diện Player thông minh: Lưu lịch sử, chuyển tập trực tiếp.",
+        "description": "Giao diện Player VIP: Chọn tập trực tiếp, lưu lịch sử, không quảng cáo.",
         "version": "4.0.0",             
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/motherless_logo.jpgphimchill.ico", 
         "isEnabled": true,
         "type": "MOVIE",
-        "playerType": "webview" // Bắt buộc webview để tiêm giao diện JS
+        "playerType": "webview" // Bắt buộc dùng Webview để tiêm giao diện Player Custom
     });
 }
 
@@ -37,9 +37,7 @@ function getPrimaryCategories() {
 function getFilterConfig() {
     var listurl = getLISTmenu();
     var menulist = buildMenu(listurl);
-    return JSON.stringify({
-        category: menulist
-    });
+    return JSON.stringify({ category: menulist });
 }
 
 // =============================================================================
@@ -47,9 +45,7 @@ function getFilterConfig() {
 // =============================================================================
 
 function getUrlList(slug, filtersJson) {
-    if (slug && slug.indexOf("http") > -1) {
-        return slug;
-    }
+    if (slug && slug.indexOf("http") > -1) return slug;
     try {
         var filters = typeof filtersJson === "string" ? JSON.parse(filtersJson || "{}") : (filtersJson || {});
         var page = parseInt(filters.page) || 1;
@@ -63,9 +59,7 @@ function getUrlList(slug, filtersJson) {
             }
         }
         var url = BASEURL + (path ? "/" + path : "");
-        if (page > 1) {
-            url += "?page=" + page;
-        }
+        if (page > 1) url += "?page=" + page;
         return url.replace(/([^:]\/)\/+/g, "$1");
     } catch (e) {
         var fallback = BASEURL + (slug ? "/" + slug : "");
@@ -81,9 +75,7 @@ function getUrlSearch(keyword, filtersJson) {
         page = parseInt(filters.page) || 1;
     } catch (e) {}
     var url = BASEURL + "/?search=" + encodedKeyword;
-    if (page > 1) {
-        url += "&page=" + page;
-    }
+    if (page > 1) url += "&page=" + page;
     return url;
 }
 
@@ -116,11 +108,8 @@ function parseListResponse(html) {
 
             if (!title || title === "Video không tiêu đề") continue;
 
-            if (posterUrl.indexOf('/') === 0 && posterUrl.indexOf('//') !== 0) {
-                posterUrl = BASEURL + posterUrl;
-            } else if (posterUrl.indexOf('http') !== 0 && posterUrl.indexOf('//') !== 0) {
-                posterUrl = BASEURL + "/" + posterUrl;
-            }
+            if (posterUrl.indexOf('/') === 0 && posterUrl.indexOf('//') !== 0) posterUrl = BASEURL + posterUrl;
+            else if (posterUrl.indexOf('http') !== 0 && posterUrl.indexOf('//') !== 0) posterUrl = BASEURL + "/" + posterUrl;
             if (url.indexOf("tap-") !== -1) continue;
 
             if (!seen[url]) {
@@ -170,7 +159,7 @@ function parseListResponse(html) {
 function parseSearchResponse(html) { return parseListResponse(html); }
 
 // =============================================================================
-// PARSER CHI TIẾT PHIM (TRẢ VỀ LINK ĐỂ NẠP WEBVIEW)
+// PARSER CHI TIẾT PHIM
 // =============================================================================
 
 function parseMovieDetail(htmlContent, url) {
@@ -185,12 +174,14 @@ function parseMovieDetail(htmlContent, url) {
         
         var rmatch = htmlContent.match(/meta\s+property="og:image"\s+content="([^"]+)"/i);
         if (rmatch && rmatch[1]) limg = rmatch[1];
+        
         rmatch = htmlContent.match(/meta\s+property="og:title"\s+content="([^"]+)"/i);
         if (rmatch && rmatch[1]) lname = rmatch[1];
+        
         rmatch = htmlContent.match(/meta\s+property="og:description"\s+content="([^"]+)"/i);
         if (rmatch && rmatch[1]) ldes = rmatch[1];
 
-        // Lấy link xem phim để kích hoạt webview
+        // Lấy link xem phim gốc để nạp vào hệ thống webview Custom
         var xemPhimMatch = htmlContent.match(/href="([^"]+\/phim\/[^"]+\/tap-[^"]*\.html)"/i) || 
                            htmlContent.match(/href="([^"]+\/tap-[^"]*)"/i) ||
                            htmlContent.match(/href="([^"]+)"[^>]*>[^<]*Xem Phim/i);
@@ -204,10 +195,10 @@ function parseMovieDetail(htmlContent, url) {
         }
 
         var servers = [{
-            name: "Mở Giao Diện Webview Chọn Tập",
+            name: "Phim Chill Player",
             episodes: [{
                 id: targetUrl,
-                name: "Chọn tập thoải mái trên Webview",
+                name: "Mở Giao Diện Player Thông Minh",
                 slug: "webview"
             }]
         }];
@@ -223,97 +214,96 @@ function parseMovieDetail(htmlContent, url) {
 }
 
 // =============================================================================
-// PARSER DETAIL & INJECT GIAO DIỆN PLAYER (ĐÃ FIX LỖI TẬP)
+// BÓC TÁCH LINK STREAM, DANH SÁCH TẬP & TIÊM CUSTOM JS GIAO DIỆN
 // =============================================================================
 
 function parseDetailResponse(html, url) {
     try {
         var dataSV = {};
         
-        // 1. Trích xuất link stream video
+        // 1. Trích xuất link Stream
         var streamUrl = "";
+        var isEmbed = false;
+        
         var m3u8Match = html.match(/data-type="m3u8"[^>]*data-link="([^"]+)"/i) || html.match(/data-link="([^"]+\.m3u8[^"]*)"/i);
-        if (m3u8Match) streamUrl = m3u8Match[1];
-        if (!streamUrl) {
-            var embedMatch = html.match(/data-type="embed"[^>]*data-link="([^"]+)"/i);
-            if (embedMatch) streamUrl = embedMatch[1];
-        }
-        if (!streamUrl) {
-            var iframeMatch = html.match(/<iframe[^>]+src=["']([^"']+)["']/i);
-            if (iframeMatch) streamUrl = iframeMatch[1];
-        }
-
-        // 2. Trích xuất Movie ID để lưu lịch sử độc lập
-        var movieIdMatch = html.match(/<link\s+rel="canonical"\s+href="([^"]+)"/i);
-        var movieId = "phimchill_default";
-        if (movieIdMatch) {
-            var mUrl = movieIdMatch[1];
-            movieId = mUrl.replace(/\/tap-[^/]+$/, "").split('/').pop() || "phimchill_movie";
+        var embedMatch = html.match(/data-type="embed"[^>]*data-link="([^"]+)"/i);
+        var iframeMatch = html.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+        
+        if (m3u8Match) {
+            streamUrl = m3u8Match[1];
+        } else if (embedMatch) {
+            streamUrl = embedMatch[1];
+            isEmbed = true;
+        } else if (iframeMatch) {
+            streamUrl = iframeMatch[1];
+            isEmbed = true;
         }
 
-        // 3. BÓC TÁCH DANH SÁCH TẬP PHIM CHILL (ĐÃ SỬA CHUẨN XÁC)
+        // 2. Tạo Movie ID để lưu lịch sử cục bộ
+        var movieIdMatch = url.match(/\/phim\/([^/]+)/i) || html.match(/\/phim\/([^/]+)/i);
+        var movieId = movieIdMatch ? movieIdMatch[1] : "phimchill_movie";
+
+        // 3. Quét TẤT CẢ các tập ở trang web
         var episodes = [];
         var seenEp = {};
         
-        // Quét cẩn thận các thẻ a có chứa "tap-"
-        var aTagRegex = /<a([^>]+href=["'][^"']+\/tap-[^"']+["'][^>]*)>([\s\S]*?)<\/a>/gi;
+        var aRegex = /<a[^>]*href=["']([^"']+\/tap-[^"']+\.html)["'][^>]*>([\s\S]*?)<\/a>/gi;
         var match;
-        
-        while ((match = aTagRegex.exec(html)) !== null) {
-            var attrs = match[1];
-            var innerText = match[2].replace(/<[^>]*>/g, '').trim();
-            
-            var hrefMatch = attrs.match(/href=["']([^"']+)["']/i);
-            var href = hrefMatch ? hrefMatch[1].trim() : "";
-            
-            var titleMatch = attrs.match(/title=["']([^"']+)["']/i);
-            var titleAttr = titleMatch ? titleMatch[1].trim() : "";
-            
-            if (href && href.indexOf('javascript') === -1) {
-                if (href.indexOf('http') !== 0) {
-                    href = BASEURL + (href.startsWith('/') ? '' : '/') + href;
-                }
-                
-                if (!seenEp[href]) {
-                    var name = titleAttr || innerText;
-                    // Format lại thành "Tập X" nếu chưa có chữ tập
-                    if (!name.toLowerCase().includes("tập") && !isNaN(parseInt(name))) {
-                        name = "Tập " + name;
-                    }
-                    
-                    episodes.push({
-                        id: href,
-                        name: name || "Tập",
-                        slug: href.split('/').pop()
-                    });
-                    seenEp[href] = true;
-                }
+        while ((match = aRegex.exec(html)) !== null) {
+            var epUrl = match[1].trim();
+            var epText = match[2].replace(/<[^>]*>/g, '').trim();
+
+            if (epUrl.indexOf('http') !== 0) {
+                epUrl = BASEURL + (epUrl.startsWith('/') ? '' : '/') + epUrl;
+            }
+
+            if (!seenEp[epUrl]) {
+                var numMatch = epUrl.match(/tap-([^_]+)/i) || epUrl.match(/tap-(\d+)/i);
+                var formattedName = numMatch ? ("Tập " + numMatch[1].replace(/-/g, ' ')) : (!isNaN(epText) ? ("Tập " + epText) : (epText || "Tập"));
+
+                episodes.push({
+                    id: epUrl,
+                    name: formattedName,
+                    slug: epUrl.split('/').pop()
+                });
+                seenEp[epUrl] = true;
             }
         }
         
-        var servers = [];
+        // Quét dự phòng diện rộng
+        if (episodes.length === 0) {
+            var generalRegex = /href=["']([^"']+\/phim\/[^"']+\/tap-[^"']+\.html)["']/gi;
+            while ((match = generalRegex.exec(html)) !== null) {
+                var gUrl = match[1].trim();
+                if (gUrl.indexOf('http') !== 0) gUrl = BASEURL + (gUrl.startsWith('/') ? '' : '/') + gUrl;
+                if (!seenEp[gUrl]) {
+                    var nMatch = gUrl.match(/tap-([^_.]+)/i);
+                    var epNum = nMatch ? nMatch[1] : "1";
+                    episodes.push({ id: gUrl, name: "Tập " + epNum, slug: gUrl.split('/').pop() });
+                    seenEp[gUrl] = true;
+                }
+            }
+        }
+
         if(episodes.length > 0) {
-            // Sắp xếp thứ tự tập
             episodes.sort(function(a, b) {
                 var numA = parseFloat(a.name.replace(/[^\d.]/g, '')) || 0;
                 var numB = parseFloat(b.name.replace(/[^\d.]/g, '')) || 0;
                 return numA - numB;
             });
-            servers.push({
-                name: "Phim Chill VIP",
-                episodes: episodes
-            });
         } else {
-            servers.push({
-                name: "Phim Lẻ",
-                episodes: [{id: url, name: "Full", slug: "full"}]
-            });
+            episodes.push({ id: url, name: "Full", slug: "full" });
         }
 
+        // 4. Build config để đẩy vào bộ Engine JS
         dataSV.stream = streamUrl || url;
+        dataSV.isEmbed = isEmbed;
         dataSV.current = url;
         dataSV.movieId = movieId;
-        dataSV.servers = servers;
+        dataSV.servers = [{
+            name: "Phim Chill",
+            episodes: episodes
+        }];
 
         var customJS = rawJS(dataSV);
 
@@ -325,7 +315,8 @@ function parseDetailResponse(html, url) {
                 "Referer": BASEURL + "/",
                 "Custom-Js": customJS
             },
-            subtitles: []
+            subtitles: [],
+            injectScript: customJS // Đảm bảo hoạt động hoàn hảo trên mọi module Webview
         });
 
     } catch (e) {
@@ -333,140 +324,61 @@ function parseDetailResponse(html, url) {
     }
 }
 
+// =============================================================================
+// ENGINE GIAO DIỆN PLAYER THÔNG MINH (PORT TỪ PHIMFUN -> PHIMCHILL)
+// =============================================================================
 function rawJS(config) {
     return `
 (function() {
-    // 1. DIỆT SẠCH GIAO DIỆN CŨ ĐỂ DỰNG PLAYER CUSTOM
+    // 1. DỌN SẠCH DOM GỐC (BỎ QUẢNG CÁO, RÁC, AUTOPLAY LỖI)
     if (document.head) {
-        document.head.innerHTML = '<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">';
+        document.head.innerHTML = '<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">';
     }
     document.documentElement.style.cssText = 'margin:0 !important; padding:0 !important; width:100vw !important; height:100vh !important; overflow:hidden !important; background:#000 !important;';
     document.body.innerHTML = '';
     document.body.style.cssText = 'margin:0 !important; padding:0 !important; width:100vw !important; height:100vh !important; overflow:hidden !important; background:#000 !important; position:fixed !important; top:0 !important; left:0 !important; z-index:0 !important;';
 
-    // 2. KHỞI TẠO BIẾN
+    // 2. KHỞI TẠO BIẾN CONFIG
     const DATA = ${JSON.stringify(config)};
-    const INITIAL_STREAM = DATA.stream || "";
-    const CURRENT_URL = DATA.current || "";
-    const SERVERS = Array.isArray(DATA.servers) ? DATA.servers : [];
-    const AUTO_HIDE_TIME = 15000; 
-    const storageKey = "phimchill_history_" + (DATA.movieId || "default");
-    const widthStorageKey = "pc_player_iframe_width";
-    const heightStorageKey = "pc_player_iframe_height";
-    const scaleStorageKey = "pc_player_iframe_scale";
+    const SERVERS = DATA.servers || [];
+    const storageKey = "pc_hist_" + DATA.movieId;
 
     let currentServerIndex = 0;
     let currentEpisodeIndex = 0;
     let hideTimer = null;
 
-    // 3. CSS CHO PLAYER GIAO DIỆN ĐẸP
+    // 3. TIÊM CSS GIAO DIỆN MỚI
     let styleTag = document.createElement('style');
-    styleTag.textContent = \`
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        * { box-sizing: border-box !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important; }
-        
-        #framePlay {
-            position: fixed !important; top: 50% !important; left: 50% !important;
-            transform-origin: center center !important; border: none !important;
-            margin: 0 !important; padding: 0 !important; z-index: 1 !important;
-            display: block !important;
-            transition: width 0.15s ease, height 0.15s ease, transform 0.15s ease !important;
-        }
-
-        #iframe-event-overlay {
-            position: fixed !important; top: 0 !important; left: 0 !important;
-            width: 100vw !important; height: 100vh !important;
-            z-index: 10 !important; background: transparent !important;
-            cursor: pointer !important;
-        }
-
-        .floating-control-ui { 
-            opacity: 0 !important; 
-            pointer-events: none !important;
-            transition: opacity 0.4s ease !important; 
-        }
-        .floating-control-ui.active-show { 
-            opacity: 1 !important; 
-            pointer-events: auto !important;
-        }
-
-        #center-play-notice {
-            position: fixed !important; top: calc(50% + 50px) !important; left: 50% !important;
-            transform: translate(-50%, -50%) !important; z-index: 999999 !important;
-            background: rgba(15, 15, 18, 0.92) !important; backdrop-filter: blur(12px) !important;
-            border: 1px solid rgba(255, 255, 255, 0.2) !important; color: #fff !important;
-            padding: 12px 24px !important; border-radius: 30px !important; font-size: 14px !important;
-            font-weight: 600 !important; box-shadow: 0 8px 32px rgba(0,0,0,0.7) !important;
-            pointer-events: none !important; transition: opacity 0.3s ease, transform 0.3s ease !important;
-            opacity: 0; text-align: center !important; white-space: nowrap !important;
-        }
-
-        #server-select-box {
-            appearance: none !important; -webkit-appearance: none !important;
-            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e") !important;
-            background-repeat: no-repeat !important; background-position: right 6px center !important;
-            background-size: 10px !important; padding-right: 22px !important;
-        }
-        .dim-btn {
-            background: rgba(255, 255, 255, 0.12) !important; color: #fff !important; border: none !important;
-            border-radius: 4px !important; width: 22px !important; height: 22px !important; cursor: pointer !important;
-            font-size: 13px !important; font-weight: bold !important; display: inline-flex !important;
-            align-items: center !important; justify-content: center !important; padding: 0 !important; line-height: 1 !important;
-        }
-        .dim-btn:hover { background: rgba(255, 255, 255, 0.25) !important; }
-        .dim-input {
-            width: 38px !important; background: transparent !important; border: none !important;
-            color: #fff !important; text-align: center !important; font-size: 12px !important;
-            font-weight: 700 !important; outline: none !important; padding: 0 !important;
-        }
-        .dim-input::-webkit-outer-spin-button, .dim-input::-webkit-inner-spin-button { -webkit-appearance: none !important; margin: 0 !important; }
-        .dim-input[type=number] { -moz-appearance: textfield !important; }
-        
-        .ep-grid-btn {
-            display: flex !important; align-items: center !important; justify-content: center !important;
-            padding: 8px 12px !important; border-radius: 6px !important; border: 1px solid rgba(255, 255, 255, 0.1) !important;
-            color: #fff !important; cursor: pointer !important; font-size: 12px !important; font-weight: 700 !important;
-            text-align: center !important; white-space: nowrap !important; transition: all 0.2s ease !important;
-            user-select: none !important; box-sizing: border-box !important; width: 100% !important; min-height: 36px !important;
-        }
-        .ep-grid-btn:hover { border-color: rgba(255, 255, 255, 0.3) !important; }
-        .ep-grid-btn.active { background-color: #007bff !important; border-color: #007bff !important; }
-        .ep-grid-btn.inactive { background-color: rgba(255, 255, 255, 0.08) !important; }
-
-        .toast-action-btn {
-            background: rgba(255, 255, 255, 0.15) !important; color: #fff !important; border: 1px solid rgba(255, 255, 255, 0.2) !important;
-            padding: 5px 10px !important; border-radius: 5px !important; font-size: 11px !important; font-weight: 700 !important;
-            cursor: pointer !important; transition: background 0.2s ease !important; display: inline-flex !important; align-items: center !important;
-        }
-        .toast-action-btn:hover { background: rgba(255, 255, 255, 0.3) !important; }
-        .toast-action-btn.primary { background: #007bff !important; border-color: #007bff !important; }
-    \`;
+    styleTag.textContent = "\\
+        * { box-sizing: border-box !important; font-family: sans-serif !important; }\\
+        #framePlay { position: fixed !important; top: 50% !important; left: 50% !important; transform-origin: center center !important; border: none !important; margin: 0 !important; padding: 0 !important; z-index: 1 !important; display: block !important; transition: all 0.15s ease !important; background:#000 !important; }\\
+        .floating-control-ui { opacity: 0 !important; pointer-events: none !important; transition: opacity 0.4s ease !important; }\\
+        .floating-control-ui.active-show { opacity: 1 !important; pointer-events: auto !important; }\\
+        .dim-btn { background: rgba(255, 255, 255, 0.12) !important; color: #fff !important; border: none !important; border-radius: 4px !important; width: 22px !important; height: 22px !important; cursor: pointer !important; font-size: 13px !important; font-weight: bold !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; }\\
+        .dim-input { width: 38px !important; background: transparent !important; border: none !important; color: #fff !important; text-align: center !important; font-size: 12px !important; font-weight: 700 !important; outline: none !important; }\\
+        .ep-grid-btn { display: flex !important; align-items: center !important; justify-content: center !important; padding: 8px 12px !important; border-radius: 6px !important; border: 1px solid rgba(255, 255, 255, 0.1) !important; color: #fff !important; cursor: pointer !important; font-size: 12px !important; font-weight: 700 !important; text-align: center !important; white-space: nowrap !important; }\\
+        .ep-grid-btn.active { background-color: #e50914 !important; border-color: #e50914 !important; }\\
+        .ep-grid-btn.inactive { background-color: rgba(255, 255, 255, 0.08) !important; }\\
+        #center-play-notice { position: fixed !important; top: 20px !important; left: 50% !important; transform: translateX(-50%) !important; z-index: 999999 !important; background: rgba(15, 15, 18, 0.92) !important; color: #fff !important; padding: 8px 16px !important; border-radius: 20px !important; font-size: 13px !important; pointer-events: none !important; transition: opacity 0.3s !important; opacity: 0; }\\
+    ";
     document.head.appendChild(styleTag);
 
-    // 4. OVERLAY LOADING & NOTICE
+    // 4. OVERLAY LOADING & THÔNG BÁO
     let overlay = document.createElement('div');
-    overlay.id = 'loading-overlay';
-    Object.assign(overlay.style, {
-        position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh',
-        backgroundColor: '#000', zIndex: '999998', display: 'flex',
-        flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff'
-    });
+    Object.assign(overlay.style, { position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh', backgroundColor: '#000', zIndex: '999998', display: 'none', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff' });
+    document.body.appendChild(overlay);
 
     function showLoading(msg) {
-        msg = msg || 'Đang tải...';
-        overlay.innerHTML = '<div style="border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid #007bff; border-radius: 50%; width: 40px; height: 40px; animation: spin 0.8s linear infinite;"></div><div style="margin-top: 14px; font-size: 13px; color: #ccc; font-weight: 500;">' + msg + '</div>';
-        overlay.style.opacity = '1';
+        overlay.innerHTML = '<div style="font-size: 14px; font-weight: bold; color: #aaa;">' + (msg || 'Đang tải...') + '</div>';
         overlay.style.display = 'flex';
-        if (!document.getElementById('loading-overlay')) document.body.appendChild(overlay);
+        overlay.style.opacity = '1';
     }
-
     function hideLoading() {
-        overlay.style.transition = 'opacity 0.25s ease';
         overlay.style.opacity = '0';
-        setTimeout(function() { overlay.style.display = 'none'; }, 250);
+        setTimeout(() => { overlay.style.display = 'none'; }, 250);
     }
 
-    function showCenterPlayNotice(text) {
+    function showNotice(text) {
         let notice = document.getElementById('center-play-notice');
         if (!notice) {
             notice = document.createElement('div');
@@ -474,500 +386,255 @@ function rawJS(config) {
             document.body.appendChild(notice);
         }
         notice.textContent = text;
-        requestAnimationFrame(function() { notice.style.opacity = '1'; });
-        let overlayEvt = document.getElementById('iframe-event-overlay');
-        if (overlayEvt) overlayEvt.style.display = 'block';
+        notice.style.opacity = '1';
+        setTimeout(() => { notice.style.opacity = '0'; }, 3000);
     }
 
-    function hideCenterPlayNotice() {
-        let notice = document.getElementById('center-play-notice');
-        if (notice) notice.style.opacity = '0';
-        let overlayEvt = document.getElementById('iframe-event-overlay');
-        if (overlayEvt) overlayEvt.style.display = 'none';
-    }
-
-    // Toast Lịch sử xem
-    function showHistoryPrompt(savedSrvIdx, savedEpIdx, savedEpName, nextEpIdx, nextEpName) {
-        let toast = document.getElementById('mini-action-toast');
-        if (toast) toast.remove();
-
-        toast = document.createElement('div');
-        toast.id = 'mini-action-toast';
-        toast.className = 'floating-control-ui active-show';
-        toast.style.cssText = 'position: fixed !important; bottom: 20px !important; right: 20px !important; z-index: 2147483647 !important; background-color: rgba(22, 22, 26, 0.95) !important; backdrop-filter: blur(12px) !important; border: 1px solid rgba(255,255,255,0.2) !important; color: #fff !important; padding: 12px 16px !important; border-radius: 8px !important; font-size: 12px !important; box-shadow: 0 8px 24px rgba(0,0,0,0.6) !important; transition: opacity 0.4s ease !important; opacity: 0; display: flex !important; flex-direction: column !important; gap: 10px !important; max-width: 380px !important;';
-
-        let title = document.createElement('div');
-        title.innerHTML = '📍 Lần trước bạn đã xem đến <b>' + savedEpName + '</b>.';
-
-        let btnGroup = document.createElement('div');
-        btnGroup.style.cssText = 'display: flex !important; gap: 6px !important; align-items: center !important;';
-
-        let btnHistory = document.createElement('button');
-        btnHistory.className = 'toast-action-btn primary';
-        btnHistory.textContent = savedEpName;
-        btnHistory.onclick = function(e) {
-            e.stopPropagation();
-            toast.remove();
-            fetchAndPlayEpisode(savedSrvIdx, savedEpIdx);
-        };
-
-        let btnNext = null;
-        if (nextEpIdx !== null) {
-            btnNext = document.createElement('button');
-            btnNext.className = 'toast-action-btn';
-            btnNext.textContent = 'Xem ' + nextEpName;
-            btnNext.onclick = function(e) {
-                e.stopPropagation();
-                toast.remove();
-                fetchAndPlayEpisode(savedSrvIdx, nextEpIdx);
-            };
-        }
-
-        let btnCancel = document.createElement('button');
-        btnCancel.className = 'toast-action-btn';
-        btnCancel.textContent = 'Hủy ✕';
-        btnCancel.onclick = function(e) { e.stopPropagation(); toast.remove(); };
-
-        btnGroup.appendChild(btnHistory);
-        if (btnNext) btnGroup.appendChild(btnNext);
-        btnGroup.appendChild(btnCancel);
-
-        toast.appendChild(title);
-        toast.appendChild(btnGroup);
-        document.body.appendChild(toast);
-
-        requestAnimationFrame(function() { toast.classList.add('active-show'); });
-        resetAutoHideTimer();
-    }
-
-    function resetAutoHideTimer() {
-        let elements = document.querySelectorAll('.floating-control-ui');
-        elements.forEach(function(el) { el.classList.add('active-show'); });
-
-        if (hideTimer) clearTimeout(hideTimer);
-        hideTimer = setTimeout(function() {
-            elements.forEach(function(el) { el.classList.remove('active-show'); });
-            let popupGrid = document.getElementById("episode-grid-popup");
-            let scalePopupGrid = document.getElementById("scale-grid-popup");
-            if (popupGrid) popupGrid.style.display = "none";
-            if (scalePopupGrid) scalePopupGrid.style.display = "none";
-
-            let overlayEvt = document.getElementById('iframe-event-overlay');
-            if (overlayEvt) overlayEvt.style.display = 'block';
-        }, AUTO_HIDE_TIME);
-    }
-
-    // 5. XỬ LÝ LỊCH SỬ XEM
-    function matchCurrentEpisode() {
-        let foundServer = 0;
-        let foundEpisode = 0;
-
-        if (CURRENT_URL) {
-            SERVERS.forEach(function(srv, sIdx) {
-                if (srv && Array.isArray(srv.episodes)) {
-                    srv.episodes.forEach(function(ep, eIdx) {
-                        if (ep.id === CURRENT_URL || (ep.id && CURRENT_URL.includes(ep.id))) {
-                            foundServer = sIdx;
-                            foundEpisode = eIdx;
-                        }
-                    });
-                }
-            });
-        }
-
-        currentServerIndex = foundServer;
-        currentEpisodeIndex = foundEpisode;
-
-        let savedHistoryRaw = localStorage.getItem(storageKey);
-        if (savedHistoryRaw) {
-            try {
-                let savedHistory = JSON.parse(savedHistoryRaw);
-                let savedSrvIdx = savedHistory.serverIndex || 0;
-                let savedEpIdx = savedHistory.episodeIndex || 0;
-
-                let diff = Math.abs(currentEpisodeIndex - savedEpIdx);
-
-                if (diff > 2) {
-                    let savedSrv = SERVERS[savedSrvIdx];
-                    let savedEp = savedSrv && savedSrv.episodes ? savedSrv.episodes[savedEpIdx] : null;
-                    
-                    if (savedEp) {
-                        let savedEpName = savedEp.name || savedEp.slug || ('Tập ' + (savedEpIdx + 1));
-                        let nextEpIdx = (savedEpIdx + 1 < savedSrv.episodes.length) ? (savedEpIdx + 1) : null;
-                        let nextEpName = "";
-                        if (nextEpIdx !== null) {
-                            let nextEp = savedSrv.episodes[nextEpIdx];
-                            nextEpName = nextEp ? (nextEp.name || nextEp.slug || ('Tập ' + (nextEpIdx + 1))) : ('Tập ' + (nextEpIdx + 1));
-                        }
-                        setTimeout(function() { showHistoryPrompt(savedSrvIdx, savedEpIdx, savedEpName, nextEpIdx, nextEpName); }, 800);
-                    }
-                }
-            } catch (e) {}
-        }
-        saveCurrentState();
-    }
-
-    function saveCurrentState() {
-        localStorage.setItem(storageKey, JSON.stringify({ serverIndex: currentServerIndex, episodeIndex: currentEpisodeIndex, timestamp: Date.now() }));
-    }
-
-    // 6. KÍCH THƯỚC IFRAME
-    function getSavedWidth() { return parseInt(localStorage.getItem(widthStorageKey), 10) || window.innerWidth; }
-    function getSavedHeight() { return parseInt(localStorage.getItem(heightStorageKey), 10) || window.innerHeight; }
-    function getSavedScale() { return parseFloat(localStorage.getItem(scaleStorageKey)) || 1.0; }
-
+    // 5. QUẢN LÝ KÍCH THƯỚC TRÌNH PHÁT
     function applyIframeDimensions(w, h, s) {
         w = Math.max(150, parseInt(w, 10) || window.innerWidth);
         h = Math.max(100, parseInt(h, 10) || window.innerHeight);
         s = parseFloat(s) || 1.0;
-
-        let iframe = document.getElementById("framePlay");
-        if (iframe) {
-            iframe.style.setProperty('width', w + 'px', 'important');
-            iframe.style.setProperty('height', h + 'px', 'important');
-            iframe.style.setProperty('transform', 'translate(-50%, -50%) scale(' + s + ')', 'important');
+        let player = document.getElementById("framePlay");
+        if (player) {
+            player.style.setProperty('width', w + 'px', 'important');
+            player.style.setProperty('height', h + 'px', 'important');
+            player.style.setProperty('transform', 'translate(-50%, -50%) scale(' + s + ')', 'important');
         }
-
-        localStorage.setItem(widthStorageKey, w);
-        localStorage.setItem(heightStorageKey, h);
-        localStorage.setItem(scaleStorageKey, s);
+        localStorage.setItem("pc_w", w);
+        localStorage.setItem("pc_h", h);
+        localStorage.setItem("pc_s", s);
 
         let wInput = document.getElementById("iframe-w-input");
         let hInput = document.getElementById("iframe-h-input");
         let scaleTrigger = document.getElementById("scale-select-trigger");
-
-        if (wInput && document.activeElement !== wInput) wInput.value = w;
-        if (hInput && document.activeElement !== hInput) hInput.value = h;
+        if (wInput) wInput.value = w;
+        if (hInput) hInput.value = h;
         if (scaleTrigger) scaleTrigger.textContent = "Scale " + s.toFixed(1) + "x ▼";
     }
 
-    // XỬ LÝ ĐỔI TẬP VÀ FETCH LINK MỚI TỪ PHIMCHILL
-    function fetchAndPlayEpisode(serverIdx, epIdx) {
-        currentServerIndex = serverIdx;
+    // 6. KIẾN TẠO TRÌNH PHÁT (VIDEO CHO M3U8 HOẶC IFRAME CHO EMBED)
+    function createPlayer(stream, isEmbed) {
+        let oldMedia = document.getElementById("framePlay");
+        if (oldMedia) oldMedia.remove();
+
+        let mediaEl;
+        if (isEmbed) {
+            mediaEl = document.createElement("iframe");
+            mediaEl.src = stream;
+            mediaEl.setAttribute("allowfullscreen", "true");
+            mediaEl.setAttribute("scrolling", "no");
+        } else {
+            mediaEl = document.createElement("video");
+            mediaEl.src = stream;
+            mediaEl.controls = true;
+            mediaEl.playsInline = true;
+            // Chặn tính năng ép Fullscreen khó chịu của iOS
+            mediaEl.setAttribute("webkit-playsinline", "true");
+        }
+        mediaEl.id = "framePlay";
+        document.body.appendChild(mediaEl);
+        
+        let savedW = localStorage.getItem("pc_w") || window.innerWidth;
+        let savedH = localStorage.getItem("pc_h") || window.innerHeight;
+        let savedS = localStorage.getItem("pc_s") || 1.0;
+        applyIframeDimensions(savedW, savedH, savedS);
+    }
+
+    // 7. XỬ LÝ CHUYỂN TẬP
+    function fetchAndPlayEpisode(epIdx) {
         currentEpisodeIndex = epIdx;
-        saveCurrentState();
+        localStorage.setItem(storageKey, epIdx);
+        
+        let ep = SERVERS[0].episodes[epIdx];
+        if (!ep) return;
 
-        let activeServer = SERVERS[currentServerIndex];
-        let activeEpisode = activeServer && activeServer.episodes ? activeServer.episodes[currentEpisodeIndex] : null;
-
-        if (!activeEpisode || !activeEpisode.id) return;
-
-        let epName = activeEpisode.name || ('Tập ' + (currentEpisodeIndex + 1));
-        showLoading('Đang tải ' + epName.toLowerCase() + '...');
-
-        fetch(activeEpisode.id, { headers: { 'Accept': 'text/html' } })
-            .then(function(res) { return res.text(); })
-            .then(function(htmlText) {
-                // Bóc tách link stream ngay từ trong mã nguồn HTML của tập vừa click
-                var streamUrl = "";
+        showLoading('Đang tải ' + ep.name + '...');
+        fetch(ep.id)
+            .then(res => res.text())
+            .then(htmlText => {
                 var m3u8Match = htmlText.match(/data-type="m3u8"[^>]*data-link="([^"]+)"/i) || htmlText.match(/data-link="([^"]+\\.m3u8[^"]*)"/i);
-                if (m3u8Match) streamUrl = m3u8Match[1];
-                if (!streamUrl) {
-                    var embedMatch = htmlText.match(/data-type="embed"[^>]*data-link="([^"]+)"/i);
-                    if (embedMatch) streamUrl = embedMatch[1];
-                }
-                if (!streamUrl) {
-                    var iframeMatch = htmlText.match(/<iframe[^>]+src=["']([^"']+)["']/i);
-                    if (iframeMatch) streamUrl = iframeMatch[1];
+                var embedMatch = htmlText.match(/data-type="embed"[^>]*data-link="([^"]+)"/i);
+                var iframeMatch = htmlText.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+                
+                var streamUrl = "";
+                var isEmbed = false;
+                
+                if (m3u8Match) {
+                    streamUrl = m3u8Match[1];
+                } else if (embedMatch) {
+                    streamUrl = embedMatch[1];
+                    isEmbed = true;
+                } else if (iframeMatch) {
+                    streamUrl = iframeMatch[1];
+                    isEmbed = true;
                 }
 
                 if (streamUrl) {
                     if (streamUrl.startsWith("//")) streamUrl = window.location.protocol + streamUrl;
-                    let framePlay = document.getElementById('framePlay');
-                    if (framePlay) {
-                        framePlay.setAttribute("referrerpolicy", "no-referrer");
-                        framePlay.src = streamUrl;
-                        framePlay.onload = function() {
-                            hideLoading();
-                            showCenterPlayNotice('▶ Đã chuyển ' + epName + '. Vui lòng nhấn Play để tiếp tục xem!');
-                        };
-                    }
+                    createPlayer(streamUrl, isEmbed);
+                    hideLoading();
+                    showNotice('▶ Đã chuyển ' + ep.name);
                 } else {
                     hideLoading();
-                    showCenterPlayNotice('❌ Lỗi không tìm thấy link tập này!');
+                    showNotice('❌ Không tìm thấy link stream!');
                 }
             })
-            .catch(function(err) {
+            .catch(err => {
                 hideLoading();
-                showCenterPlayNotice('❌ Lỗi kết nối!');
+                showNotice('❌ Lỗi kết nối máy chủ!');
             })
-            .finally(function() {
-                updateEpisodeGridState();
-                updateNavState();
+            .finally(() => {
+                renderEpisodeGrid();
                 resetAutoHideTimer();
             });
     }
 
-    // 7. LAYOUT GIAO DIỆN
-    function initBaseLayout() {
-        matchCurrentEpisode();
-        showLoading("Đang tải...");
+    // 8. TỰ ĐỘNG ẨN GIAO DIỆN
+    function resetAutoHideTimer() {
+        let elements = document.querySelectorAll('.floating-control-ui');
+        elements.forEach(el => el.classList.add('active-show'));
+        if (hideTimer) clearTimeout(hideTimer);
+        hideTimer = setTimeout(() => {
+            elements.forEach(el => el.classList.remove('active-show'));
+            let epPopup = document.getElementById("episode-grid-popup");
+            let scPopup = document.getElementById("scale-grid-popup");
+            if(epPopup) epPopup.style.display = "none";
+            if(scPopup) scPopup.style.display = "none";
+        }, 12000);
+    }
 
-        // 1. Tạo IFRAME
-        let framePlay = document.createElement("iframe");
-        framePlay.id = "framePlay";
-        framePlay.scrolling = "no";
-        framePlay.setAttribute("referrerpolicy", "no-referrer");
-        framePlay.setAttribute("allowfullscreen", "true");
-        framePlay.setAttribute("allow", "autoplay; fullscreen; picture-in-picture");
-        
-        let cleanInitialStream = INITIAL_STREAM;
-        if (cleanInitialStream.startsWith("//")) cleanInitialStream = window.location.protocol + cleanInitialStream;
-        framePlay.src = cleanInitialStream;
-
-        framePlay.onload = function() {
-            hideLoading();
-            applyIframeDimensions(getSavedWidth(), getSavedHeight(), getSavedScale());
-            showCenterPlayNotice('▶ Vui lòng nhấn Play để xem video!');
-        };
-        document.body.appendChild(framePlay);
-
-        // 2. Tạo Lớp phủ bắt sự kiện Hover
-        let eventOverlay = document.createElement("div");
-        eventOverlay.id = "iframe-event-overlay";
-        function handleOverlayTrigger() {
-            resetAutoHideTimer();
-            hideCenterPlayNotice(); 
+    // 9. DỰNG LAYOUT CHÍNH
+    function initLayout() {
+        let savedEp = parseInt(localStorage.getItem(storageKey), 10);
+        if (!isNaN(savedEp) && savedEp < SERVERS[0].episodes.length) {
+            currentEpisodeIndex = savedEp;
+        } else {
+            let found = SERVERS[0].episodes.findIndex(e => e.id === DATA.current);
+            if (found > -1) currentEpisodeIndex = found;
         }
-        eventOverlay.addEventListener('mousemove', handleOverlayTrigger);
-        eventOverlay.addEventListener('click', handleOverlayTrigger);
-        eventOverlay.addEventListener('touchstart', handleOverlayTrigger, { passive: true });
+
+        if (DATA.stream) {
+            createPlayer(DATA.stream, DATA.isEmbed);
+            showNotice('▶ Chọn tập ở Góc trên bên Phải');
+        } else {
+            fetchAndPlayEpisode(currentEpisodeIndex);
+        }
+
+        let eventOverlay = document.createElement("div");
+        Object.assign(eventOverlay.style, { position: "fixed", top: "0", left: "0", width: "100vw", height: "100vh", zIndex: "10" });
+        eventOverlay.addEventListener('mousemove', resetAutoHideTimer);
+        eventOverlay.addEventListener('click', resetAutoHideTimer);
+        eventOverlay.addEventListener('touchstart', resetAutoHideTimer, { passive: true });
         document.body.appendChild(eventOverlay);
 
-        // 3. Thanh điều hướng công cụ 
         let container = document.createElement("div");
-        container.id = "floating-select-box";
         container.className = "floating-control-ui active-show";
-        Object.assign(container.style, {
-            position: "fixed", top: "16px", right: "20px", zIndex: "999999",
-            backgroundColor: "rgba(22, 22, 26, 0.92)", backdropFilter: "blur(16px)",
-            padding: "5px 8px", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.15)",
-            boxShadow: "0 6px 24px rgba(0,0,0,0.6)", color: "#fff", display: "flex", gap: "6px"
-        });
+        Object.assign(container.style, { position: "fixed", top: "16px", right: "20px", zIndex: "999999", backgroundColor: "rgba(22, 22, 26, 0.92)", backdropFilter: "blur(16px)", padding: "5px 8px", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.15)", display: "flex", gap: "6px" });
 
-        function createDimensionControl(type) {
-            let isW = (type === 'W');
-            let group = document.createElement("div");
-            Object.assign(group.style, {
-                display: "flex", alignItems: "center", gap: "2px",
-                backgroundColor: "rgba(255, 255, 255, 0.08)", padding: "2px 5px",
-                borderRadius: "5px", border: "1px solid rgba(255,255,255,0.1)"
-            });
+        function createDim(type) {
+            let isW = type === 'W';
+            let grp = document.createElement("div");
+            Object.assign(grp.style, { display: "flex", alignItems: "center", gap: "2px", backgroundColor: "rgba(255, 255, 255, 0.08)", padding: "2px 5px", borderRadius: "5px" });
+            
+            let lbl = document.createElement("span"); lbl.textContent = type + ":"; lbl.style.cssText = "color:#aaa; font-size:11px; font-weight:bold;";
+            let btnM = document.createElement("button"); btnM.className = "dim-btn"; btnM.textContent = "-";
+            let inp = document.createElement("input"); inp.id = isW ? "iframe-w-input" : "iframe-h-input"; inp.type = "number"; inp.className = "dim-input";
+            let btnP = document.createElement("button"); btnP.className = "dim-btn"; btnP.textContent = "+";
+            
+            let curW = () => localStorage.getItem("pc_w") || window.innerWidth;
+            let curH = () => localStorage.getItem("pc_h") || window.innerHeight;
+            let curS = () => localStorage.getItem("pc_s") || 1.0;
 
-            let lbl = document.createElement("span");
-            lbl.textContent = isW ? "W:" : "H:";
-            lbl.style.cssText = "font-size: 11px !important; color: #aaa !important; font-weight: 700 !important; margin-right: 2px !important;";
+            btnM.onclick = (e) => { e.stopPropagation(); applyIframeDimensions(isW ? curW()-20 : curW(), isW ? curH() : curH()-20, curS()); };
+            btnP.onclick = (e) => { e.stopPropagation(); applyIframeDimensions(isW ? parseInt(curW())+20 : curW(), isW ? curH() : parseInt(curH())+20, curS()); };
+            inp.onchange = (e) => { let v = parseInt(e.target.value); if(!isNaN(v)) applyIframeDimensions(isW ? v : curW(), isW ? curH() : v, curS()); };
 
-            let btnMinus = document.createElement("button");
-            btnMinus.className = "dim-btn"; btnMinus.textContent = "-";
-            btnMinus.onclick = function(e) {
-                e.stopPropagation();
-                let curW = getSavedWidth(), curH = getSavedHeight(), curS = getSavedScale();
-                applyIframeDimensions(isW ? curW - 20 : curW, isW ? curH : curH - 20, curS);
-            };
-
-            let input = document.createElement("input");
-            input.id = isW ? "iframe-w-input" : "iframe-h-input";
-            input.type = "number"; input.className = "dim-input";
-            input.value = isW ? getSavedWidth() : getSavedHeight();
-            input.onchange = function(e) {
-                let val = parseInt(e.target.value, 10);
-                if (!isNaN(val)) {
-                    let curW = getSavedWidth(), curH = getSavedHeight(), curS = getSavedScale();
-                    applyIframeDimensions(isW ? val : curW, isW ? curH : val, curS);
-                }
-            };
-            input.onkeydown = function(e) { e.stopPropagation(); };
-
-            let btnPlus = document.createElement("button");
-            btnPlus.className = "dim-btn"; btnPlus.textContent = "+";
-            btnPlus.onclick = function(e) {
-                e.stopPropagation();
-                let curW = getSavedWidth(), curH = getSavedHeight(), curS = getSavedScale();
-                applyIframeDimensions(isW ? curW + 20 : curW, isW ? curH : curH + 20, curS);
-            };
-
-            group.appendChild(lbl); group.appendChild(btnMinus); group.appendChild(input); group.appendChild(btnPlus);
-            return group;
+            grp.appendChild(lbl); grp.appendChild(btnM); grp.appendChild(inp); grp.appendChild(btnP);
+            return grp;
         }
-
-        let widthCtrl = createDimensionControl('W');
-        let heightCtrl = createDimensionControl('H');
 
         let scaleTrigger = document.createElement("span");
         scaleTrigger.id = "scale-select-trigger";
-        scaleTrigger.textContent = "Scale " + getSavedScale().toFixed(1) + "x ▼";
-        styleClickable(scaleTrigger, "rgba(255, 255, 255, 0.08)");
+        Object.assign(scaleTrigger.style, { padding: "4px 10px", borderRadius: "5px", backgroundColor: "rgba(255,255,255,0.08)", color: "#fff", cursor: "pointer", fontSize: "12px", fontWeight: "700" });
 
         let epTrigger = document.createElement("span");
         epTrigger.id = "ep-select-trigger";
-        styleClickable(epTrigger, "#007bff");
+        Object.assign(epTrigger.style, { padding: "4px 10px", borderRadius: "5px", backgroundColor: "#e50914", color: "#fff", cursor: "pointer", fontSize: "12px", fontWeight: "700" });
 
-        container.appendChild(widthCtrl);
-        container.appendChild(heightCtrl);
+        container.appendChild(createDim('W'));
+        container.appendChild(createDim('H'));
         container.appendChild(scaleTrigger);
         container.appendChild(epTrigger);
 
-        let scalePopupGrid = createPopup("scale-grid-popup", "240px");
-        let popupGrid = createPopup("episode-grid-popup", "340px");
+        let scalePopup = document.createElement("div"); scalePopup.id = "scale-grid-popup";
+        let epPopup = document.createElement("div"); epPopup.id = "episode-grid-popup";
+        [scalePopup, epPopup].forEach(p => {
+            p.className = "floating-control-ui active-show";
+            Object.assign(p.style, { position: "fixed", top: "58px", right: "20px", zIndex: "1000000", backgroundColor: "rgba(22, 22, 26, 0.95)", border: "1px solid rgba(255, 255, 255, 0.15)", padding: "10px", borderRadius: "10px", maxHeight: "250px", overflowY: "auto", display: "none", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" });
+            document.body.appendChild(p);
+        });
+        scalePopup.style.width = "240px";
+        epPopup.style.width = "340px";
 
-        scaleTrigger.onclick = function(e) {
-            e.stopPropagation();
-            popupGrid.style.display = "none";
-            scalePopupGrid.style.display = (scalePopupGrid.style.display === "grid") ? "none" : "grid";
-        };
+        scaleTrigger.onclick = (e) => { e.stopPropagation(); epPopup.style.display = "none"; scalePopup.style.display = scalePopup.style.display === "grid" ? "none" : "grid"; };
+        epTrigger.onclick = (e) => { e.stopPropagation(); scalePopup.style.display = "none"; epPopup.style.display = epPopup.style.display === "grid" ? "none" : "grid"; };
+        document.addEventListener("click", (e) => { if (!container.contains(e.target) && !epPopup.contains(e.target) && !scalePopup.contains(e.target)) { epPopup.style.display = "none"; scalePopup.style.display = "none"; } });
 
-        epTrigger.onclick = function(e) {
-            e.stopPropagation();
-            scalePopupGrid.style.display = "none";
-            popupGrid.style.display = (popupGrid.style.display === "grid") ? "none" : "grid";
-        };
-
-        function handleOutsideClick(e) {
-            if (!container.contains(e.target) && !popupGrid.contains(e.target) && !scalePopupGrid.contains(e.target)) {
-                popupGrid.style.display = "none";
-                scalePopupGrid.style.display = "none";
-            }
+        let curScale = parseFloat(localStorage.getItem("pc_s")) || 1.0;
+        for (let sVal = 0.5; sVal <= 2.05; sVal += 0.1) {
+            let v = Math.round(sVal * 10) / 10;
+            let btn = document.createElement("div");
+            btn.className = "ep-grid-btn " + (Math.abs(v - curScale) < 0.05 ? "active" : "inactive");
+            btn.textContent = v.toFixed(1) + "x";
+            btn.onclick = (e) => { 
+                e.stopPropagation(); scalePopup.style.display = "none"; 
+                applyIframeDimensions(localStorage.getItem("pc_w"), localStorage.getItem("pc_h"), v); 
+                Array.from(scalePopup.children).forEach(c => c.className = "ep-grid-btn " + (c.textContent === v.toFixed(1) + "x" ? "active" : "inactive"));
+            };
+            scalePopup.appendChild(btn);
         }
-        document.addEventListener("click", handleOutsideClick);
-        document.addEventListener("touchstart", handleOutsideClick, { passive: true });
 
-        // 4. Nút Prev / Next
-        let navPrev = createNavButton("nav-prev-item", "&#10094;", "left", "30px");
-        navPrev.onclick = function(e) {
-            e.stopPropagation();
-            if (currentEpisodeIndex > 0) fetchAndPlayEpisode(currentServerIndex, currentEpisodeIndex - 1);
+        window.renderEpisodeGrid = function() {
+            epPopup.innerHTML = "";
+            SERVERS[0].episodes.forEach((ep, idx) => {
+                let btn = document.createElement("div");
+                btn.className = "ep-grid-btn " + (idx === currentEpisodeIndex ? "active" : "inactive");
+                btn.textContent = ep.name || "Tập " + (idx + 1);
+                btn.onclick = (e) => { e.stopPropagation(); epPopup.style.display = "none"; fetchAndPlayEpisode(idx); };
+                epPopup.appendChild(btn);
+            });
+            epTrigger.textContent = (SERVERS[0].episodes[currentEpisodeIndex]?.name || "Chọn Tập") + " ▼";
         };
 
-        let navNext = createNavButton("nav-next-item", "&#10095;", "right", "30px");
-        navNext.onclick = function(e) {
-            e.stopPropagation();
-            let activeServer = SERVERS[currentServerIndex];
-            if (activeServer && activeServer.episodes && currentEpisodeIndex < activeServer.episodes.length - 1) {
-                fetchAndPlayEpisode(currentServerIndex, currentEpisodeIndex + 1);
-            }
-        };
-
+        function createNav(arrow, side) {
+            let btn = document.createElement("span");
+            btn.className = "floating-control-ui active-show";
+            btn.innerHTML = arrow;
+            Object.assign(btn.style, { position: "fixed", top: "50%", zIndex: "999999", transform: "translateY(-50%)", width: "42px", height: "42px", borderRadius: "50%", backgroundColor: "rgba(20,20,20,0.6)", color: "#fff", fontSize: "16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" });
+            btn.style[side] = "20px";
+            return btn;
+        }
+        let navPrev = createNav("&#10094;", "left");
+        let navNext = createNav("&#10095;", "right");
+        navPrev.onclick = (e) => { e.stopPropagation(); if (currentEpisodeIndex > 0) fetchAndPlayEpisode(currentEpisodeIndex - 1); };
+        navNext.onclick = (e) => { e.stopPropagation(); if (currentEpisodeIndex < SERVERS[0].episodes.length - 1) fetchAndPlayEpisode(currentEpisodeIndex + 1); };
+        
         document.body.appendChild(container);
-        document.body.appendChild(popupGrid);
-        document.body.appendChild(scalePopupGrid);
         document.body.appendChild(navPrev);
         document.body.appendChild(navNext);
 
-        resetAutoHideTimer();
         renderEpisodeGrid();
-        renderScaleGrid();
-        applyIframeDimensions(getSavedWidth(), getSavedHeight(), getSavedScale());
+        resetAutoHideTimer();
     }
 
-    function createPopup(id, width) {
-        let el = document.createElement("div");
-        el.id = id;
-        el.className = "floating-control-ui active-show";
-        Object.assign(el.style, {
-            position: "fixed", top: "58px", right: "20px", zIndex: "1000000",
-            backgroundColor: "rgba(22, 22, 26, 0.95)", backdropFilter: "blur(12px)",
-            border: "1px solid rgba(255, 255, 255, 0.15)", padding: "10px", borderRadius: "10px",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.8)", width: width, maxHeight: "250px",
-            overflowY: "auto", display: "none", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px"
-        });
-        return el;
-    }
-
-    function createNavButton(id, arrow, side, offset) {
-        let btn = document.createElement("span");
-        btn.id = id;
-        btn.className = "floating-control-ui active-show";
-        btn.innerHTML = arrow;
-        Object.assign(btn.style, {
-            position: "fixed", top: "50%", zIndex: "999999",
-            transform: "translateY(-50%)", width: "42px", height: "42px", borderRadius: "50%",
-            backgroundColor: "rgba(20, 20, 20, 0.6)", backdropFilter: "blur(8px)",
-            color: "#fff", fontSize: "16px", cursor: "pointer", display: "flex",
-            alignItems: "center", justifyContent: "center", userSelect: "none"
-        });
-        btn.style[side] = offset;
-        return btn;
-    }
-
-    function renderEpisodeGrid() {
-        let popupGrid = document.getElementById("episode-grid-popup");
-        if (!popupGrid) return;
-        popupGrid.innerHTML = "";
-
-        let activeServer = SERVERS[currentServerIndex];
-        let episodes = activeServer ? (activeServer.episodes || []) : [];
-
-        episodes.forEach(function(ep, idx) {
-            let epItem = document.createElement("div");
-            epItem.className = "ep-grid-btn " + (idx === currentEpisodeIndex ? "active" : "inactive");
-            epItem.textContent = ep.name || ep.slug || ("Tập " + (idx + 1));
-            
-            epItem.onclick = function(e) {
-                e.stopPropagation();
-                popupGrid.style.display = "none";
-                fetchAndPlayEpisode(currentServerIndex, idx);
-            };
-            popupGrid.appendChild(epItem);
-        });
-        updateEpisodeGridState();
-    }
-
-    function updateEpisodeGridState() {
-        let epTrigger = document.getElementById("ep-select-trigger");
-        if (epTrigger) {
-            let activeServer = SERVERS[currentServerIndex];
-            let ep = activeServer && activeServer.episodes ? activeServer.episodes[currentEpisodeIndex] : null;
-            epTrigger.textContent = (ep ? (ep.name || ep.slug) : "Chọn Tập") + " ▼";
-        }
-    }
-
-    function updateNavState() {
-        let navPrev = document.getElementById("nav-prev-item");
-        let navNext = document.getElementById("nav-next-item");
-        let activeServer = SERVERS[currentServerIndex];
-        let maxEp = activeServer && activeServer.episodes ? activeServer.episodes.length : 0;
-
-        if (navPrev) navPrev.style.opacity = currentEpisodeIndex <= 0 ? "0.3" : "1";
-        if (navNext) navNext.style.opacity = currentEpisodeIndex >= maxEp - 1 ? "0.3" : "1";
-    }
-
-    function renderScaleGrid() {
-        let scalePopupGrid = document.getElementById("scale-grid-popup");
-        if (!scalePopupGrid) return;
-        scalePopupGrid.innerHTML = "";
-        let curSavedScale = getSavedScale();
-
-        for (let sVal = 0.5; sVal <= 2.05; sVal += 0.1) {
-            let formattedVal = Math.round(sVal * 10) / 10;
-            let item = document.createElement("div");
-            item.className = "ep-grid-btn " + ((Math.abs(formattedVal - curSavedScale) < 0.05) ? "active" : "inactive");
-            item.textContent = formattedVal.toFixed(1) + "x";
-            item.onclick = function(e) {
-                e.stopPropagation();
-                scalePopupGrid.style.display = "none";
-                applyIframeDimensions(getSavedWidth(), getSavedHeight(), formattedVal);
-            };
-            scalePopupGrid.appendChild(item);
-        }
-    }
-
-    function styleClickable(el, bgColor) {
-        Object.assign(el.style, {
-            padding: "4px 10px", borderRadius: "5px", border: "1px solid rgba(255, 255, 255, 0.1)",
-            backgroundColor: bgColor, color: "#fff", cursor: "pointer",
-            fontSize: "12px", fontWeight: "700", textAlign: "center",
-            display: "inline-block", userSelect: "none"
-        });
-    }
-
-    initBaseLayout();
+    initLayout();
 })();
     `;
 }
 
 // =============================================================================
-// MENUS THỂ LOẠI
+// MENUS
 // =============================================================================
 
 function parseCategoriesResponse(apiResponseJson) {
