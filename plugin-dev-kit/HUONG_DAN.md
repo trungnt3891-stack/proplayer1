@@ -256,7 +256,7 @@ Khi plugin khai báo `"playerType": "embedtoexoplay"` trong `getManifest()`, ứ
 
 | Header Key | Mục đích | Ví dụ |
 |------------|----------|-------|
-| `Block-Ads` | Bật bộ chặn quảng cáo mạnh mẽ (AdBlocker) cho WebView. Tự động chặn 50+ mạng quảng cáo, khóa popunder/popup `window.open`, chèn CSS ẩn quảng cáo và xóa các lớp phủ trong suốt (click-traps). | `"true"` |
+| `Block-Ads` | Bật/Tắt bộ chặn quảng cáo cho WebView. Nếu `"true"`: Tự động chặn 50+ mạng quảng cáo, khóa popunder/popup `window.open`, chèn CSS ẩn quảng cáo và xóa các lớp phủ trong suốt (click-traps). Nếu `"false"`: TẮT HOÀN TOÀN AdBlocker. Nếu không khai báo: Mặc định bật cho trang embed. | `"true"` hoặc `"false"` |
 | `Custom-Js` | Chuỗi JavaScript được inject vào WebView **ngay khi bắt đầu tải trang** (`onPageStarted` — trước khi script của web gốc chạy). Có thể chủ động trích xuất link và gọi `SnifferBridge.play(url, headers)` | `"(function() { SnifferBridge.play(url); })();"` |
 | `Stream-Regex` | Chuỗi RegEx tùy chỉnh để EmbedSniffer lọc bắt link mạng thay cho mẫu mặc định (.m3u8, .mp4...) | `"https?:\\/\\/[^\"'\\s]+\\/index\\.m3u8"` |
 | `Block-Scripts` | Danh sách từ khóa/mẫu đường dẫn script cần chặn trong WebView (phân cách bằng dấu phẩy) | `"adsterra,popads,clickadu"` |
