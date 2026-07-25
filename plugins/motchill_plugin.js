@@ -9,8 +9,8 @@ function getManifest() {
     return JSON.stringify({
         "id": "motchill",
         "name": "Nguồn Phim Motchill",
-        "description": "Bản Native 19.0 (Slug-Matching): Chống bắt nhầm phim 100%, Xóa T Vietsub, Load Full API.",
-        "version": "19.0.0",
+        "description": "Bản Native 20.0 (Pure M3U8): Chỉ lấy link m3u8 gốc, Chặn sạch 100% quảng cáo webview.",
+        "version": "20.0.0",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/motchill.png",
         "isEnabled": true,
@@ -213,11 +213,82 @@ function parseListResponse(html, $url) {
 function parseSearchResponse(html) { return parseListResponse(html); }
 
 // =============================================================================
-// THUẬT TOÁN LÕI CHI TIẾT: KHÓA SLUG ĐỂ TRÁNH BẮT NHẦM ID PHIM ĐỀ XUẤT
+// THUẬT TOÁN LÕI CHI TIẾT: XỬ LÝ LỌC STRICT M3U8 (CHẶN SẠCH EMBED/QUẢNG CÁO)
 // =============================================================================
 
 var cachedMovieDetailId = ""; 
 var cachedMovieObj = {};
+
+function transformMovieData(data) {
+    const servers = [];
+    if (!data || !data.servers) return servers;
+    
+    data.servers.forEach(function(server) {
+        var sName = server.name || "";
+        
+        // 1. CHỐT CHẶN: XÓA SỔ HOÀN TOÀN SERVER T VIETSUB
+        if (sName.toLowerCase().indexOf('t vietsub') > -1 || sName.toLowerCase().indexOf('t-vietsub') > -1) {
+            return;
+        }
+
+        const episodeMap = {};
+        
+        server.items.forEach(function(item) {
+            // 2. CHỐT CHẶN QUAN TRỌNG: CHỈ LẤY LINK M3U8 GỐC (LOẠI BỎ HOÀN TOÀN TYPE EMBED ĐỂ CHẶN QUẢNG CÁO WEBVIEW)
+            if (item.type !== 'm3u8' || !item.link) {
+                return;
+            }
+
+            var link = item.link;
+            if (link.startsWith("//")) link = "https:" + link;
+            if (link.indexOf('http') === -1 && link.startsWith('/')) {
+                link = BASEURL + link;
+            } else if (link.indexOf('http') !== 0) {
+                return;
+            }
+            
+            const slug = item.slug;
+            
+            // Lưu lại link m3u8 thuần túy
+            if (!episodeMap[slug]) {
+                episodeMap[slug] = {
+                    id: link,
+                    name: item.name,
+                    slug: item.slug,
+                    type: 'm3u8'
+                };
+            }
+        });
+        
+        const items = Object.values(episodeMap).map(function(ep) {
+            var cName = ep.name;
+            if (!cName.toLowerCase().includes("tập") && !isNaN(parseInt(cName))) {
+                cName = "Tập " + cName;
+            }
+            return {
+                id: ep.id,
+                name: cName,
+                slug: ep.slug
+            };
+        });
+
+        // Sắp xếp tập theo thứ tự
+        items.sort(function(a, b) {
+            var numA = parseFloat(a.name.replace(/[^\d.]/g, '')) || 0;
+            var numB = parseFloat(b.name.replace(/[^\d.]/g, '')) || 0;
+            return numA - numB;
+        });
+        
+        if (items.length > 0) {
+            servers.push({
+                name: sName,
+                episodes: items
+            });
+        }
+    });
+    
+    return servers;
+}
 
 function parseMovieDetail(html, url) {
     try {
@@ -229,22 +300,20 @@ function parseMovieDetail(html, url) {
         var limg = "";
         var ldes = "Không có mô tả.";
         var category = "Phim Mới";
-        var episode_current = "";
-        var quality = "HD";
-        var year = 2026;
+        var year = new Date().getFullYear();
         var servers = [];
         var extra = "";
         
         if (!isJsonCall) {
-            // LƯỢT 1: PHÂN TÍCH HTML VÀ KHÓA ID
+            // =================================================================
+            // LƯỢT 1: ĐỌC HTML VÀ LẤY MOVIE_ID CHUẨN XÁC
+            // =================================================================
             cachedMovieDetailId = id;
             var cleanHtml = html.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
 
-            // 1. Lấy Slug từ thanh địa chỉ để chống bắt nhầm ID của phim khác
             var urlSlug = url.split('/').filter(Boolean).pop().split('?')[0]; 
             var exactMovieId = null;
 
-            // Truy quét cụm JSON chứa CHÍNH XÁC slug này
             var slugRegex1 = new RegExp('"id"\\s*:\\s*"?(\\d+)"?[^}]*?"slug"\\s*:\\s*"' + urlSlug + '"', 'i');
             var slugRegex2 = new RegExp('"slug"\\s*:\\s*"' + urlSlug + '"[^}]*?"id"\\s*:\\s*"?(\\d+)"?', 'i');
             
@@ -252,12 +321,10 @@ function parseMovieDetail(html, url) {
             if (sm) {
                 exactMovieId = sm[1];
             } else {
-                // Dự phòng quét cụm "movie":{...} đặc trưng của bộ phim đang xem
-                var mMatch = cleanHtml.match(/"movie"\s*:\s*\{\s*"id"\s*:\s*"?(\d+)"?/i);
+                var mMatch = cleanHtml.match(/"movie"\s*:\s*\{\s*"id"\s*:\s*"?(\d+)"?/i) || cleanHtml.match(/movie_id[^\d]+(\d+)/i);
                 if (mMatch) exactMovieId = mMatch[1];
             }
 
-            // 2. Lấy thông tin hiển thị cơ bản
             var titleMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i);
             if (titleMatch) lname = titleMatch[1].split('-')[0].trim();
 
@@ -265,108 +332,29 @@ function parseMovieDetail(html, url) {
             if (imgMatch) limg = imgMatch[1];
             if (limg && limg.indexOf('http') === -1) limg = BASEURL + limg;
 
-            // Xử lý mô tả từ Meta tag để sạch 100% không dính \u003c
             var descMatch = html.match(/<meta\s+name="description"\s+content="([^"]+)"/i) || html.match(/<meta\s+property="og:description"\s+content="([^"]+)"/i);
             if (descMatch) ldes = descMatch[1].replace(/<[^>]*>/g, '').trim();
 
-            // 3. Nếu chốt được ID chuẩn -> Kích hoạt API ở Lượt 2
             if (exactMovieId) {
                 extra = BASEURL + "/baseapi/episodes?movie_id=" + exactMovieId;
-                // Lưu tạm thông tin để ráp vào Lượt 2
                 cachedMovieObj = { title: lname, posterUrl: limg, description: ldes };
             } else {
-                // Fallback cứu cánh: Quét thẻ <a> trong DOM ảo nếu web thay đổi API
-                var domEps = [];
-                var aRegex = /<a([^>]+href=["'][^"']*\/xem-phim\/[^"']*["'][^>]*)>([\s\S]*?)<\/a>/gi;
-                var aMatch;
-                while ((aMatch = aRegex.exec(html)) !== null) {
-                    var attrs = aMatch[1];
-                    var inner = aMatch[2].replace(/<[^>]*>/g, '').trim();
-                    var hrefMatch = attrs.match(/href=["']([^"']+)["']/i);
-                    if (hrefMatch && inner.length < 15 && inner.length > 0) {
-                        var eUrl = hrefMatch[1];
-                        if (eUrl.indexOf('http') === -1) eUrl = BASEURL + eUrl;
-                        var eName = isNaN(inner) ? inner : "Tập " + inner;
-                        domEps.push({ id: eUrl, name: eName, slug: eUrl });
-                    }
-                }
-                
-                if (domEps.length > 0) {
-                    var uniqueEps = [];
-                    var seenEps = {};
-                    domEps.forEach(function(ep) {
-                        if (!seenEps[ep.id]) { seenEps[ep.id] = true; uniqueEps.push(ep); }
-                    });
-                    servers.push({ name: "Server (Web Fallback)", episodes: uniqueEps });
-                } else {
-                    servers.push({ name: "Mặc định", episodes: [{ id: url, name: "Full", slug: "full" }] });
-                }
+                servers.push({ name: "Mặc định", episodes: [{ id: url, name: "Full", slug: "full" }] });
             }
             
         } else {
-            // LƯỢT 2: PARSE DỮ LIỆU TỪ API (HÌNH THỨC CHUẨN JSON CỦA BẠN)
+            // =================================================================
+            // LƯỢT 2: NHẬN JSON VÀ LỌC BỎ HOÀN TOÀN EMBED/QUẢNG CÁO
+            // =================================================================
             id = cachedMovieDetailId || url;
             lname = cachedMovieObj.title || lname;
             limg = cachedMovieObj.posterUrl || limg;
             ldes = cachedMovieObj.description || ldes;
             
             var data = JSON.parse(html); 
-            
-            if (data && data.servers && Array.isArray(data.servers)) {
-                data.servers.forEach(function(server) {
-                    var sName = server.name || "";
-                    
-                    // ==============================================
-                    // BỘ LỌC TỐI THƯỢNG: CẮT CỔ T VIETSUB NGAY LẬP TỨC
-                    // ==============================================
-                    if (sName.toLowerCase().indexOf('t vietsub') > -1 || sName.toLowerCase().indexOf('t-vietsub') > -1) {
-                        return; // Bỏ qua hoàn toàn server này
-                    }
-                    
-                    var episodeMap = {};
-                    
-                    if (server.items && Array.isArray(server.items)) {
-                        server.items.forEach(function(item) {
-                            var link = item.link;
-                            if (!link) return;
-                            
-                            if (link.startsWith("//")) link = "https:" + link;
-                            if (link.indexOf('http') === -1 && link.startsWith('/')) {
-                                link = BASEURL + link;
-                            } else if (link.indexOf('http') !== 0) {
-                                return;
-                            }
-                            
-                            var eSlug = item.slug;
-                            var eType = item.type;
-                            var eName = item.name;
-                            
-                            // Gộp tập, ưu tiên link native M3U8 để chạy mượt, ném Embed đi
-                            if (!episodeMap[eSlug] || eType === 'm3u8') {
-                                episodeMap[eSlug] = {
-                                    id: link,
-                                    name: isNaN(eName) ? eName : "Tập " + eName,
-                                    slug: eSlug
-                                };
-                            }
-                        });
-                    }
-                    
-                    var eps = Object.values(episodeMap);
-                    
-                    // Sắp xếp tập theo số thứ tự (1 -> 2 -> 3)
-                    eps.sort(function(a, b) {
-                        var nA = parseFloat(a.name.replace(/[^\d.]/g, '')) || 0;
-                        var nB = parseFloat(b.name.replace(/[^\d.]/g, '')) || 0;
-                        return nA - nB;
-                    });
-                    
-                    if (eps.length > 0) {
-                        servers.push({ name: sName, episodes: eps });
-                    }
-                });
-            }
-            extra = ""; // Cắt vòng lặp API
+            servers = transformMovieData(data);
+
+            extra = ""; 
         }
         
         return JSON.stringify({
@@ -375,7 +363,7 @@ function parseMovieDetail(html, url) {
             posterUrl: limg,
             backdropUrl: limg,
             description: ldes,
-            quality: quality,
+            quality: "HD",
             year: year,
             rating: 8.5,
             category: category,
@@ -391,31 +379,24 @@ function parseMovieDetail(html, url) {
 }
 
 // =============================================================================
-// PARSER CHI TIẾT TẬP & CÀO LINK STREAM NATIVE / WEBVIEW
+// PARSER CHI TIẾT TẬP: CHẠY THẲNG NATIVE M3U8 (KHÔNG WEBVIEW, KHÔNG QUẢNG CÁO)
 // =============================================================================
 
 function parseDetailResponse(html, url) {
     try {
-        var isEmbed = false;
         var streamUrl = url;
 
-        // Nếu File ID truyền xuống không phải M3u8/Mp4, tự động mở Webview Iframe
-        if (streamUrl.indexOf('.m3u8') === -1 && streamUrl.indexOf('.mp4') === -1) {
-            isEmbed = true; 
-        }
-
-        // Chống lỗi đường dẫn Embed tương đối của Motchill
-        if (streamUrl.startsWith('/player/master/')) {
-            streamUrl = BASEURL + streamUrl;
-            isEmbed = true; 
-        } else if (streamUrl.startsWith("//")) {
+        if (streamUrl.startsWith("//")) {
             streamUrl = "https:" + streamUrl;
+        } else if (streamUrl.startsWith("/")) {
+            streamUrl = BASEURL + streamUrl;
         }
 
-        // Truyền cho Player của hệ thống
+        // Bắt buộc ép isEmbed: false khi chơi file m3u8 trực tiếp để chạy Native Player tuyệt đối
         return JSON.stringify({
             "url": streamUrl,
-            "isEmbed": isEmbed,
+            "isEmbed": false,
+            "mimeType": "application/x-mpegURL",
             "headers": {
                 "Referer": BASEURL + "/",
                 "Origin": BASEURL,
@@ -425,7 +406,7 @@ function parseDetailResponse(html, url) {
         });
         
     } catch (e) {
-        return JSON.stringify({ "url": url, "isEmbed": true, "headers": {} });
+        return JSON.stringify({ "url": url, "isEmbed": false, "headers": {} });
     }
 }
 
