@@ -304,7 +304,25 @@ Khi viết `Custom-Js` hoặc mã xử lý trong WebView, plugin có thể sử 
 | `SnifferBridge.playVideo(url, headersJson)` | Bí danh | Giống `play()` |
 | `SnifferBridge.playExoPlayer(url, headersJson)` | Bí danh | Giống `play()` |
 | `SnifferBridge.sendToPlayer(url, headersJson)` | Bí danh | Giống `play()` |
+| `SnifferBridge.toast(message)` | `message`: String | 💡 **Hiển thị thông báo Toast nổi trên màn hình App** (Rất hữu ích khi debug WebView ngầm/embed) |
+| `SnifferBridge.log(message)` | `message`: String | 📝 **Ghi log debug ra Android Logcat** (Tag: `SnifferBridgeJS`) |
 | `SnifferBridge.onVideoDetected(url)` | `url`: String | Hàm callback cũ (tương thích ngược) |
+
+### 🛠️ Hướng Dẫn Debug Log & Hiển Thị Toast Trong Plugin
+
+#### 1. Hiển thị thông báo Toast trên màn hình:
+Khi trang web ngầm hoặc mã `Custom-Js` thực thi, bạn có thể kiểm tra xem đoạn JS của mình có chạy tới đâu bằng cách hiển thị Toast trực tiếp lên màn hình người dùng:
+```javascript
+if (window.SnifferBridge && window.SnifferBridge.toast) {
+    window.SnifferBridge.toast("Đã tìm thấy video: " + videoUrl);
+}
+```
+
+#### 2. Ghi Log Debug:
+- **Trong Engine QuickJS (Server-side fetch)**: Gọi `console.log("...")`. Log sẽ tự động đẩy ra Android Logcat (Filter Tag: `Plugin:<id_plugin>`) và màn hình Debug Logger trong cài đặt App.
+- **Trong WebView Ngầm (`Custom-Js` / Embed)**: Gọi `console.log("...")` hoặc `SnifferBridge.log("...")`. Log sẽ xuất ra Logcat với Filter Tag `SnifferBridgeJS` hoặc `WebViewPlayer`.
+
+---
 
 #### Ví dụ ĐẦY ĐỦ VỚI TOÀN BỘ DANH SÁCH TÊN MIỀN, KEYWORD & CSS SELECTORS:
 ```javascript
