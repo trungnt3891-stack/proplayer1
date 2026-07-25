@@ -79,6 +79,13 @@
             "iconUrl": "https://phimfun.net/Content/PhimFun/Imgs/phimFun.png",
     },
     {
+            "id": "phimchill",
+            "name": "Phim Chill",
+            "version": "3.7.9",
+            "scriptUrl": "https://rawcdn.githack.com/alokillgtv-gif/VAXAPPSCRIPT/802a1bc857acbc69976772d998373d7ef50f2972/Plugins/movie/phimchill_plugin.js",
+            "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/phimchill.ico",
+    },
+    {
       "id": "Anime09",
       "name": "Anime09",
       "version": "1.0.3",
