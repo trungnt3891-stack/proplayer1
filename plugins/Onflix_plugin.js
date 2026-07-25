@@ -9,8 +9,8 @@ function getManifest() {
 	return JSON.stringify({
 		"id": "onflix",
 		"name": "Onflix",
-		"description": "Trang xem phim siêu hay - Fix triệt để folder rỗng và tìm kiếm đa tầng.",
-		"version": "1.8.5",
+		"description": "Trang xem phim siêu hay - Gom 1 folder Phim Mới và chuẩn hóa tìm kiếm Next.js.",
+		"version": "1.8.6",
 		"BASEURL": BASEURL,
 		"iconUrl": BASEURL + "/app/asset/logo.png",
 		"isEnabled": true,
@@ -29,11 +29,10 @@ function log(msg) {
     }
 }
 
+// Chỉ để duy nhất 1 mục Phim Mới chứa toàn bộ phim
 function getHomeSections() {
     var listurl = `
 /movies?sort=newest&limit=24@@Phim Mới Cập Nhật@@true
-/themes/de-xuat-cho-ban@@Đề Xuất Cho Bạn@@true
-/themes/dang-chieu-phat@@Đang Chiếu Phát@@true
 `;
     var menulist = buildMenu(listurl);
     return JSON.stringify(menulist);
@@ -107,6 +106,7 @@ function getUrlList(slug, filtersJson) {
 	}
 }
 
+// Viết lại hàm search dựa theo cấu trúc API Next.js của Onflix
 function getUrlSearch(keyword, filtersJson) {
 	let page = 1;
 	if (filtersJson) {
@@ -266,7 +266,6 @@ function parseMovieDetail(html, $url) {
         let movie = null;
         let episodesList = [];
 
-        // 1. Quét thẻ __NEXT_DATA__
         let nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/i);
         if (nextDataMatch) {
             try {
@@ -277,7 +276,6 @@ function parseMovieDetail(html, $url) {
             } catch (err) {}
         }
 
-        // 2. Quét Next.js RSC payload nếu __NEXT_DATA__ chưa đủ
         if (!movie || episodesList.length === 0) {
             var scripts = _$(html).find("script").elements;
             for (let i = 0; i < scripts.length; i++) {
@@ -302,10 +300,17 @@ function parseMovieDetail(html, $url) {
             });
         }
 
+        var scriptEmbed = _$(html).find("script:content('\"link_embed\\\":\\\"http')").text();
+        if (!scriptEmbed) {
+            scriptEmbed = _$(html).find("script:content('\"link_m3u8\\\":\\\"http')").text();
+        }
+        var rawVDEmbed = parseNextPayload(scriptEmbed);
+        var embedData = extractCleanData(rawVDEmbed);
+        
+        var $listEpi = (embedData.episodes && embedData.episodes.length > 0) ? embedData.episodes : dataVD.episodes;
         var serversMap = {};
 
-        if (episodesList && Array.isArray(episodesList)) {
-            episodesList.forEach(episode => {
+        if ($listEpi && Array.isArray($listEpi)) {$listEpi.forEach(episode => {
                 var rawServerName = episode.server_name || "Vietsub";
                 
                 var cleanServerName = "Vietsub";
@@ -332,11 +337,11 @@ function parseMovieDetail(html, $url) {
                     }
                 }
 
-                var epSlug = "tap-" + (episode.slug || episode.name || "1");
+                var epSlug = "tap-" + episode.slug;
                 if (streamLink && streamLink !== "undefined" && !serversMap[cleanServerName][epSlug]) {
                     serversMap[cleanServerName][epSlug] = {
                         id: streamLink,            
-                        name: "Tập " + (episode.slug || episode.name || "1"),     
+                        name: "Tập " + episode.slug,     
                         slug: epSlug        
                     };
                 }
@@ -356,29 +361,6 @@ function parseMovieDetail(html, $url) {
                 servers.push({
                     name: sName,
                     episodes: epsArray
-                });
-            }
-        }
-
-        // Fallback quét thẻ <a> nếu không tìm thấy server từ payload
-        if (servers.length === 0) {
-            var fallbackEps = [];
-            _$(html).find("a").each(function() {
-                var href = this.attr("href");
-                var txt = this.text().trim();
-                if (href && (href.indexOf("/xem-phim/") > -1 || href.indexOf("tap-") > -1)) {
-                    let fullLink = href.indexOf("http") === 0 ? href : BASEURL + (href.startsWith('/') ? '' : '/') + href;
-                    fallbackEps.push({
-                        id: fullLink,
-                        name: txt || "Xem phim",
-                        slug: "tap-1"
-                    });
-                }
-            });
-            if (fallbackEps.length > 0) {
-                servers.push({
-                    name: "Vietsub",
-                    episodes: fallbackEps
                 });
             }
         }
@@ -593,58 +575,11 @@ function parseCategoriesResponse(apiResponseJson) {
 function parseCountriesResponse(html) { return "[]"; }
 function parseYearsResponse(html) { return "[]"; }
 
+// Rút gọn chỉ để 1 danh mục "Phim Mới" duy nhất ở menu chính nếu muốn, giữ danh sách menu lọc đầy đủ bên dưới
 function getLISTmenu() {
     return `
-/movies?sort=year_desc&limit=24&category=action-&-adventure@@Action & Adventure
-/movies?sort=year_desc&limit=24&category=am-nhac@@Âm Nhạc
-/movies?sort=year_desc&limit=24&category=bi-an@@Bí Ẩn
-/movies?sort=year_desc&limit=24&category=chien-tranh@@Chiến Tranh
-/movies?sort=year_desc&limit=24&category=chinh-kich@@Chính Kịch
-/movies?sort=year_desc&limit=24&category=chuong-trinh-truyen-hinh@@Chương Trình Truyền Hình
-/movies?sort=year_desc&limit=24&category=chuyen-the@@Chuyển Thể
-/movies?sort=year_desc&limit=24&category=dang-cap-nhat@@Đang cập nhật
-/movies?sort=year_desc&limit=24&category=gay-can@@Gây Cấn
-/movies?sort=year_desc&limit=24&category=gia-dinh@@Gia Đình
-/movies?sort=year_desc&limit=24&category=gia-tuong@@Giả Tưởng
-/movies?sort=year_desc&limit=24&category=hai-huoc@@Hài Hước
-/movies?sort=year_desc&limit=24&category=hanh-dong@@Hành Động
-/movies?sort=year_desc&limit=24&category=hinh-su@@Hình Sự
-/movies?sort=year_desc&limit=24&category=hoat-hinh@@Hoạt Hình
-/movies?sort=year_desc&limit=24&category=hoc-duong@@Học Đường
-/movies?sort=year_desc&limit=24&category=huyen-huyen@@Huyền Huyễn
-/movies?sort=year_desc&limit=24&category=khoa-hoc@@Khoa Học
-/movies?sort=year_desc&limit=24&category=khoa-hoc-vien-tuong@@Khoa Học Viễn Tưởng
-/movies?sort=year_desc&limit=24&category=kinh-di@@Kinh Dị
-/movies?sort=year_desc&limit=24&category=kinh-dien@@Kinh Điển
-/movies?sort=year_desc&limit=24&category=lang-man@@Lãng Mạn
-/movies?sort=year_desc&limit=24&category=lgbt@@LGBT
-/movies?sort=year_desc&limit=24&category=lich-su@@Lịch Sử
-/movies?sort=year_desc&limit=24&category=mien-tay@@Miền Tây
-/movies?sort=year_desc&limit=24&category=phieu-luu@@Phiêu Lưu
-/movies?sort=year_desc&limit=24&category=phim-18@@Phim 18+
-/movies?sort=year_desc&limit=24&category=phim-hai@@Phim Hài
-/movies?sort=year_desc&limit=24&category=phim-ngan@@Phim Ngắn
-/movies?sort=year_desc&limit=24&category=sci-fi-&-fantasy@@Sci-Fi & Fantasy
-/movies?sort=year_desc&limit=24&category=short-drama@@Short Drama
-/movies?sort=year_desc&limit=24&category=sitcom@@Sitcom
-/movies?sort=year_desc&limit=24&category=soap@@Soap
-/movies?sort=year_desc&limit=24&category=tai-lieu@@Tài Liệu
-/movies?sort=year_desc&limit=24&category=talk@@Talk
-/movies?sort=year_desc&limit=24&category=tam-ly@@Tâm Lý
-/movies?sort=year_desc&limit=24&category=than-thoai@@Thần Thoại
-/movies?sort=year_desc&limit=24&category=than-tuong@@Thần Tượng
-/movies?sort=year_desc&limit=24&category=thanh-xuan@@Thanh Xuân
-/movies?sort=year_desc&limit=24&category=the-thao@@Thể Thao
-/movies?sort=year_desc&limit=24&category=thuong-truong@@Thương Trường
-/movies?sort=year_desc&limit=24&category=tien-hiep@@Tiên Hiệp
-/movies?sort=year_desc&limit=24&category=tinh-cam@@Tình Cảm
-/movies?sort=year_desc&limit=24&category=tinh-tiet@@Tình Tiết
-/movies?sort=year_desc&limit=24&category=tinh-yeu-ngot-ngao@@Tình Yêu Ngọt Ngào
-/movies?sort=year_desc&limit=24&category=toi-pham@@Tội Phạm
-/movies?sort=year_desc&limit=24&category=tre-em@@Trẻ Em
-/movies?sort=year_desc&limit=24&category=vien-tuong@@Viễn Tưởng
-/movies?sort=year_desc&limit=24&category=vo-thuat@@Võ Thuật
-`
+/movies?sort=newest&limit=24@@Phim Mới
+`;
 }
 
 function buildMenu(listurl){let menulist=[];if (!listurl)return menulist;let lines=listurl.split('\n');for (let i=0;i < lines.length;i++){let line=lines[i].trim();if (!line||line.indexOf('@@')===-1)continue;let parts=line.split('@@');let link=parts[0]?parts[0].trim():"";let name=parts[1]?parts[1].trim():"";let check=parts[2]?parts[2].trim():undefined;if (!link||!name)continue;let item={};if (check==="false"){item={"slug":link,"title":name,"type":"Horizontal"};}else if (check==="true"){item={"slug":link,"title":name,"type":"Grid"};}else{item={"slug":link,"name":name};}menulist.push(item);}return menulist;}
