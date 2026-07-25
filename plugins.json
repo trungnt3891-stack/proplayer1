@@ -75,7 +75,7 @@
         {
             "id": "avdbapi",
             "name": "AVDB JAV",
-            "version": "1.0.3",
+            "version": "1.0.4",
             "scriptUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/avdbapi_plugin.js",
             "iconUrl": "https://avdbapi.com/favicon.ico"
         },
