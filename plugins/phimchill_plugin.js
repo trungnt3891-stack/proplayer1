@@ -9,8 +9,8 @@ function getManifest() {
     return JSON.stringify({
         "id": "phimchill",          
         "name": "Phim Chill",
-        "description": "Giao diện Player VIP: Chọn tập trực tiếp, chống Autoplay tuyệt đối.",
-        "version": "4.0.1",             
+        "description": "Giao diện Player VIP: Sandbox chặn 100% Popup/Autoplay từ bên thứ 3.",
+        "version": "4.0.2",             
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/motherless_logo.jpgphimchill.ico", 
         "isEnabled": true,
@@ -51,13 +51,9 @@ function getUrlList(slug, filtersJson) {
         var filters = typeof filtersJson === "string" ? JSON.parse(filtersJson || "{}") : (filtersJson || {});
         var page = parseInt(filters.page) || 1;
         var path = slug || "";
-
         if (filters.category) {
-            if (Array.isArray(filters.category) && filters.category.length > 0) {
-                path = filters.category[0].slug || path;
-            } else if (typeof filters.category === "string") {
-                path = filters.category;
-            }
+            if (Array.isArray(filters.category) && filters.category.length > 0) path = filters.category[0].slug || path;
+            else if (typeof filters.category === "string") path = filters.category;
         }
         var url = BASEURL + (path ? "/" + path : "");
         if (page > 1) url += "?page=" + page;
@@ -98,7 +94,6 @@ function parseListResponse(html) {
     try {
         var items = [];
         var seen = {};
-
         var regex = /<a[^>]*href=["']([^"']+\/phim\/[^"']+)["'][^>]*title=["']([^"']+)["'][^>]*>[\s\S]*?<img[^>]*(?:src|data-src)=["']([^"']+)["']/gi;
         var match;
 
@@ -108,15 +103,12 @@ function parseListResponse(html) {
             var posterUrl = match[3].trim();
 
             if (!title || title === "Video không tiêu đề") continue;
-
             if (posterUrl.indexOf('/') === 0 && posterUrl.indexOf('//') !== 0) posterUrl = BASEURL + posterUrl;
             else if (posterUrl.indexOf('http') !== 0 && posterUrl.indexOf('//') !== 0) posterUrl = BASEURL + "/" + posterUrl;
             if (url.indexOf("tap-") !== -1) continue;
 
             if (!seen[url]) {
-                items.push({
-                    "id": url, "title": title, "posterUrl": posterUrl, "backdropUrl": posterUrl, "quality": "HD"
-                });
+                items.push({ "id": url, "title": title, "posterUrl": posterUrl, "backdropUrl": posterUrl, "quality": "HD" });
                 seen[url] = true;
             }
         }
@@ -139,9 +131,7 @@ function parseListResponse(html) {
                     if (link.indexOf("tap-") !== -1) continue;
 
                     if (!seen[link]) {
-                        items.push({
-                            "id": link, "title": name, "posterUrl": img, "backdropUrl": img, "quality": "HD"
-                        });
+                        items.push({ "id": link, "title": name, "posterUrl": img, "backdropUrl": img, "quality": "HD" });
                         seen[link] = true;
                     }
                 }
@@ -165,8 +155,7 @@ function parseSearchResponse(html) { return parseListResponse(html); }
 
 function parseMovieDetail(htmlContent, url) {
     try {
-        var idMatch = htmlContent.match(/<link\s+rel="canonical"\s+href="([^"]+)"/i) ||
-                      htmlContent.match(/<meta\s+property="og:url"\s+content="([^"]+)"/i);
+        var idMatch = htmlContent.match(/<link\s+rel="canonical"\s+href="([^"]+)"/i) || htmlContent.match(/<meta\s+property="og:url"\s+content="([^"]+)"/i);
         var id = idMatch ? idMatch[1] : (url || "");
         
         var lname = "Đang cập nhật...";
@@ -175,10 +164,8 @@ function parseMovieDetail(htmlContent, url) {
         
         var rmatch = htmlContent.match(/meta\s+property="og:image"\s+content="([^"]+)"/i);
         if (rmatch && rmatch[1]) limg = rmatch[1];
-        
         rmatch = htmlContent.match(/meta\s+property="og:title"\s+content="([^"]+)"/i);
         if (rmatch && rmatch[1]) lname = rmatch[1];
-        
         rmatch = htmlContent.match(/meta\s+property="og:description"\s+content="([^"]+)"/i);
         if (rmatch && rmatch[1]) ldes = rmatch[1];
 
@@ -189,18 +176,12 @@ function parseMovieDetail(htmlContent, url) {
         var targetUrl = id;
         if (xemPhimMatch) {
             targetUrl = xemPhimMatch[1];
-            if (targetUrl.indexOf('http') !== 0) {
-                targetUrl = BASEURL + (targetUrl.startsWith('/') ? '' : '/') + targetUrl;
-            }
+            if (targetUrl.indexOf('http') !== 0) targetUrl = BASEURL + (targetUrl.startsWith('/') ? '' : '/') + targetUrl;
         }
 
         var servers = [{
             name: "Phim Chill Player",
-            episodes: [{
-                id: targetUrl,
-                name: "Mở Giao Diện Player Thông Minh",
-                slug: "webview"
-            }]
+            episodes: [{ id: targetUrl, name: "Mở Giao Diện Player Thông Minh", slug: "webview" }]
         }];
 
         return JSON.stringify({
@@ -220,66 +201,61 @@ function parseMovieDetail(htmlContent, url) {
 function parseDetailResponse(html, url) {
     try {
         var dataSV = {};
-        
         var streamUrl = "";
         var isEmbed = false;
         
-        var m3u8Match = html.match(/data-type="m3u8"[^>]*data-link="([^"]+)"/i) || html.match(/data-link="([^"]+\.m3u8[^"]*)"/i);
-        var embedMatch = html.match(/data-type="embed"[^>]*data-link="([^"]+)"/i);
+        // 1. Quét tìm Link Stream chuẩn xác hơn
+        var m3u8Match = html.match(/data-type=["']m3u8["'][^>]*data-link=["']([^"']+)["']/i) || html.match(/data-link=["']([^"']+\.m3u8[^"']*)["']/i);
+        var embedMatch = html.match(/data-type=["']embed["'][^>]*data-link=["']([^"']+)["']/i);
         var iframeMatch = html.match(/<iframe[^>]+src=["']([^"']+)["']/i);
         
-        if (m3u8Match) {
-            streamUrl = m3u8Match[1];
-        } else if (embedMatch) {
-            streamUrl = embedMatch[1];
-            isEmbed = true;
-        } else if (iframeMatch) {
-            streamUrl = iframeMatch[1];
-            isEmbed = true;
+        if (m3u8Match) { streamUrl = m3u8Match[1]; } 
+        else if (embedMatch) { streamUrl = embedMatch[1]; isEmbed = true; } 
+        else if (iframeMatch) { streamUrl = iframeMatch[1]; isEmbed = true; }
+
+        if (!streamUrl) {
+            var scriptMatch = html.match(/['"](https?:\/\/[^"']+(?:\.m3u8|\/embed\/)[^"']*)['"]/i);
+            if (scriptMatch) {
+                streamUrl = scriptMatch[1];
+                isEmbed = streamUrl.includes("/embed/") || streamUrl.includes("iframe");
+            }
+        }
+
+        // Loại bỏ trường hợp bắt nhầm URL trang web thành URL stream
+        if (streamUrl && streamUrl.includes(BASEURL) && streamUrl.includes(".html")) {
+            streamUrl = ""; 
         }
 
         var movieIdMatch = url.match(/\/phim\/([^/]+)/i) || html.match(/\/phim\/([^/]+)/i);
         var movieId = movieIdMatch ? movieIdMatch[1] : "phimchill_movie";
 
+        // 2. Thu hẹp khu vực quét danh sách tập
         var episodes = [];
         var seenEp = {};
-        var aRegex = /<a[^>]*href=["']([^"']+\/tap-[^"']+\.html)["'][^>]*>([\s\S]*?)<\/a>/gi;
+        
+        var listEpMatch = html.match(/class=["'][^"']*list-episode[^"']*["'][^>]*>([\s\S]*?)<\/ul>/i);
+        var searchArea = listEpMatch ? listEpMatch[1] : html;
+        
+        var aRegex = /<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
         var match;
-        while ((match = aRegex.exec(html)) !== null) {
+        while ((match = aRegex.exec(searchArea)) !== null) {
             var epUrl = match[1].trim();
             var epText = match[2].replace(/<[^>]*>/g, '').trim();
 
-            if (epUrl.indexOf('http') !== 0) {
-                epUrl = BASEURL + (epUrl.startsWith('/') ? '' : '/') + epUrl;
-            }
+            if (epUrl.includes('tap-') || epUrl.includes('chuong-') || epUrl.includes('phan-') || epUrl.includes('full')) {
+                if (epUrl.indexOf('http') !== 0) epUrl = BASEURL + (epUrl.startsWith('/') ? '' : '/') + epUrl;
 
-            if (!seenEp[epUrl]) {
-                var numMatch = epUrl.match(/tap-([^_]+)/i) || epUrl.match(/tap-(\d+)/i);
-                var formattedName = numMatch ? ("Tập " + numMatch[1].replace(/-/g, ' ')) : (!isNaN(epText) ? ("Tập " + epText) : (epText || "Tập"));
+                if (!seenEp[epUrl]) {
+                    var numMatch = epUrl.match(/-(?:tap|chuong|phan)-(\d+(?:\.\d+)?)/i);
+                    var num = numMatch ? numMatch[1] : epText;
+                    var formattedName = numMatch ? ("Tập " + num) : (epText || "Tập");
 
-                episodes.push({
-                    id: epUrl,
-                    name: formattedName,
-                    slug: epUrl.split('/').pop()
-                });
-                seenEp[epUrl] = true;
-            }
-        }
-        
-        if (episodes.length === 0) {
-            var generalRegex = /href=["']([^"']+\/phim\/[^"']+\/tap-[^"']+\.html)["']/gi;
-            while ((match = generalRegex.exec(html)) !== null) {
-                var gUrl = match[1].trim();
-                if (gUrl.indexOf('http') !== 0) gUrl = BASEURL + (gUrl.startsWith('/') ? '' : '/') + gUrl;
-                if (!seenEp[gUrl]) {
-                    var nMatch = gUrl.match(/tap-([^_.]+)/i);
-                    var epNum = nMatch ? nMatch[1] : "1";
-                    episodes.push({ id: gUrl, name: "Tập " + epNum, slug: gUrl.split('/').pop() });
-                    seenEp[gUrl] = true;
+                    episodes.push({ id: epUrl, name: formattedName, slug: epUrl.split('/').pop() });
+                    seenEp[epUrl] = true;
                 }
             }
         }
-
+        
         if(episodes.length > 0) {
             episodes.sort(function(a, b) {
                 var numA = parseFloat(a.name.replace(/[^\d.]/g, '')) || 0;
@@ -290,25 +266,18 @@ function parseDetailResponse(html, url) {
             episodes.push({ id: url, name: "Full", slug: "full" });
         }
 
-        dataSV.stream = streamUrl || url;
+        dataSV.stream = streamUrl; // Cố tình để rỗng nếu không tìm thấy để JS tự xử lý
         dataSV.isEmbed = isEmbed;
         dataSV.current = url;
         dataSV.movieId = movieId;
-        dataSV.servers = [{
-            name: "Phim Chill",
-            episodes: episodes
-        }];
+        dataSV.servers = [{ name: "Phim Chill", episodes: episodes }];
 
         var customJS = rawJS(dataSV);
 
         return JSON.stringify({
             url: url,
             isEmbed: false,
-            headers: {
-                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)",
-                "Referer": BASEURL + "/",
-                "Custom-Js": customJS
-            },
+            headers: { "Referer": BASEURL + "/", "Custom-Js": customJS },
             subtitles: [],
             injectScript: customJS
         });
@@ -325,9 +294,13 @@ function rawJS(config) {
     return `
 (function() {
     // ---------------------------------------------------------
-    // LỚP KHIÊN BẢO VỆ 1: CHẶN ĐỨNG TRANG GỐC TẢI & THỰC THI NGẦM
+    // LỚP KHIÊN BẢO VỆ 1: NUKE (HỦY DIỆT) DOM GỐC NGAY LẬP TỨC
     // ---------------------------------------------------------
-    if(window.stop) window.stop();
+    try {
+        document.open();
+        document.write('<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"></head><body style="margin:0;padding:0;background:#000;overflow:hidden;"></body></html>');
+        document.close();
+    } catch(e) {}
 
     // LỚP KHIÊN BẢO VỆ 2: VÔ HIỆU HÓA HÀM ÉP FULLSCREEN CỦA IOS
     const _reqFS = Element.prototype.requestFullscreen;
@@ -335,21 +308,13 @@ function rawJS(config) {
     Element.prototype.requestFullscreen = function() { return Promise.resolve(); };
     if (_wkEnterFS) HTMLVideoElement.prototype.webkitEnterFullscreen = function() {};
     
-    // Nhả lại quyền Fullscreen sau 3.5 giây để người dùng chủ động bấm
+    // Nhả lại quyền Fullscreen sau 4 giây để người dùng có thể tự bấm
     setTimeout(() => {
         Element.prototype.requestFullscreen = _reqFS;
         if (_wkEnterFS) HTMLVideoElement.prototype.webkitEnterFullscreen = _wkEnterFS;
-    }, 3500);
+    }, 4000);
 
-    // XÓA SẠCH GIAO DIỆN CŨ
-    if (document.head) {
-        document.head.innerHTML = '<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">';
-    }
-    document.documentElement.style.cssText = 'margin:0 !important; padding:0 !important; width:100vw !important; height:100vh !important; overflow:hidden !important; background:#000 !important;';
-    document.body.innerHTML = '';
-    document.body.style.cssText = 'margin:0 !important; padding:0 !important; width:100vw !important; height:100vh !important; overflow:hidden !important; background:#000 !important; position:fixed !important; top:0 !important; left:0 !important; z-index:0 !important;';
-
-    // XÓA SẠCH VIDEO/IFRAME ĐANG CỐ CHẠY NGẦM KHÁC
+    // XÓA SẠCH VIDEO/IFRAME LỌT LƯỚI
     setInterval(() => {
         document.querySelectorAll('video, iframe').forEach(v => {
             if(v.id !== 'framePlay') {
@@ -432,28 +397,34 @@ function rawJS(config) {
         if (scaleTrigger) scaleTrigger.textContent = "Scale " + s.toFixed(1) + "x ▼";
     }
 
-    // TẠO TRÌNH PHÁT AN TOÀN
+    // TẠO TRÌNH PHÁT AN TOÀN VỚI LỚP KHIÊN SANDBOX
     function createPlayer(stream, isEmbed) {
         let oldMedia = document.getElementById("framePlay");
         if (oldMedia) oldMedia.remove();
 
+        if (!stream) {
+            showNotice('❌ Không tìm thấy link phát!');
+            return;
+        }
+
         let mediaEl;
         if (isEmbed) {
             mediaEl = document.createElement("iframe");
-            // LỚP KHIÊN BẢO VỆ 3: XÓA SẠCH AUTOPLAY TRÊN LINK NHÚNG
             let safeStream = stream.replace(/[?&]autoplay=[01a-zA-Z]+/gi, '').replace(/[?&]autoPlay=[01a-zA-Z]+/gi, '');
             mediaEl.src = safeStream;
             mediaEl.setAttribute("allowfullscreen", "true");
             mediaEl.setAttribute("scrolling", "no");
-            // Cấm autoplay qua Content Security Policy gián tiếp
-            mediaEl.setAttribute("allow", "fullscreen; picture-in-picture"); 
+            
+            // LỚP KHIÊN 3: Chặn tuyệt đối quyền mở Popup Quảng Cáo và Nhảy Trang của Bên thứ 3
+            // Chỉ cho phép chạy script và giao tiếp cùng origin
+            mediaEl.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms");
         } else {
             mediaEl = document.createElement("video");
             mediaEl.src = stream;
             mediaEl.controls = true;
             mediaEl.playsInline = true;
             mediaEl.setAttribute("webkit-playsinline", "true");
-            mediaEl.autoplay = false; // Tuyệt đối không cho autoplay
+            mediaEl.autoplay = false; 
         }
         mediaEl.id = "framePlay";
         document.body.appendChild(mediaEl);
@@ -476,13 +447,20 @@ function rawJS(config) {
             .then(res => res.text())
             .then(htmlText => {
                 var streamUrl = ""; var isEmbed = false;
-                var m3u8Match = htmlText.match(/data-type="m3u8"[^>]*data-link="([^"]+)"/i) || htmlText.match(/data-link="([^"]+\\.m3u8[^"]*)"/i);
-                var embedMatch = htmlText.match(/data-type="embed"[^>]*data-link="([^"]+)"/i);
+                var m3u8Match = htmlText.match(/data-type=["']m3u8["'][^>]*data-link=["']([^"']+)["']/i) || htmlText.match(/data-link=["']([^"']+\\.m3u8[^"']*)["']/i);
+                var embedMatch = htmlText.match(/data-type=["']embed["'][^>]*data-link=["']([^"']+)["']/i);
                 var iframeMatch = htmlText.match(/<iframe[^>]+src=["']([^"']+)["']/i);
                 
                 if (m3u8Match) { streamUrl = m3u8Match[1]; } 
                 else if (embedMatch) { streamUrl = embedMatch[1]; isEmbed = true; } 
                 else if (iframeMatch) { streamUrl = iframeMatch[1]; isEmbed = true; }
+                
+                if (!streamUrl) {
+                    var scriptMatch = htmlText.match(/['"](https?:\\/\\/[^"']+(?:\\.m3u8|\\/embed\\/)[^"']*)['"]/i);
+                    if (scriptMatch) { streamUrl = scriptMatch[1]; isEmbed = streamUrl.includes("/embed/") || streamUrl.includes("iframe"); }
+                }
+
+                if (streamUrl && streamUrl.includes(".html") && streamUrl.includes("phimchill")) streamUrl = "";
 
                 if (streamUrl) {
                     if (streamUrl.startsWith("//")) streamUrl = window.location.protocol + streamUrl;
@@ -490,7 +468,7 @@ function rawJS(config) {
                     hideLoading();
                     showNotice('▶ Đã chuyển ' + ep.name);
                 } else {
-                    hideLoading(); showNotice('❌ Không tìm thấy link!');
+                    hideLoading(); showNotice('❌ Server từ chối cấp link!');
                 }
             })
             .catch(err => { hideLoading(); showNotice('❌ Lỗi kết nối!'); })
