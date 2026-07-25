@@ -9,8 +9,8 @@ function getManifest() {
 	return JSON.stringify({
 		"id": "onflix",
 		"name": "Onflix",
-		"description": "Trang xem phim siêu hay.",
-		"version": "1.7.8",
+		"description": "Trang xem phim siêu hay - Gom nhóm Server gọn gàng.",
+		"version": "1.7.9",
 		"BASEURL": BASEURL,
 		"iconUrl": BASEURL + "/app/asset/logo.png",
 		"isEnabled": true,
@@ -27,14 +27,9 @@ function log(msg) {
     }
 }
 
-// Cập nhật các mục trang chủ chuẩn theo giao diện Onflix thực tế
 function getHomeSections() {
     var listurl = `
-/themes/de-xuat-cho-ban@@Đề Xuất Cho Bạn@@true
-/themes/dang-chieu-phat@@Đang Chiếu Phát@@true
-/movies?sort=newest&limit=24@@Phim Mới Cập Nhật@@true
-/themes/phim-chat-luong-cao-va-phu-de-song-ngu@@Phim Chất Lượng Cao & Song Ngữ@@true
-/themes/hoat-hinh-chon-loc@@Hoạt Hình Chọn Lọc@@true
+/movies?sort=newest&limit=24@@Phim Mới@@true
 `;
     var menulist = buildMenu(listurl);
     return JSON.stringify(menulist);
@@ -85,7 +80,6 @@ function getUrlList(slug, filtersJson) {
 		}
 		
 		let resultUrl = BASEAPI;
-        // Nếu slug là đường dẫn themes, gọi trực tiếp API themes tương ứng
         if (path && path.indexOf("/themes/") === 0) {
             resultUrl = BASEURL + path;
         } else if (path) {
@@ -129,9 +123,7 @@ function getUrlYears() { return ""; }
 function parseListResponse(html, $url) {
 	try {
 		var items = [];
-        // Xử lý trường hợp nhận về chuỗi HTML từ các đường dẫn Themes hoặc API JSON trực tiếp
         if (html.trim().indexOf("<") === 0) {
-            // Nếu là trang HTML trả về từ themes, trích xuất dữ liệu qua DOM ảo
             _$(html).find("a").each(function() {
                 var href = this.attr("href");
                 if (href && href.indexOf("/phim/") > -1) {
@@ -287,55 +279,73 @@ function parseMovieDetail(html, $url) {
         dataVD = extractCleanData(rawVDEmbed);
         
         var $listEpi = dataVD.episodes;
-        var servers = [];
+        var serversMap = {};
 
         if ($listEpi) {
             $listEpi.forEach(episode => {
-                let server = servers.find(s => s.name === episode.server_name);
+                var rawServerName = episode.server_name || "Vietsub";
+                
+                // Chuẩn hóa và gom nhóm các server bị chia nhỏ thành các cụm chính thống
+                var cleanServerName = "Vietsub";
+                if (rawServerName.includes("PA") || rawServerName.toLowerCase().includes("kk")) {
+                    cleanServerName = "KK Phim";
+                } else if (rawServerName.includes("OP") || rawServerName.toLowerCase().includes("ổ phim")) {
+                    cleanServerName = "Ổ Phim";
+                } else if (rawServerName.includes("NC") || rawServerName.toLowerCase().includes("nguồn c")) {
+                    cleanServerName = "Nguồn C";
+                } else if (rawServerName.toLowerCase().includes("thuyết minh")) {
+                    cleanServerName = "Thuyết Minh";
+                } else {
+                    cleanServerName = rawServerName;
+                }
 
-                if (!server) {
-                    var serverName = episode.server_name;
-                    server = {
-                        name: serverName,
-                        episodes: []
-                    };
-                    servers.push(server);
+                if (!serversMap[cleanServerName]) {
+                    serversMap[cleanServerName] = {};
                 }
 
                 var streamLink = episode.link_m3u8;
-                if (episode.link_m3u8.indexOf("https://ss.onflixstream.site/playlist?url") > -1) {
+                if (!streamLink || streamLink.indexOf("https://ss.onflixstream.site/playlist?url") > -1) {
                     streamLink = episode.link_embed;
                 }
-                server.episodes.push({
-                    id: streamLink,            
-                    name: "Tập " + episode.slug,     
-                    slug: "tap-" + episode.slug        
-                });
+
+                var epSlug = "tap-" + episode.slug;
+                // Chỉ thêm tập nếu có link hợp lệ và tránh trùng lặp tập trong cùng server
+                if (streamLink && !serversMap[cleanServerName][epSlug]) {
+                    serversMap[cleanServerName][epSlug] = {
+                        id: streamLink,            
+                        name: "Tập " + episode.slug,     
+                        slug: epSlug        
+                    };
+                }
             });
         }
 
-        function renameServer(originalName) {
-            let newName = originalName;
-            if (originalName.includes("PA")) {
-                newName = originalName.replace("PA", "KK Phim");
-            } else if (originalName.includes("OP")) {
-                newName = originalName.replace("OP", "Ổ Phim");
-            } else if (originalName.includes("NC")) {
-                newName = originalName.replace("NC", "Nguồn C");
+        var servers = [];
+        for (var sName in serversMap) {
+            var epsArray = Object.values(serversMap[sName]);
+            // Sắp xếp thứ tự các tập tăng dần
+            epsArray.sort((a, b) => {
+                const numA = parseInt(a.name.replace(/[^\d]/g, '')) || 0;
+                const numB = parseInt(b.name.replace(/[^\d]/g, '')) || 0;
+                return numA - numB;
+            });
+
+            if (epsArray.length > 0) {
+                servers.push({
+                    name: sName,
+                    episodes: epsArray
+                });
             }
-            return newName;
         }
 
-        servers.forEach(server => {
-            server.name = renameServer(server.name);
-        });
-
+        // Sắp xếp độ ưu tiên hiển thị các Server chính
         servers.sort((a, b) => {
             const getPriority = (name) => {
                 if (name.includes("KK Phim")) return 1;  
                 if (name.includes("Ổ Phim")) return 2;    
-                if (name.includes("Nguồn C")) return 4;  
-                return 3;                                        
+                if (name.includes("Vietsub")) return 3;
+                if (name.includes("Thuyết Minh")) return 4;
+                return 5;                                        
             };
             return getPriority(a.name) - getPriority(b.name);
         });
