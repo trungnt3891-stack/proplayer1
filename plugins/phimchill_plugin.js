@@ -9,8 +9,8 @@ function getManifest() {
     return JSON.stringify({
         "id": "phimchill",          
         "name": "Phim Chill",
-        "description": "Giao diện Player VIP: Sandbox chặn 100% Popup/Autoplay từ bên thứ 3.",
-        "version": "4.0.2",             
+        "description": "Giao diện Player VIP: Chống Autoplay 100%, có thời gian chọn tập.",
+        "version": "4.1.0",             
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/motherless_logo.jpgphimchill.ico", 
         "isEnabled": true,
@@ -195,7 +195,7 @@ function parseMovieDetail(htmlContent, url) {
 }
 
 // =============================================================================
-// BÓC TÁCH LINK STREAM, DANH SÁCH TẬP & TIÊM CUSTOM JS GIAO DIỆN
+// BÓC TÁCH LINK STREAM VÀ ĐIỀU HƯỚNG WEBVIEW VÀO SAFE ZONE
 // =============================================================================
 
 function parseDetailResponse(html, url) {
@@ -204,7 +204,6 @@ function parseDetailResponse(html, url) {
         var streamUrl = "";
         var isEmbed = false;
         
-        // 1. Quét tìm Link Stream chuẩn xác hơn
         var m3u8Match = html.match(/data-type=["']m3u8["'][^>]*data-link=["']([^"']+)["']/i) || html.match(/data-link=["']([^"']+\.m3u8[^"']*)["']/i);
         var embedMatch = html.match(/data-type=["']embed["'][^>]*data-link=["']([^"']+)["']/i);
         var iframeMatch = html.match(/<iframe[^>]+src=["']([^"']+)["']/i);
@@ -221,15 +220,9 @@ function parseDetailResponse(html, url) {
             }
         }
 
-        // Loại bỏ trường hợp bắt nhầm URL trang web thành URL stream
-        if (streamUrl && streamUrl.includes(BASEURL) && streamUrl.includes(".html")) {
-            streamUrl = ""; 
-        }
-
         var movieIdMatch = url.match(/\/phim\/([^/]+)/i) || html.match(/\/phim\/([^/]+)/i);
         var movieId = movieIdMatch ? movieIdMatch[1] : "phimchill_movie";
 
-        // 2. Thu hẹp khu vực quét danh sách tập
         var episodes = [];
         var seenEp = {};
         
@@ -266,7 +259,7 @@ function parseDetailResponse(html, url) {
             episodes.push({ id: url, name: "Full", slug: "full" });
         }
 
-        dataSV.stream = streamUrl; // Cố tình để rỗng nếu không tìm thấy để JS tự xử lý
+        dataSV.stream = streamUrl; 
         dataSV.isEmbed = isEmbed;
         dataSV.current = url;
         dataSV.movieId = movieId;
@@ -274,8 +267,13 @@ function parseDetailResponse(html, url) {
 
         var customJS = rawJS(dataSV);
 
+        // QUAN TRỌNG NHẤT Ở ĐÂY:
+        // Trả về một URL hoàn toàn trống (Safe Zone) của web để cắt đứt mã độc của trang gốc
+        // Trình duyệt sẽ chỉ chạy trang trắng và injectJS của chúng ta!
+        var safeZoneUrl = BASEURL + "/?search=vax_safe_player_zone";
+
         return JSON.stringify({
-            url: url,
+            url: safeZoneUrl,
             isEmbed: false,
             headers: { "Referer": BASEURL + "/", "Custom-Js": customJS },
             subtitles: [],
@@ -288,49 +286,17 @@ function parseDetailResponse(html, url) {
 }
 
 // =============================================================================
-// ENGINE GIAO DIỆN PLAYER THÔNG MINH KÈM KHIÊN CHỐNG AUTOPLAY/FULLSCREEN
+// ENGINE GIAO DIỆN PLAYER (CLICK-TO-PLAY + SAFE ZONE)
 // =============================================================================
 function rawJS(config) {
     return `
 (function() {
-    // ---------------------------------------------------------
-    // LỚP KHIÊN BẢO VỆ 1: NUKE (HỦY DIỆT) DOM GỐC NGAY LẬP TỨC
-    // ---------------------------------------------------------
-    try {
-        document.open();
-        document.write('<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"></head><body style="margin:0;padding:0;background:#000;overflow:hidden;"></body></html>');
-        document.close();
-    } catch(e) {}
+    // Làm sạch trang tuyệt đối
+    document.documentElement.style.cssText = 'margin:0 !important; padding:0 !important; width:100vw !important; height:100vh !important; overflow:hidden !important; background:#000 !important;';
+    document.body.innerHTML = '';
+    document.body.style.cssText = 'margin:0 !important; padding:0 !important; width:100vw !important; height:100vh !important; overflow:hidden !important; background:#000 !important; position:fixed !important; top:0 !important; left:0 !important; z-index:0 !important;';
 
-    // LỚP KHIÊN BẢO VỆ 2: VÔ HIỆU HÓA HÀM ÉP FULLSCREEN CỦA IOS
-    const _reqFS = Element.prototype.requestFullscreen;
-    const _wkEnterFS = HTMLVideoElement.prototype.webkitEnterFullscreen;
-    Element.prototype.requestFullscreen = function() { return Promise.resolve(); };
-    if (_wkEnterFS) HTMLVideoElement.prototype.webkitEnterFullscreen = function() {};
-    
-    // Nhả lại quyền Fullscreen sau 4 giây để người dùng có thể tự bấm
-    setTimeout(() => {
-        Element.prototype.requestFullscreen = _reqFS;
-        if (_wkEnterFS) HTMLVideoElement.prototype.webkitEnterFullscreen = _wkEnterFS;
-    }, 4000);
-
-    // XÓA SẠCH VIDEO/IFRAME LỌT LƯỚI
-    setInterval(() => {
-        document.querySelectorAll('video, iframe').forEach(v => {
-            if(v.id !== 'framePlay') {
-                try { if(v.pause) v.pause(); } catch(e){}
-                v.removeAttribute('autoplay');
-                v.src = ''; v.remove();
-            }
-        });
-    }, 500);
-
-    // ---------------------------------------------------------
-    // KHỞI TẠO BIẾN CONFIG & CHỨC NĂNG CHÍNH
-    // ---------------------------------------------------------
     const DATA = ${JSON.stringify(config)};
-    const INITIAL_STREAM = DATA.stream || "";
-    const CURRENT_URL = DATA.current || "";
     const SERVERS = Array.isArray(DATA.servers) ? DATA.servers : [];
     const AUTO_HIDE_TIME = 15000; 
     const storageKey = "pc_hist_" + DATA.movieId;
@@ -345,7 +311,7 @@ function rawJS(config) {
     let styleTag = document.createElement('style');
     styleTag.textContent = "\\
         * { box-sizing: border-box !important; font-family: sans-serif !important; }\\
-        #framePlay { position: fixed !important; top: 50% !important; left: 50% !important; transform-origin: center center !important; border: none !important; margin: 0 !important; padding: 0 !important; z-index: 1 !important; display: block !important; transition: all 0.15s ease !important; background:#000 !important; }\\
+        .player-wrapper { position: fixed !important; top: 50% !important; left: 50% !important; transform-origin: center center !important; z-index: 1 !important; display: flex !important; align-items: center !important; justify-content: center !important; background:#000 !important; transition: all 0.15s ease !important; border: 1px solid #222 !important; border-radius: 8px !important; overflow: hidden !important; }\\
         .floating-control-ui { opacity: 0 !important; pointer-events: none !important; transition: opacity 0.4s ease !important; }\\
         .floating-control-ui.active-show { opacity: 1 !important; pointer-events: auto !important; }\\
         .dim-btn { background: rgba(255, 255, 255, 0.12) !important; color: #fff !important; border: none !important; border-radius: 4px !important; width: 22px !important; height: 22px !important; cursor: pointer !important; font-size: 13px !important; font-weight: bold !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; }\\
@@ -353,6 +319,8 @@ function rawJS(config) {
         .ep-grid-btn { display: flex !important; align-items: center !important; justify-content: center !important; padding: 8px 12px !important; border-radius: 6px !important; border: 1px solid rgba(255, 255, 255, 0.1) !important; color: #fff !important; cursor: pointer !important; font-size: 12px !important; font-weight: 700 !important; text-align: center !important; white-space: nowrap !important; }\\
         .ep-grid-btn.active { background-color: #e50914 !important; border-color: #e50914 !important; }\\
         .ep-grid-btn.inactive { background-color: rgba(255, 255, 255, 0.08) !important; }\\
+        .play-overlay-btn { padding: 16px 36px !important; background: #e50914 !important; color: #fff !important; border-radius: 40px !important; font-size: 16px !important; font-weight: bold !important; cursor: pointer !important; box-shadow: 0 4px 20px rgba(229,9,20,0.5) !important; letter-spacing: 0.5px !important; text-transform: uppercase !important; transition: transform 0.2s !important; }\\
+        .play-overlay-btn:active { transform: scale(0.95) !important; }\\
         #center-play-notice { position: fixed !important; top: 20px !important; left: 50% !important; transform: translateX(-50%) !important; z-index: 999999 !important; background: rgba(15, 15, 18, 0.92) !important; color: #fff !important; padding: 8px 16px !important; border-radius: 20px !important; font-size: 13px !important; pointer-events: none !important; transition: opacity 0.3s !important; opacity: 0; }\\
     ";
     document.head.appendChild(styleTag);
@@ -370,9 +338,7 @@ function rawJS(config) {
     }
     function showNotice(text) {
         let notice = document.getElementById('center-play-notice');
-        if (!notice) {
-            notice = document.createElement('div'); notice.id = 'center-play-notice'; document.body.appendChild(notice);
-        }
+        if (!notice) { notice = document.createElement('div'); notice.id = 'center-play-notice'; document.body.appendChild(notice); }
         notice.textContent = text; notice.style.opacity = '1';
         setTimeout(() => { notice.style.opacity = '0'; }, 3000);
     }
@@ -381,11 +347,11 @@ function rawJS(config) {
         w = Math.max(150, parseInt(w, 10) || window.innerWidth);
         h = Math.max(100, parseInt(h, 10) || window.innerHeight);
         s = parseFloat(s) || 1.0;
-        let player = document.getElementById("framePlay");
-        if (player) {
-            player.style.setProperty('width', w + 'px', 'important');
-            player.style.setProperty('height', h + 'px', 'important');
-            player.style.setProperty('transform', 'translate(-50%, -50%) scale(' + s + ')', 'important');
+        let wrapper = document.getElementById("playerWrapper");
+        if (wrapper) {
+            wrapper.style.setProperty('width', w + 'px', 'important');
+            wrapper.style.setProperty('height', h + 'px', 'important');
+            wrapper.style.setProperty('transform', 'translate(-50%, -50%) scale(' + s + ')', 'important');
         }
         localStorage.setItem("pc_w", w); localStorage.setItem("pc_h", h); localStorage.setItem("pc_s", s);
 
@@ -397,42 +363,54 @@ function rawJS(config) {
         if (scaleTrigger) scaleTrigger.textContent = "Scale " + s.toFixed(1) + "x ▼";
     }
 
-    // TẠO TRÌNH PHÁT AN TOÀN VỚI LỚP KHIÊN SANDBOX
-    function createPlayer(stream, isEmbed) {
-        let oldMedia = document.getElementById("framePlay");
-        if (oldMedia) oldMedia.remove();
+    // CƠ CHẾ BẤM-MỚI-PHÁT (CHẶN 100% AUTOPLAY/FULLSCREEN)
+    function buildClickToPlay(stream, isEmbed) {
+        let oldWrapper = document.getElementById("playerWrapper");
+        if (oldWrapper) oldWrapper.remove();
 
+        let wrapper = document.createElement("div");
+        wrapper.id = "playerWrapper";
+        wrapper.className = "player-wrapper";
+        
         if (!stream) {
-            showNotice('❌ Không tìm thấy link phát!');
+            wrapper.innerHTML = '<div style="color:#e50914; font-weight:bold;">❌ Không tìm thấy link phát! Vui lòng chọn tập khác.</div>';
+            document.body.appendChild(wrapper);
+            applyIframeDimensions(localStorage.getItem("pc_w"), localStorage.getItem("pc_h"), localStorage.getItem("pc_s"));
             return;
         }
 
-        let mediaEl;
-        if (isEmbed) {
-            mediaEl = document.createElement("iframe");
-            let safeStream = stream.replace(/[?&]autoplay=[01a-zA-Z]+/gi, '').replace(/[?&]autoPlay=[01a-zA-Z]+/gi, '');
-            mediaEl.src = safeStream;
-            mediaEl.setAttribute("allowfullscreen", "true");
-            mediaEl.setAttribute("scrolling", "no");
-            
-            // LỚP KHIÊN 3: Chặn tuyệt đối quyền mở Popup Quảng Cáo và Nhảy Trang của Bên thứ 3
-            // Chỉ cho phép chạy script và giao tiếp cùng origin
-            mediaEl.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms");
-        } else {
-            mediaEl = document.createElement("video");
-            mediaEl.src = stream;
-            mediaEl.controls = true;
-            mediaEl.playsInline = true;
-            mediaEl.setAttribute("webkit-playsinline", "true");
-            mediaEl.autoplay = false; 
-        }
-        mediaEl.id = "framePlay";
-        document.body.appendChild(mediaEl);
+        let playBtn = document.createElement("div");
+        playBtn.className = "play-overlay-btn";
+        playBtn.innerHTML = "▶ BẤM ĐỂ XEM TẬP NÀY";
         
-        let savedW = localStorage.getItem("pc_w") || window.innerWidth;
-        let savedH = localStorage.getItem("pc_h") || window.innerHeight;
-        let savedS = localStorage.getItem("pc_s") || 1.0;
-        applyIframeDimensions(savedW, savedH, savedS);
+        playBtn.onclick = function(e) {
+            e.stopPropagation();
+            wrapper.innerHTML = ""; // Xóa nút bấm, bắt đầu tiêm iframe/video
+
+            let mediaEl;
+            if (isEmbed) {
+                mediaEl = document.createElement("iframe");
+                let safeStream = stream.replace(/[?&]autoplay=[01a-zA-Z]+/gi, '').replace(/[?&]autoPlay=[01a-zA-Z]+/gi, '');
+                mediaEl.src = safeStream;
+                mediaEl.setAttribute("allowfullscreen", "true");
+                mediaEl.setAttribute("scrolling", "no");
+                // Giới hạn quyền iframe để chặn nó mở tab mới hoặc tự bật popup quảng cáo
+                mediaEl.setAttribute("sandbox", "allow-scripts allow-same-origin allow-presentation"); 
+            } else {
+                mediaEl = document.createElement("video");
+                mediaEl.src = stream;
+                mediaEl.controls = true;
+                mediaEl.playsInline = true;
+                mediaEl.setAttribute("webkit-playsinline", "true");
+                mediaEl.autoplay = true; 
+            }
+            Object.assign(mediaEl.style, { width: "100%", height: "100%", border: "none", outline: "none", background: "#000" });
+            wrapper.appendChild(mediaEl);
+        };
+
+        wrapper.appendChild(playBtn);
+        document.body.appendChild(wrapper);
+        applyIframeDimensions(localStorage.getItem("pc_w"), localStorage.getItem("pc_h"), localStorage.getItem("pc_s"));
     }
 
     function fetchAndPlayEpisode(epIdx) {
@@ -464,11 +442,11 @@ function rawJS(config) {
 
                 if (streamUrl) {
                     if (streamUrl.startsWith("//")) streamUrl = window.location.protocol + streamUrl;
-                    createPlayer(streamUrl, isEmbed);
+                    buildClickToPlay(streamUrl, isEmbed);
                     hideLoading();
-                    showNotice('▶ Đã chuyển ' + ep.name);
                 } else {
-                    hideLoading(); showNotice('❌ Server từ chối cấp link!');
+                    hideLoading(); showNotice('❌ Server chưa cấp link! Thử tập khác!');
+                    buildClickToPlay("", false);
                 }
             })
             .catch(err => { hideLoading(); showNotice('❌ Lỗi kết nối!'); })
@@ -498,8 +476,7 @@ function rawJS(config) {
         }
 
         if (DATA.stream) {
-            createPlayer(DATA.stream, DATA.isEmbed);
-            showNotice('▶ Chọn tập ở Góc trên bên Phải');
+            buildClickToPlay(DATA.stream, DATA.isEmbed);
         } else {
             fetchAndPlayEpisode(currentEpisodeIndex);
         }
@@ -519,7 +496,6 @@ function rawJS(config) {
             let isW = type === 'W';
             let grp = document.createElement("div");
             Object.assign(grp.style, { display: "flex", alignItems: "center", gap: "2px", backgroundColor: "rgba(255, 255, 255, 0.08)", padding: "2px 5px", borderRadius: "5px" });
-            
             let lbl = document.createElement("span"); lbl.textContent = type + ":"; lbl.style.cssText = "color:#aaa; font-size:11px; font-weight:bold;";
             let btnM = document.createElement("button"); btnM.className = "dim-btn"; btnM.textContent = "-";
             let inp = document.createElement("input"); inp.id = isW ? "iframe-w-input" : "iframe-h-input"; inp.type = "number"; inp.className = "dim-input";
