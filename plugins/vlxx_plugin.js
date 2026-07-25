@@ -6,7 +6,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "vlxx",
         "name": "VLXX",
-        "version": "1.0.4",
+        "version": "1.0.3",
         "baseUrl": "https://vlxx.moi",
         "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/vlxx.ico",
         "isEnabled": true,
@@ -301,7 +301,8 @@ function parseDetailResponse(html, fetchedUrl) {
             isEmbed: true,
             postBody: "vlxx_server=" + vlxxServer + "&id=" + videoId + "&server=" + serverId,
             headers: {
-                "Referer": "https://vlxx.moi/"
+                "Referer": "https://vlxx.moi/",
+                "Stream-Regex": "https?:\\/\\/[^\"'\\s]+\\.(?:vl|m3u8|mp4)[^\"'\\s]*"
             }
         });
     } catch (error) {
@@ -371,10 +372,12 @@ function parseEmbedResponse(html, url) {
             try {
                 var sources = JSON.parse(sourcesMatch[1]);
                 if (sources && sources.length > 0 && sources[0].file) {
+                    var sFile = sources[0].file;
+                    var isHls = (sources[0].type === 'hls') || sFile.indexOf('.vl') !== -1 || sFile.indexOf('.m3u8') !== -1;
                     return JSON.stringify({
-                        url: sources[0].file,
+                        url: sFile,
                         isEmbed: false,
-                        mimeType: sources[0].type === 'hls' ? 'application/x-mpegURL' : '',
+                        mimeType: isHls ? 'application/x-mpegURL' : (sFile.indexOf('.mp4') !== -1 ? 'video/mp4' : ''),
                         headers: {
                             "Referer": "https://play.vlstream.net/"
                         }
