@@ -337,19 +337,22 @@ Khi viết `Custom-Js` hoặc mã xử lý trong WebView, plugin có thể sử 
 | `SnifferBridge.log(message)` | `message`: String | 📝 **Ghi log debug ra Android Logcat** (Tag: `SnifferBridgeJS`) |
 | `SnifferBridge.onVideoDetected(url)` | `url`: String | Hàm callback cũ (tương thích ngược) |
 
-### 🛠️ Hướng Dẫn Debug Log & Hiển Thị Toast Trong Plugin
+### 🛠️ Hướng Dẫn Debug Log, Hàm `print()` & Khung Console Nổi (Dành Cho Dev Plugin Local)
 
-#### 1. Hiển thị thông báo Toast trên màn hình:
-Khi trang web ngầm hoặc mã `Custom-Js` thực thi, bạn có thể kiểm tra xem đoạn JS của mình có chạy tới đâu bằng cách hiển thị Toast trực tiếp lên màn hình người dùng:
+Dành riêng cho các **Plugin cài đặt trực tiếp từ file `.js` qua nút dấu (`+`)** trong màn hình Quản lý Plugin:
+
+#### 1. Sử dụng hàm `print(...)` & `console.log(...)`:
+Bạn có thể in bất kỳ giá trị, biến, JSON object hoặc lỗi nào trực tiếp trong file JS của plugin bằng cách gọi:
 ```javascript
-if (window.SnifferBridge && window.SnifferBridge.toast) {
-    window.SnifferBridge.toast("Đã tìm thấy video: " + videoUrl);
-}
+print("Dữ liệu bóc tách được:", result);
+print("Link stream:", streamUrl);
+console.log("Chiều dài HTML:", html.length);
 ```
 
-#### 2. Ghi Log Debug:
-- **Trong Engine QuickJS (Server-side fetch)**: Gọi `console.log("...")`. Log sẽ tự động đẩy ra Android Logcat (Filter Tag: `Plugin:<id_plugin>`) và màn hình Debug Logger trong cài đặt App.
-- **Trong WebView Ngầm (`Custom-Js` / Embed)**: Gọi `console.log("...")` hoặc `SnifferBridge.log("...")`. Log sẽ xuất ra Logcat với Filter Tag `SnifferBridgeJS` hoặc `WebViewPlayer`.
+#### 2. Khung Nổi Toast Console (Có thể Sao Chép 1 Động Tác 📋):
+- Khi bạn chạy bất kỳ hàm nào của plugin local cài từ nút `+`, App sẽ **tự động bật một Khung Nổi Console (Toast Console Overlay)** đè lên góc dưới màn hình.
+- Khung này hiển thị thời gian, loại log (`[PRINT]`, `[LOG]`, `[ERROR]`) và nội dung chi tiết.
+- Trên thanh công cụ của Khung Nổi có **Nút Sao Chép (📋)**: Chỉ cần bấm 1 phát là **toàn bộ dữ liệu log/lỗi được chép vào Clipboard** để bạn dán sang chỗ khác kiểm tra cực kỳ nhanh chóng mà không cần mở Chrome DevTools hay máy tính!
 
 ---
 
