@@ -353,6 +353,9 @@ print("Link stream:", streamUrl);
 console.log("Chiều dài HTML:", html.length);
 ```
 
+#### 🛠️ Hỗ trợ `localStorage` sẵn trong QuickJS Engine:
+- Bạn có thể sử dụng các hàm `localStorage.getItem(key)`, `localStorage.setItem(key, value)`, `localStorage.removeItem(key)` trực tiếp trong file JS mà không lo bị lỗi `ReferenceError: localStorage is not defined`.
+
 #### 2. Trong mã `Custom-Js` chèn vào WebView (`embedtoexoplay`):
 *(Đoạn JS chạy ngầm bên trong WebView)*
 Gửi log trực tiếp từ WebView về Khung Console Nổi bằng `SnifferBridge.log(...)` hoặc `SnifferBridge.toast(...)`:
