@@ -298,7 +298,7 @@ Khi plugin khai báo `"playerType": "embedtoexoplay"` trong `getManifest()`, ứ
 
 | Header Key | Mục đích | Ví dụ |
 |------------|----------|-------|
-| `Block-Ads` | Ép BẬT/TẮT (Override) bộ chặn quảng cáo riêng cho link này (`"true"` = BẬT, `"false"` = TẮT). Nếu không khai báo, ứng dụng tự động dùng cấu hình `adblock` của Manifest (mặc định BẬT). | `"true"` hoặc `"false"` |
+| `Block-Ads` | Khóa điều khiển chặn quảng cáo Custom riêng cho link này. Nếu Manifest để `adblock: false`, bạn truyền `"Block-Ads": "true"` kết hợp với `Block-Domains`/`Block-Keywords` để CHỈ chặn các domain tùy biến do plugin chỉ định (TÁCH BẠCH, KHÔNG chặn 58+ domain mặc định của App). | `"true"` hoặc `"false"` |
 | `Block-Redirects` | Bật/Tắt chặn chuyển hướng main frame khi click (`"true"` = bật chặn, `"false"` = cho phép). Mặc định `"true"` khi `Block-Ads: true`. | `"true"` hoặc `"false"` |
 | `Block-Domains` | Danh sách tên miền quảng cáo bổ sung do Plugin tự định nghĩa (phân cách bằng dấu phẩy) | `"bad-domain.com, ad-server.net"` |
 | `Block-Keywords` | Danh sách từ khóa URL quảng cáo bổ sung do Plugin tự định nghĩa (phân cách bằng dấu phẩy) | `"/popunder, /popup.js"` |
