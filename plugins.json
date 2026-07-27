@@ -79,6 +79,14 @@
             "iconUrl": "https://phimfun.net/Content/PhimFun/Imgs/phimFun.png",
     },
     {
+            "id": "shortflix",
+            "name": "Phim Ngắn Hay",
+            "version": "1.2.2",
+            "scriptUrl": "https://rawcdn.githack.com/alokillgtv-gif/VAXAPPSCRIPT/802a1bc857acbc69976772d998373d7ef50f2972/Plugins/movie/shortflix_plugin.js",
+            "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/shortflix.png",
+            "info": "Phim ngắn hay, một số loại phim nên coi theo chiều dọc sẽ hay hơn."
+    },
+    {
       "id": "Anime09",
       "name": "Anime09",
       "version": "1.0.3",
