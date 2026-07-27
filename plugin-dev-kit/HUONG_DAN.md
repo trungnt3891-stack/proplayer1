@@ -129,9 +129,14 @@ Khi đăng ký plugin trên file JSON hoặc thêm nguồn tùy chỉnh, đườ
     "isAdult": false,
     "type": "MOVIE",
     "layoutType": "VERTICAL",
-    "playerType": "exoplayer"
+    "playerType": "exoplayer",
+    "adblock": true
 }
 ```
+
+**`adblock` option (Bật/Tắt chặn quảng cáo nền):**
+- **Không khai báo** (hoặc `true`): Mặc định **BẬT** bộ chặn quảng cáo nền cho plugin này.
+- **`false`**: **TẮT** bộ chặn quảng cáo mặc định cho plugin này.
 
 **`type` options:**
 | Giá trị | Loại nội dung & Trình phát |
@@ -291,11 +296,9 @@ App sẽ POST tới URL đó → nhận response → gọi `parseEmbedResponse(h
 
 Khi plugin khai báo `"playerType": "embedtoexoplay"` trong `getManifest()`, ứng dụng sẽ dùng **EmbedSniffer** (WebView chạy ngầm với màn hình Loading đen che bên trên) để tải trang web embed, tự động dò tìm link stream (.m3u8, .mp4, ...) và chuyển cho ExoPlayer phát native. Người dùng sẽ không nhìn thấy giao diện thô hay quảng cáo của trang web embed.
 
-#### Các thuộc tính điều khiển qua `headers` trong `parseDetailResponse`:
-
 | Header Key | Mục đích | Ví dụ |
 |------------|----------|-------|
-| `Block-Ads` | Bật bộ chặn quảng cáo cho WebView. Khi khai báo `"true"` (hoặc `"1"`, `"yes"`): Bật AdBlocker (chặn 50+ mạng quảng cáo, khóa popunder `window.open`, chèn Anti-Ad CSS). Nếu bỏ trống hoặc `"false"`: Mặc định TẮT. | `"true"` |
+| `Block-Ads` | Ép BẬT/TẮT (Override) bộ chặn quảng cáo riêng cho link này (`"true"` = BẬT, `"false"` = TẮT). Nếu không khai báo, ứng dụng tự động dùng cấu hình `adblock` của Manifest (mặc định BẬT). | `"true"` hoặc `"false"` |
 | `Block-Redirects` | Bật/Tắt chặn chuyển hướng main frame khi click (`"true"` = bật chặn, `"false"` = cho phép). Mặc định `"true"` khi `Block-Ads: true`. | `"true"` hoặc `"false"` |
 | `Block-Domains` | Danh sách tên miền quảng cáo bổ sung do Plugin tự định nghĩa (phân cách bằng dấu phẩy) | `"bad-domain.com, ad-server.net"` |
 | `Block-Keywords` | Danh sách từ khóa URL quảng cáo bổ sung do Plugin tự định nghĩa (phân cách bằng dấu phẩy) | `"/popunder, /popup.js"` |
