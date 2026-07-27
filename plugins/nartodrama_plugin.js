@@ -7,16 +7,17 @@ function getManifest() {
     return JSON.stringify({
         "id": "nartodrama",
         "name": "Phim Ngắn Narto",
-        "description": "Phim Ngắn lồng tiếng vietsub hay (Fix lỗi Regex iOS + Auto Vuốt dọc)",
-        "version": "1.1.7",
+        "description": "Phim Ngắn lồng tiếng vietsub hay (Force 100% Xoay Dọc)",
+        "version": "1.1.8",
         "info": "Nguồn phim ngắn siêu hay, một vài bộ phim nên xem theo chiều dọc. App có hỗ trợ nhé. Hãy nhấn thử lại nếu không tải được video.",
         "baseUrl": "https://edge.narto-drama.com",
         "iconUrl": "https://narto-drama.com/narto-drama-logo-compressed.png",
         "isEnabled": true,
-        // CẤU HÌNH AUTO XOAY DỌC MÀN HÌNH TIKTOK DƯỚI ĐÂY:
+        
+        // COMBO KHÓA LỚP 1: ÉP GIAO DIỆN TIKTOK
         "type": "shortfilm",
         "layoutType": "VERTICAL",
-        "playerType": "embedtoexoplay", // Đã sửa lỗi chính tả từ playerTpye thành playerType
+        "playerType": "exoplayer", // Phải dùng exoplayer thì iOS mới xoay dọc được
         "subtitleCat": true
     })
 };
@@ -225,7 +226,6 @@ function parseMovieDetail(html, url) {
             /<meta\s+property="og:url"\s+content="([^"]+)"/i.exec(html);
         var id = idMatch ? idMatch[1] : (url || "");
 
-        // SỬA LỖI REGEX CHẾT APP TRÊN IPHONE TẠI ĐÂY (Xóa bỏ ?<=)
         var slug = "";
         if (id) {
             var slugMatch = id.match(/\/phim\/([^/?]+)/i);
@@ -275,7 +275,6 @@ function parseMovieDetail(html, url) {
             }
         }
 
-        // SỬA LỖI REGEX CHẾT APP TẠI ĐÂY LẦN 2 (Xóa bỏ ?<=)
         var parsedSlug = "";
         if (id.indexOf("/detail/watch/") > -1) {
             var matchWatch = id.match(/\/watch\/([^/?]+)/i);
@@ -327,7 +326,7 @@ function parseMovieDetail(html, url) {
             director: ldirec || "",
             extra: extra,
             
-            // Ép thêm lớp bảo vệ cho VAX xoay dọc
+            // KHÓA LỚP 2: BẢO VỆ GIAO DIỆN DỌC TỪ BÊN TRONG DANH SÁCH TẬP
             type: "shortfilm",
             layoutType: "VERTICAL"
         });
@@ -396,6 +395,10 @@ function parseDetailResponse(html, url) {
             "url": finalStreamUrl,
             "isEmbed": false,
             "mimeType": mimeType,
+            
+            // KHÓA LỚP 3: ÉP TRỰC TIẾP LÊN TRÌNH PHÁT NATIVE
+            "layoutType": "VERTICAL",
+            
             "headers": {
                 "Referer": typeof BASEURL !== 'undefined' ? BASEURL : "https://edge.narto-drama.com/",
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -436,7 +439,7 @@ function parseCountriesResponse(html) { return "[]"; }
 function parseYearsResponse(html) { return "[]"; }
 
 function getLISTmenu() {
-    return `[{\"link\":\"https://edge.narto-drama.com/search?lang=vi-VN&q=l%E1%BB%93ng+ti%E1%BA%BFng\",\"name\":\"Lồng Tiếng\"},{\"link\":\"https://edge.narto-drama.com/search?lang=vi-VN&q=kinh+d%E1%BB%8B\",\"name\":\"Kinh Dị\"},{\"link\":\"https://edge.narto-drama.com/tag/bi-an-than-phan?lang=vi-VN&tab-provider=bibishort\",\"name\":\"Thân Phận Bí Ẩn\"},{\"link\":\"https://edge.narto-drama.com/tag/hien-dai?lang=vi-VN&tab-provider=bibishort\",\"name\":\"Hiện Đại\"},{\"link\":\"https://edge.narto-drama.com/tag/bao-thu?lang=vi-VN&tab-provider=bibishort\",\"name\":\"Báo Thù\"}]`;
+    return `[{\"link\":\"https://narto-drama.com/search?lang=vi-VN&q=l%E1%BB%93ng+ti%E1%BA%BFng\",\"name\":\"Lồng Tiếng\"},{\"link\":\"https://narto-drama.com/search?lang=vi-VN&q=kinh+d%E1%BB%8B\",\"name\":\"Kinh Dị\"},{\"link\":\"https://narto-drama.com/tag/bi-an-than-phan?lang=vi-VN&tab-provider=bibishort\",\"name\":\"Thân Phận Bí Ẩn\"},{\"link\":\"https://narto-drama.com/tag/hien-dai?lang=vi-VN&tab-provider=bibishort\",\"name\":\"Hiện Đại\"},{\"link\":\"https://narto-drama.com/tag/bao-thu?lang=vi-VN&tab-provider=bibishort\",\"name\":\"Báo Thù\"}]`;
 }
 
 function buildMenu(menuStr, type) { 
