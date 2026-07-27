@@ -9,8 +9,8 @@ function getManifest() {
     return JSON.stringify({
         "id": "narto_drama",
         "name": "Narto Drama",
-        "description": "Xem phim ngắn, drama lồng tiếng Vietsub chất lượng cao. Hỗ trợ vuốt dọc TikTok.",
-        "version": "1.0.0",
+        "description": "Bản Master: Vuốt Dọc TikTok, Chặn 100% Quảng Cáo, Đăng Nhập",
+        "version": "1.1.0",
         "info": "Phim ngắn chia thành nhiều tập. Vuốt lên/xuống để qua tập và xem bằng chiều dọc.",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/narto-drama-logo-compressed.png",
@@ -19,7 +19,7 @@ function getManifest() {
         "loginUrl": BASEURL + "?lang=vi-VN",
         "type": "shortfilm",           // KÍCH HOẠT CHẾ ĐỘ VUỐT DỌC TIKTOK
         "layoutType": "VERTICAL",      // ÉP MÀN HÌNH XOAY DỌC
-        "playerType": "exoplayer"
+        "playerType": "embedtoexoplay" // KÍCH HOẠT SNIFFER & CHẶN QUẢNG CÁO TỐI ƯU
     });
 }
 
@@ -119,7 +119,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSERS (CÀO DỮ LIỆU HTML & NEXT.JS PAYLOAD)
+// PARSERS
 // =============================================================================
 
 function parseListResponse(html, $url) {
@@ -127,10 +127,8 @@ function parseListResponse(html, $url) {
         var items = [];
         var seen = {};
 
-        // Cào các thẻ card phim trên Narto Drama (thường là thẻ a chứa poster và tiêu đề)
         var cardBlocks = _$(html).find("a[href*='/detail/watch/']").elements;
         
-        // Nếu không tìm thấy bằng selector trên, quét bằng regex các đường dẫn detail
         if (cardBlocks.length === 0) {
             var regex = /href="([^"]*\/detail\/watch\/[^"]+)"[^>]*>[\s\S]*?<img[^>]*src="([^"]+)"[^>]*alt="([^"]+)"/gi;
             var match;
@@ -190,7 +188,6 @@ function parseSearchResponse(html, url) {
     return parseListResponse(html, url);
 }
 
-// Trích xuất biến episodeItemsUnlocked từ script của Narto Drama
 function parseMovieDetail(html, url) {
     try {
         var lname = _$(html).find("h1").text() || _$(html).find('meta[property="og:title"]').attr("content").split("-")[0].trim();
@@ -199,7 +196,6 @@ function parseMovieDetail(html, url) {
 
         var items = [];
         
-        // Quét mảng episodeItemsUnlocked nhúng sẵn trong script HTML của Narto Drama
         var scriptMatch = html.match(/const\s+episodeItemsUnlocked\s*=\s*(\[[\s\S]*?\]);/i);
         if (scriptMatch && scriptMatch[1]) {
             try {
@@ -211,7 +207,7 @@ function parseMovieDetail(html, url) {
                     
                     if (streamUrl) {
                         items.push({
-                            id: streamUrl, // Truyền thẳng link m3u8 vào ID để ExoPlayer phát tức thì
+                            id: streamUrl, 
                             name: epNum === 0 ? "Trailer / Tập 0" : "Tập " + epNum,
                             slug: "tap-" + epNum
                         });
@@ -220,7 +216,6 @@ function parseMovieDetail(html, url) {
             } catch (err) {}
         }
 
-        // Fallback: Nếu không quét được qua script, quét các nút tập phim HTML
         if (items.length === 0) {
             var epLinks = _$(html).find(".episode-item").elements;
             for (var j = 0; j < epLinks.length; j++) {
@@ -264,17 +259,16 @@ function parseMovieDetail(html, url) {
     }
 }
 
+// BỔ SUNG CƠ CHẾ CHẶN QUẢNG CÁO TỐI ƯU TRONG PARSE DETAIL RESPONSE
 function parseDetailResponse(html, url) {
     try {
         var streamUrl = url;
         
-        // Nếu URL chưa phải là link m3u8, tiến hành bóc tách từ trang tập phim
         if (streamUrl.indexOf(".m3u8") === -1 && streamUrl.indexOf(".mp4") === -1) {
             var scriptMatch = html.match(/const\s+episodeItemsUnlocked\s*=\s*(\[[\s\S]*?\]);/i);
             if (scriptMatch && scriptMatch[1]) {
                 try {
                     var episodes = JSON.parse(scriptMatch[1]);
-                    // Lấy tập đầu tiên hoặc tìm tập khớp với URL hiện tại
                     if (episodes.length > 0) {
                         streamUrl = episodes[0].play_url || episodes[0].direct_play_url || streamUrl;
                     }
@@ -284,17 +278,19 @@ function parseDetailResponse(html, url) {
 
         return JSON.stringify({
             "url": streamUrl,
-            "isEmbed": false,           // BẮT BUỘC FALSE ĐỂ BẬT TÍNH NĂNG VUỐT DỌC TIKTOK
+            "isEmbed": false,
             "mimeType": "application/x-mpegURL",
             "headers": {
                 "Referer": BASEURL,
                 "Origin": BASEURL,
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Block-Ads": "true",
+                "Block-Redirects": "true"
             },
             "subtitles": []
         });
     } catch (e) {
-        return JSON.stringify({ "url": url, "isEmbed": false });
+        return JSON.stringify({ "url": url, "isEmbed": false, "headers": {} });
     }
 }
 
