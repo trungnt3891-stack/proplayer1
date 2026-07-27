@@ -9,8 +9,8 @@ function getManifest() {
     return JSON.stringify({
         "id": "narto_drama",
         "name": "Narto Drama",
-        "description": "Bản Fix Master: Chơi trực tiếp m3u8 (Native AVPlayer), Tiêu diệt Native Popup, Vuốt dọc TikTok",
-        "version": "3.1.5",
+        "description": "Bản Fix Master: Chơi trực tiếp m3u8 (Native AVPlayer), Fix lỗi kẹt tập 1, Vuốt dọc TikTok",
+        "version": "3.1.6", // Nâng version
         "info": "Phim ngắn chia thành nhiều tập. Vuốt lên/xuống để qua tập và xem bằng chiều dọc.",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/narto-drama-logo-compressed.png",
@@ -19,7 +19,7 @@ function getManifest() {
         "loginUrl": BASEURL + "?lang=vi-VN",
         "type": "shortfilm",           
         "layoutType": "VERTICAL",      
-        "playerType": "auto" // DÙNG AUTO ĐỂ APP TỰ CHUYỂN ĐỔI NATIVE/WEBVIEW TRÊN IOS[cite: 2, 3]
+        "playerType": "auto" 
     });
 }
 
@@ -58,9 +58,7 @@ function getPrimaryCategories() {
     ]);
 }
 
-function getFilterConfig() {
-    return JSON.stringify({});
-}
+function getFilterConfig() { return JSON.stringify({}); }
 
 // =============================================================================
 // URL GENERATION
@@ -179,6 +177,7 @@ function parseSearchResponse(html, url) {
     return parseListResponse(html, url);
 }
 
+// FIX: Chỉ tạo danh sách URL CỦA TỪNG TRANG WEB tập phim, không bóc m3u8 ở đây
 function parseMovieDetail(html, url) {
     try {
         var lname = _$(html).find("h1").text() || _$(html).find('meta[property="og:title"]').attr("content").split("-")[0].trim();
@@ -207,63 +206,75 @@ function parseMovieDetail(html, url) {
 
         var ldes = _$(html).find(".movie-desc").text() || _$(html).find('meta[property="og:description"]').attr("content");
 
+        // Xử lý tạo base url cho các tập (Cắt bỏ số tập ở cuối nếu có)
+        // Ví dụ: https://edge.narto-drama.com/detail/watch/ceo-drama/1 -> https://edge.narto-drama.com/detail/watch/ceo-drama
+        var baseMoviePath = url;
+        if (baseMoviePath.match(/\/\d+$/)) {
+            baseMoviePath = baseMoviePath.substring(0, baseMoviePath.lastIndexOf('/'));
+        }
+
         var items = [];
-        var seenUrls = {};
+        var seenEps = {};
         
-        function addEpisode(epNum, streamUrl) {
-            if (streamUrl && !seenUrls[streamUrl]) {
+        function addEpisode(epNum) {
+            if (!seenEps[epNum]) {
                 items.push({
-                    id: streamUrl,
+                    id: baseMoviePath + "/" + epNum, // Truyền đúng link Web của tập đó để bắt parseDetailResponse gọi
                     name: epNum === 0 ? "Trailer / Tập 0" : "Tập " + epNum,
                     slug: "tap-" + epNum
                 });
-                seenUrls[streamUrl] = true;
+                seenEps[epNum] = true;
             }
         }
 
-        // Ưu tiên 1: Trích xuất Data JSON có sẵn trong script để lấy luồng trực tiếp
+        // Ưu tiên lấy tổng số tập từ JSON
         var scriptMatch = html.match(/const\s+episodeItemsUnlocked\s*=\s*(\[[\s\S]*?\]);/i);
         if (scriptMatch && scriptMatch[1]) {
             try {
                 var episodes = JSON.parse(scriptMatch[1]);
                 for (var i = 0; i < episodes.length; i++) {
-                    var ep = episodes[i];
-                    var epNum = ep.number || ep.route_episode_number || (i + 1);
-                    var streamUrl = ep.play_url || ep.direct_play_url || "";
-                    addEpisode(epNum, streamUrl);
+                    var epNum = episodes[i].number || episodes[i].route_episode_number || (i + 1);
+                    addEpisode(epNum);
                 }
             } catch (err) {}
         }
 
-        // Ưu tiên 2: Lục trong JSON của Next.js (__NEXT_DATA__)
+        // Lấy số tập từ JSON của __NEXT_DATA__
         if (items.length === 0) {
             var nextDataMatch = html.match(/id="__NEXT_DATA__"[^>]*>(\{.*?\})<\/script>/i);
             if (nextDataMatch) {
                 try {
                     var strData = JSON.stringify(JSON.parse(nextDataMatch[1]));
-                    var playUrlRegex = /"play_url"\s*:\s*"([^"]+)"/gi;
+                    var epNumRegex = /"route_episode_number"\s*:\s*(\d+)/gi;
                     var pm;
-                    var pidx = 1;
-                    while ((pm = playUrlRegex.exec(strData)) !== null) {
-                        addEpisode(pidx++, pm[1]);
+                    while ((pm = epNumRegex.exec(strData)) !== null) {
+                        addEpisode(parseInt(pm[1]));
                     }
                 } catch (e) {}
             }
         }
 
-        // Dự phòng 3: Bóc tách thẻ A thông thường
+        // Dự phòng: Bóc các nút chọn tập hiển thị trên DOM
         if (items.length === 0) {
-            var epLinks = _$(html).find(".episode-item").elements;
+            var epLinks = _$(html).find("a[href*='/detail/watch/']").elements;
             for (var j = 0; j < epLinks.length; j++) {
                 var el = _$(epLinks[j]);
                 var epHref = el.attr("href");
                 var epText = el.text().trim();
-                if (epHref) {
-                    if (epHref.indexOf('http') !== 0) epHref = BASEURL + (epHref.startsWith('/') ? '' : '/') + epHref;
-                    addEpisode(j + 1, epHref);
+                var numMatch = epText.match(/^(\d+)$/);
+                if (epHref && (numMatch || epHref.match(/\/\d+$/))) {
+                    var finalNum = numMatch ? parseInt(numMatch[1]) : parseInt(epHref.split('/').pop());
+                    addEpisode(finalNum);
                 }
             }
         }
+
+        // Sắp xếp lại thứ tự từ Tập 1 -> Tập N cho chuẩn
+        items.sort(function(a, b) {
+            var numA = parseInt(a.name.replace(/\D/g, '')) || 0;
+            var numB = parseInt(b.name.replace(/\D/g, '')) || 0;
+            return numA - numB;
+        });
 
         var servers = [];
         if (items.length > 0) {
@@ -291,25 +302,46 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// BỘ LỌC ĐA TẦNG: Ép App sử dụng Native Player (AVPlayer/Exoplayer) bất cứ khi nào có thể
+// FIX: Hàm này sẽ nhận link web của TỪNG TẬP (ví dụ: .../watch/ceo/2)
+// Và chỉ bóc đúng link m3u8 của trang web đó!
 function parseDetailResponse(html, url) {
     try {
         var streamUrl = "";
         
-        // 1. Kiểm tra nếu url truyền vào đã là luồng m3u8/mp4
-        if (url.indexOf(".m3u8") !== -1 || url.indexOf(".mp4") !== -1) {
-            streamUrl = url;
-        }
-
-        // 2. Thử parse HTML dưới dạng JSON (trường hợp VAX gọi API và web trả về JSON data)
-        if (!streamUrl) {
+        // 1. Quét JSON của NextJS (__NEXT_DATA__) trên trang hiện tại
+        var nextDataMatch = html.match(/id="__NEXT_DATA__"[^>]*>(\{.*?\})<\/script>/i);
+        if (nextDataMatch) {
             try {
-                var jsonObj = JSON.parse(html);
-                streamUrl = jsonObj.play_url || jsonObj.url || (jsonObj.data && jsonObj.data.url) || "";
-            } catch (jsonErr) {}
+                // play_url xuất hiện đầu tiên thường là của tập đang load
+                var playUrlRegex = /"play_url"\s*:\s*"([^"]+)"/i;
+                var playMatch = nextDataMatch[1].match(playUrlRegex);
+                if (playMatch && playMatch[1]) {
+                    streamUrl = playMatch[1];
+                }
+            } catch(e){}
         }
 
-        // 3. Quét luồng m3u8/mp4 ẩn trong mã HTML (Giải mã Unicode \u002F để lấy URL chuẩn)
+        // 2. Tìm qua mảng episodeItemsUnlocked nếu Cách 1 trượt
+        if (!streamUrl) {
+            var scriptMatch = html.match(/const\s+episodeItemsUnlocked\s*=\s*(\[[\s\S]*?\]);/i);
+            if (scriptMatch && scriptMatch[1]) {
+                try {
+                    var episodes = JSON.parse(scriptMatch[1]);
+                    // Bắt đúng số tập trên URL
+                    var currentEp = url.split('/').pop(); 
+                    for (var i = 0; i < episodes.length; i++) {
+                        var ep = episodes[i];
+                        if ((ep.route_episode_number == currentEp || ep.number == currentEp) && ep.play_url) {
+                            streamUrl = ep.play_url;
+                            break;
+                        }
+                    }
+                    if (!streamUrl && episodes.length > 0) streamUrl = episodes[0].play_url;
+                } catch(e){}
+            }
+        }
+
+        // 3. Fallback bằng Regex quét thuần tuý m3u8
         if (!streamUrl) {
             var decodedHtml = html.replace(/\\u([\d\w]{4})/gi, function (m, grp) {
                 return String.fromCharCode(parseInt(grp, 16));
@@ -324,7 +356,7 @@ function parseDetailResponse(html, url) {
             }
         }
 
-        // NẾU TÌM THẤY LINK STREAM RAW -> BẮT BUỘC DÙNG NATIVE PLAYER (POPUP SẼ KHÔNG CÒN ĐẤT DIỄN)
+        // Trả stream URL chuẩn cho Native Player
         if (streamUrl) {
             return JSON.stringify({
                 "url": streamUrl,
@@ -338,20 +370,10 @@ function parseDetailResponse(html, url) {
                 "subtitles": []
             });
         }
-
-        // 4. DỰ PHÒNG TỐI HẬU: Nếu bắt buộc chạy Webview, dùng JS "Tàn Sát" DOM
+        
+        // Dự phòng Tối hậu: Xóa trắng file div rác quảng cáo
         var autoClickJs = `
             setInterval(function() {
-                // Giả lập click nút Đồng ý (để web ghi nhận hành vi)
-                var btns = document.querySelectorAll('button, a, div[role="button"], span');
-                for (var i = 0; i < btns.length; i++) {
-                    var t = (btns[i].innerText || btns[i].textContent || '').toLowerCase();
-                    if (t.includes('đồng ý') || t.includes('tiếp tục xem') || t.includes('agree')) {
-                        btns[i].click();
-                    }
-                }
-
-                // Tiêu diệt hoàn toàn Popup bằng hàm .remove()
                 var divs = document.querySelectorAll('div');
                 for (var j = 0; j < divs.length; j++) {
                     var el = divs[j];
@@ -362,28 +384,10 @@ function parseDetailResponse(html, url) {
                         el.remove(); 
                     }
                 }
-
-                // Ép video autoplay
-                var vids = document.querySelectorAll('video');
-                for (var k = 0; k < vids.length; k++) {
-                    if (vids[k].paused) {
-                        var p = vids[k].play();
-                        if(p !== undefined) p.catch(function(){});
-                    }
-                }
             }, 800);
         `;
 
-        return JSON.stringify({
-            "url": url,
-            "isEmbed": true, 
-            "headers": {
-                "Referer": BASEURL,
-                "Origin": BASEURL,
-                "Custom-Js": autoClickJs.replace(/\\n/g, ' ')
-            },
-            "subtitles": []
-        });
+        return JSON.stringify({ "url": url, "isEmbed": true, "headers": { "Custom-Js": autoClickJs.replace(/\\n/g, ' ') } });
 
     } catch (e) {
         return JSON.stringify({ "url": url, "isEmbed": true, "headers": {} });
