@@ -9,8 +9,8 @@ function getManifest() {
     return JSON.stringify({
         "id": "narto_drama",
         "name": "Narto Drama",
-        "description": "Bản Master: Đọc JSON trực tiếp, Vuốt Dọc TikTok, Fix Full Poster & Tập",
-        "version": "3.0.0",
+        "description": "Bản Fix Master: Hiển thị chuẩn ảnh bìa trang chủ, Tự động bỏ qua Popup, Vuốt dọc TikTok",
+        "version": "3.1.0",
         "info": "Phim ngắn chia thành nhiều tập. Vuốt lên/xuống để qua tập và xem bằng chiều dọc.",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/narto-drama-logo-compressed.png",
@@ -19,7 +19,7 @@ function getManifest() {
         "loginUrl": BASEURL + "?lang=vi-VN",
         "type": "shortfilm",           // KÍCH HOẠT CHẾ ĐỘ VUỐT DỌC TIKTOK
         "layoutType": "VERTICAL",      // ÉP MÀN HÌNH XOAY DỌC
-        "playerType": "exoplayer"      // PHÁT NATIVE SIÊU TỐC
+        "playerType": "embedtoexoplay" // CHẶN QUẢNG CÁO TỐI ƯU
     });
 }
 
@@ -119,7 +119,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSERS (TỐI ƯU THEO GỢI Ý CHUYÊN GIA)
+// PARSERS
 // =============================================================================
 
 function parseListResponse(html, $url) {
@@ -127,58 +127,41 @@ function parseListResponse(html, $url) {
         var items = [];
         var seen = {};
 
-        var cardBlocks = _$(html).find("a[href*='/detail/watch/']").elements;
+        // QUÉT TOÀN BỘ CÁC THẺ CARD ĐỂ LẤY CHÍNH XÁC LINK, TIÊU ĐỀ VÀ POSTER ĐA TẦNG
+        var cardBlocks = _$(html).find("article.card, a[href*='/detail/watch/']").elements;
         
-        if (cardBlocks.length === 0) {
-            var regex = /href="([^"]*\/detail\/watch\/[^"]+)"[^>]*>[\s\S]*?<img[^>]*src="([^"]+)"[^>]*alt="([^"]+)"/gi;
-            var match;
-            while ((match = regex.exec(html)) !== null) {
-                var cUrl = match[1];
-                if (cUrl.indexOf('http') !== 0) cUrl = BASEURL + (cUrl.startsWith('/') ? '' : '/') + cUrl;
-                
-                var poster = match[2];
-                if (poster && poster.indexOf('http') !== 0) {
-                    poster = BASEURL + (poster.startsWith('/') ? '' : '/') + poster;
-                }
+        for (var i = 0; i < cardBlocks.length; i++) {
+            var block = _$(cardBlocks[i]);
+            var href = block.attr("href") || block.attr("data-watch-url") || block.find("a").attr("href") || "";
+            if (!href) continue;
+            if (href.indexOf('http') !== 0) href = BASEURL + (href.startsWith('/') ? '' : '/') + href;
 
-                if (!seen[cUrl]) {
-                    items.push({
-                        id: cUrl,
-                        posterUrl: poster,
-                        backdropUrl: poster,
-                        title: match[3].trim(),
-                        quality: "HD",
-                        lang: "Vietsub"
-                    });
-                    seen[cUrl] = true;
+            var imgTag = block.find("img");
+            var poster = imgTag.attr("src") || imgTag.attr("data-src") || imgTag.attr("data-lazy-src") || "";
+            
+            // Xử lý các đường dẫn ảnh tương đối hoặc ảnh NextJS tối ưu
+            if (poster) {
+                if (poster.indexOf("/_next/image?url=") !== -1) {
+                    var m = poster.match(/url=([^&]+)/);
+                    if (m) poster = decodeURIComponent(m[1]);
+                }
+                if (poster.indexOf('http') !== 0) {
+                    poster = BASEURL + (poster.startsWith('/') ? '' : '/') + poster;
                 }
             }
-        } else {
-            for (var i = 0; i < cardBlocks.length; i++) {
-                var block = _$(cardBlocks[i]);
-                var href = block.attr("href");
-                if (!href) continue;
-                if (href.indexOf('http') !== 0) href = BASEURL + (href.startsWith('/') ? '' : '/') + href;
 
-                var imgTag = block.find("img");
-                var poster = imgTag.attr("src") || imgTag.attr("data-src") || "";
-                if (poster && poster.indexOf('http') !== 0) {
-                    poster = BASEURL + (poster.startsWith('/') ? '' : '/') + poster;
-                }
+            var title = block.find(".title").text() || imgTag.attr("alt") || block.text() || "";
 
-                var title = imgTag.attr("alt") || block.text() || "";
-
-                if (href && title && !seen[href]) {
-                    items.push({
-                        "id": href,
-                        "title": title.trim(),
-                        "posterUrl": poster,
-                        "backdropUrl": poster,
-                        "quality": "HD",
-                        "lang": "Vietsub"
-                    });
-                    seen[href] = true;
-                }
+            if (href && title && !seen[href]) {
+                items.push({
+                    "id": href,
+                    "title": title.trim(),
+                    "posterUrl": poster,
+                    "backdropUrl": poster,
+                    "quality": "HD",
+                    "lang": "Vietsub"
+                });
+                seen[href] = true;
             }
         }
 
@@ -202,7 +185,6 @@ function parseMovieDetail(html, url) {
     try {
         var lname = _$(html).find("h1").text() || _$(html).find('meta[property="og:title"]').attr("content").split("-")[0].trim();
         
-        // CÁCH LẤY POSTER ĐA TẦNG CHUẨN XÁC
         var limg = "";
         var ogImg = _$(html).find('meta[property="og:image"]').attr("content");
         if (ogImg) limg = ogImg;
@@ -215,15 +197,20 @@ function parseMovieDetail(html, url) {
             if (imgMatch) limg = imgMatch[1];
         }
 
-        if (limg && limg.indexOf('http') !== 0) {
-            limg = BASEURL + (limg.startsWith('/') ? '' : '/') + limg;
+        if (limg) {
+            if (limg.indexOf("/_next/image?url=") !== -1) {
+                var m = limg.match(/url=([^&]+)/);
+                if (m) limg = decodeURIComponent(m[1]);
+            }
+            if (limg.indexOf('http') !== 0) {
+                limg = BASEURL + (limg.startsWith('/') ? '' : '/') + limg;
+            }
         }
 
         var ldes = _$(html).find(".movie-desc").text() || _$(html).find('meta[property="og:description"]').attr("content");
 
         var items = [];
         
-        // ĐỌC TRỰC TIẾP TỪ BIẾN JSON episodeItemsUnlocked TRONG SCRIPT CỦA TRANG WEB
         var scriptMatch = html.match(/const\s+episodeItemsUnlocked\s*=\s*(\[[\s\S]*?\]);/i);
         if (scriptMatch && scriptMatch[1]) {
             try {
@@ -231,7 +218,7 @@ function parseMovieDetail(html, url) {
                 for (var i = 0; i < episodes.length; i++) {
                     var ep = episodes[i];
                     var epNum = ep.number || ep.route_episode_number || (i + 1);
-                    var streamUrl = ep.direct_play_url || ep.play_url || "";
+                    var streamUrl = ep.play_url || ep.direct_play_url || "";
                     
                     if (streamUrl) {
                         items.push({
@@ -244,7 +231,6 @@ function parseMovieDetail(html, url) {
             } catch (err) {}
         }
 
-        // Fallback nếu script không quét được
         if (items.length === 0) {
             var epLinks = _$(html).find(".episode-item").elements;
             for (var j = 0; j < epLinks.length; j++) {
@@ -288,6 +274,7 @@ function parseMovieDetail(html, url) {
     }
 }
 
+// TIÊM SCRIPT TỰ ĐỘNG BẤM "ĐỒNG Ý VÀ TIẾP TỤC XEM" ĐỂ BỎ QUA POPUP QUẢNG CÁO
 function parseDetailResponse(html, url) {
     try {
         var streamUrl = url;
@@ -298,11 +285,24 @@ function parseDetailResponse(html, url) {
                 try {
                     var episodes = JSON.parse(scriptMatch[1]);
                     if (episodes.length > 0) {
-                        streamUrl = episodes[0].direct_play_url || episodes[0].play_url || streamUrl;
+                        streamUrl = episodes[0].play_url || episodes[0].direct_play_url || streamUrl;
                     }
                 } catch (err) {}
             }
         }
+
+        // Đoạn mã JavaScript tự động tìm nút xác nhận popup và click ngầm
+        var autoClickJs = `
+            setInterval(function() {
+                var btns = document.querySelectorAll('button, a');
+                for (var i = 0; i < btns.length; i++) {
+                    var text = btns[i].innerText || btns[i].textContent || '';
+                    if (text.includes('Đồng ý') || text.includes('tiếp tục xem') || text.includes('Agree')) {
+                        btns[i].click();
+                    }
+                }
+            }, 500);
+        `;
 
         return JSON.stringify({
             "url": streamUrl,
@@ -313,7 +313,8 @@ function parseDetailResponse(html, url) {
                 "Origin": BASEURL,
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Block-Ads": "true",
-                "Block-Redirects": "true"
+                "Block-Redirects": "true",
+                "Custom-Js": autoClickJs.trim()
             },
             "subtitles": []
         });
