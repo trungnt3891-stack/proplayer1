@@ -9,8 +9,8 @@ function getManifest() {
     return JSON.stringify({
         "id": "narto_drama",
         "name": "Narto Drama",
-        "description": "Bản Master: Auto Bỏ Qua Popup Quảng Cáo, Fix Ảnh Bìa, Vuốt Dọc TikTok",
-        "version": "1.1.1",
+        "description": "Bản Master: Đọc JSON trực tiếp, Vuốt Dọc TikTok, Fix Full Poster & Tập",
+        "version": "3.0.0",
         "info": "Phim ngắn chia thành nhiều tập. Vuốt lên/xuống để qua tập và xem bằng chiều dọc.",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/narto-drama-logo-compressed.png",
@@ -19,7 +19,7 @@ function getManifest() {
         "loginUrl": BASEURL + "?lang=vi-VN",
         "type": "shortfilm",           // KÍCH HOẠT CHẾ ĐỘ VUỐT DỌC TIKTOK
         "layoutType": "VERTICAL",      // ÉP MÀN HÌNH XOAY DỌC
-        "playerType": "embedtoexoplay" // CHẶN QUẢNG CÁO TỐI ƯU
+        "playerType": "exoplayer"      // PHÁT NATIVE SIÊU TỐC
     });
 }
 
@@ -119,7 +119,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSERS
+// PARSERS (TỐI ƯU THEO GỢI Ý CHUYÊN GIA)
 // =============================================================================
 
 function parseListResponse(html, $url) {
@@ -201,9 +201,20 @@ function parseSearchResponse(html, url) {
 function parseMovieDetail(html, url) {
     try {
         var lname = _$(html).find("h1").text() || _$(html).find('meta[property="og:title"]').attr("content").split("-")[0].trim();
-        var limg = _$(html).find('meta[property="og:image"]').attr("content") || _$(html).find(".poster").attr("src");
         
-        // FIX LỖI ẢNH BÌA: Chuyển đổi relative path thành absolute URL
+        // CÁCH LẤY POSTER ĐA TẦNG CHUẨN XÁC
+        var limg = "";
+        var ogImg = _$(html).find('meta[property="og:image"]').attr("content");
+        if (ogImg) limg = ogImg;
+        if (!limg) {
+            var posterEl = _$(html).find(".poster");
+            limg = posterEl.attr("src") || posterEl.attr("data-src") || "";
+        }
+        if (!limg) {
+            var imgMatch = html.match(/"image"\s*:\s*"([^"]+)"/i) || html.match(/"cover"\s*:\s*"([^"]+)"/i);
+            if (imgMatch) limg = imgMatch[1];
+        }
+
         if (limg && limg.indexOf('http') !== 0) {
             limg = BASEURL + (limg.startsWith('/') ? '' : '/') + limg;
         }
@@ -212,6 +223,7 @@ function parseMovieDetail(html, url) {
 
         var items = [];
         
+        // ĐỌC TRỰC TIẾP TỪ BIẾN JSON episodeItemsUnlocked TRONG SCRIPT CỦA TRANG WEB
         var scriptMatch = html.match(/const\s+episodeItemsUnlocked\s*=\s*(\[[\s\S]*?\]);/i);
         if (scriptMatch && scriptMatch[1]) {
             try {
@@ -219,7 +231,7 @@ function parseMovieDetail(html, url) {
                 for (var i = 0; i < episodes.length; i++) {
                     var ep = episodes[i];
                     var epNum = ep.number || ep.route_episode_number || (i + 1);
-                    var streamUrl = ep.play_url || ep.direct_play_url || "";
+                    var streamUrl = ep.direct_play_url || ep.play_url || "";
                     
                     if (streamUrl) {
                         items.push({
@@ -232,6 +244,7 @@ function parseMovieDetail(html, url) {
             } catch (err) {}
         }
 
+        // Fallback nếu script không quét được
         if (items.length === 0) {
             var epLinks = _$(html).find(".episode-item").elements;
             for (var j = 0; j < epLinks.length; j++) {
@@ -285,7 +298,7 @@ function parseDetailResponse(html, url) {
                 try {
                     var episodes = JSON.parse(scriptMatch[1]);
                     if (episodes.length > 0) {
-                        streamUrl = episodes[0].play_url || episodes[0].direct_play_url || streamUrl;
+                        streamUrl = episodes[0].direct_play_url || episodes[0].play_url || streamUrl;
                     }
                 } catch (err) {}
             }
