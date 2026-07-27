@@ -45,20 +45,6 @@
             "iconUrl": "https://phimhdcss.com/favicon.ico"
         },
         {
-            "id": "hh3d",
-            "name": "HH3D - Hoạt Hình 3D",
-            "version": "1.0.5",
-            "scriptUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/hh3d_plugin.js",
-            "iconUrl": "https://hoathinh3d.co/wp-content/uploads/2023/09/favicon.png"
-        },
-        {
-            "id": "phimhayok",
-            "name": "Phim Hay Ok",
-            "version": "1.1",
-            "scriptUrl": "https://rawcdn.githack.com/alokillgtv-gif/VAXAPPSCRIPT/8d72b500b72259c9561abdffd6758b39f1a435d0/Plugins/phimhayok_plugin.js",
-            "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/phimhayok.jpg"
-        },
-        {
             "id": "missav",
             "name": "MissAV",
             "version": "1.1.2",
