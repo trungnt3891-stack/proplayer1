@@ -12,7 +12,7 @@
       "id": "onflix",
       "name": "Onflix Phim",
       "version": "1.7.6",
-      "scriptUrl": "https://rawcdn.githack.com/alokillgtv-gif/VAXAPPSCRIPT/4fda37b345d013471e4267298f7af73ea389f621/Plugins/onflix_plugin.js",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/Onflix_plugin.js",
       "iconUrl": "https://onflix.lat/app/asset/logo.png"
     },
     {
