@@ -22,10 +22,10 @@ function getManifest() {
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/shortflix.png",
         "isEnabled": true,
-        "hasLogin": true,                     // [THÊM MỚI] KÍCH HOẠT TÍNH NĂNG ĐĂNG NHẬP
-        "loginUrl": BASEURL + "/vi/login",    // [THÊM MỚI] ĐƯỜNG DẪN ĐĂNG NHẬP CỦA WEB
-        "type": "shortfilm",                  // [ĐÃ SỬA] CHUYỂN TỪ MOVIE SANG shortfilm ĐỂ BẬT VUỐT TIKTOK
-        "layoutType": "VERTICAL",             // [THÊM MỚI] ÉP AUTO XOAY DỌC MÀN HÌNH
+        "hasLogin": true,                     // [KÍCH HOẠT TÍNH NĂNG ĐĂNG NHẬP]
+        "loginUrl": BASEURL + "/vi/login",    // [ĐƯỜNG DẪN ĐĂNG NHẬP CỦA WEB]
+        "type": "shortfilm",                  // [ĐÃ THAM KHẢO NARTO] CHUYỂN SANG shortfilm ĐỂ BẬT VUỐT DỌC
+        "layoutType": "VERTICAL",             // [ĐÃ THAM KHẢO NARTO] ÉP MÀN HÌNH XOAY DỌC
         "playerType": "exoplayer"
     });
 }
@@ -198,7 +198,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSERS (GIỮ NGUYÊN 100% LOGIC CỦA CODE ANDROID BẠN ĐƯA)
+// PARSERS
 // =============================================================================
 
 function parseListResponse(html, $url) {
@@ -365,7 +365,6 @@ function parseMovieDetail(html, url) {
         
         for (var $j = 0; $j < $listepi.length; $j++) {
             var $epinumber = $listepi[$j].episodeNumber;
-            // Xử lý thông minh tập 0 (Trailer) để nhìn đẹp hơn
             var $nameepi = $epinumber === 0 ? "Trailer" : "Tập " + $epinumber;
             
             var $item = {
@@ -441,7 +440,7 @@ function parseDetailResponse(html, url) {
         
         return JSON.stringify({
             "url": $linkstream,
-            "isEmbed": false,
+            "isEmbed": false,           // [THAM KHẢO NARTO] ÉP BẮT BUỘC FALSE ĐỂ BẬT TÍNH NĂNG VUỐT DỌC
             "mimeType": "application/x-mpegURL",
             "headers": {
                 "Referer": BASEURL,
@@ -451,7 +450,7 @@ function parseDetailResponse(html, url) {
             "subtitles": $subtitle ? [{ "lang": "vi", "url": $subtitle }] : []
         });
     } catch (e) {
-        return JSON.stringify({ "url": "", "headers": {} });
+        return JSON.stringify({ "url": "", "isEmbed": false, "headers": {} });
     }
 }
 
