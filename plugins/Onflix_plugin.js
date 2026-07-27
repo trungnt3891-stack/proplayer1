@@ -9,15 +9,15 @@ function getManifest() {
 	return JSON.stringify({
 		"id": "onflix",
 		"name": "Onflix",
-		"description": "Bản Tối Giản: 1 Thư Mục Phim Mới, Fix Lỗi Menu & Tìm Kiếm",
-		"version": "2.0.0", // Đổi version lên 2.0.0 để ép App iOS xóa cache cũ
+		"description": "Bản Master: Fix lấy link tập phim, 1 Folder Phim Mới duy nhất.",
+		"version": "2.0.2", // Cập nhật version để ép App xóa cache
 		"baseUrl": BASEURL,
 		"iconUrl": BASEURL + "/app/asset/logo.png",
 		"isEnabled": true,
 		"isAdult": false,
 		"type": "MOVIE",
 		"layoutType": "VERTICAL",
-		"playerType": "embedtoexoplay" // Dùng sức mạnh native VAX để chặn quảng cáo
+		"playerType": "embedtoexoplay" // Dùng sức mạnh native VAX để chặn quảng cáo webview
 	});
 }
 
@@ -29,7 +29,7 @@ function log(msg) {
     }
 }
 
-// 1. CHỈ ĐỂ DUY NHẤT 1 FOLDER PHIM MỚI NHƯ YÊU CẦU
+// 1. CHỈ ĐỂ DUY NHẤT 1 FOLDER PHIM MỚI 
 function getHomeSections() {
     return JSON.stringify([
         { 
@@ -40,23 +40,14 @@ function getHomeSections() {
     ]);
 }
 
-// 2. CHUẨN HÓA DANH SÁCH THỂ LOẠI (Fix lỗi chữ đỏ "Không thể tải danh sách")
 function getPrimaryCategories() {
     return JSON.stringify([
-        { "name": "Phim Mới", "slug": "/movies?sort=newest&limit=24" },
-        { "name": "Hành Động", "slug": "/movies?sort=year_desc&limit=24&category=hanh-dong" },
-        { "name": "Cổ Trang", "slug": "/movies?sort=year_desc&limit=24&category=co-trang" },
-        { "name": "Tình Cảm", "slug": "/movies?sort=year_desc&limit=24&category=tinh-cam" },
-        { "name": "Kinh Dị", "slug": "/movies?sort=year_desc&limit=24&category=kinh-di" },
-        { "name": "Hài Hước", "slug": "/movies?sort=year_desc&limit=24&category=hai-huoc" },
-        { "name": "Viễn Tưởng", "slug": "/movies?sort=year_desc&limit=24&category=vien-tuong" },
-        { "name": "Hoạt Hình", "slug": "/movies?sort=year_desc&limit=24&category=hoat-hinh" },
-        { "name": "Phim 18+", "slug": "/movies?sort=year_desc&limit=24&category=18-plus" }
+        { "name": "Phim Mới", "slug": "/movies?sort=newest&limit=24" }
     ]);
 }
 
 function getFilterConfig() { 
-    return JSON.stringify({}); // Trả về rỗng để tránh lỗi bộ lọc
+    return JSON.stringify({}); // Trả về rỗng để tắt bộ lọc
 }
 
 // =============================================================================
@@ -76,7 +67,7 @@ function getUrlList(slug, filtersJson) {
             } catch (jsonErr) {}
         }
         
-        // Luôn trỏ thẳng vào API để nhận JSON cho nhanh và không bị lỗi
+        // Luôn trỏ thẳng vào API để nhận JSON 
         let resultUrl = BASEAPI + (path.startsWith('/') ? '' : '/') + path;
 
         if (page > 1) {
@@ -89,7 +80,6 @@ function getUrlList(slug, filtersJson) {
     }
 }
 
-// 3. FIX LỖI TÌM KIẾM: Gọi thẳng vào API backend thay vì frontend HTML
 function getUrlSearch(keyword, filtersJson) {
     let page = 1;
     if (filtersJson) {
@@ -100,7 +90,7 @@ function getUrlSearch(keyword, filtersJson) {
         } catch (e) {}
     }
     
-    // API chuẩn của website Onflix: https://k8s.onflixcdn.com/api/search?q=...
+    // Gọi API chuẩn của website Onflix
     let searchUrl = BASEAPI + "/search?q=" + encodeURIComponent(keyword.trim()) + "&type=all";
     if (page > 1) {
         searchUrl += "&page=" + page;
@@ -125,8 +115,6 @@ function getUrlYears() { return ""; }
 function parseListResponse(html, $url) {
     try {
         var items = [];
-        
-        // Vì toàn bộ getUrlList & getUrlSearch đều gọi vào API -> Dữ liệu chắc chắn là JSON
         var videoData = JSON.parse(html);
         var currentpg = videoData.pagination ? videoData.pagination.current_page : 1;
         var total_pages = videoData.pagination ? videoData.pagination.total_pages : 1;
@@ -171,26 +159,10 @@ function parseListResponse(html, $url) {
 }
 
 function parseSearchResponse(html, $url) {
-    // API Search trả về JSON giống hệt API List, gọi chung 1 hàm
     return parseListResponse(html, $url);
 }
 
-function parseNextPayload(raw) {
-    try {
-        const match = raw.match(/self\.__next_f\.push\((.*)\)/);
-        if (!match) return null;
-
-        const pushArgs = JSON.parse(match[1]); 
-        const rawString = pushArgs[1];
-        const cleanJsonStr = rawString.replace(/^\w+:/, '').replace(/\n$/, '');
-
-        return JSON.parse(cleanJsonStr);
-    } catch (e) {
-        return null;
-    }
-}
-
-// Hàm lọc lấy đúng phim đang xem, bỏ qua phim đề xuất (related)
+// Hàm lọc lấy đúng phim, BẮT BUỘC ưu tiên mảng episodes chứa link stream
 function extractCleanData(data) {
     let result = { movie: null, episodes: [] };
 
@@ -201,13 +173,18 @@ function extractCleanData(data) {
             if (node.movie && typeof node.movie === 'object' && !result.movie && !isRelated) {
                 result.movie = node.movie;
             }
-            if (Array.isArray(node.episodes) && node.episodes.length > 0 && result.episodes.length === 0 && !isRelated) {
-                result.episodes = node.episodes;
+            if (Array.isArray(node.episodes) && node.episodes.length > 0 && !isRelated) {
+                // Ưu tiên ghi đè nếu mảng này CHỨA LINK STREAM (Khắc phục lỗi iOS cũ)
+                if (node.episodes[0].link_m3u8 || node.episodes[0].link_embed) {
+                    result.episodes = node.episodes;
+                } else if (result.episodes.length === 0) {
+                    result.episodes = node.episodes;
+                }
             }
 
             for (let key in node) {
                 if (node.hasOwnProperty(key)) {
-                    traverse(node[key], isRelated || key === 'related' || key === 'collection');
+                    traverse(node[key], isRelated || key === 'related' || key === 'collection' || key === 'recommend');
                 }
             }
         } else if (Array.isArray(node)) {
@@ -226,33 +203,29 @@ function parseMovieDetail(html, $url) {
         let movie = null;
         let episodesList = [];
 
-        // 1. Quét thẻ __NEXT_DATA__
-        let nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/i);
-        if (nextDataMatch) {
+        // QUÉT MỌI ĐOẠN MÃ NEXT.JS PAYLOAD TRONG HTML ĐỂ BẮT CHÍNH XÁC LINK STREAM
+        let regex = /self\.__next_f\.push\((\[.*?\])\)/g;
+        let match;
+        while ((match = regex.exec(html)) !== null) {
             try {
-                let nextJson = JSON.parse(nextDataMatch[1]);
-                let extracted = extractCleanData(nextJson);
-                if (extracted.movie) movie = extracted.movie;
-                if (extracted.episodes) episodesList = extracted.episodes;
-            } catch (err) {}
-        }
-
-        // 2. Quét Next.js RSC payload (bổ trợ)
-        if (!movie || episodesList.length === 0) {
-            var scripts = _$(html).find("script").elements;
-            for (let i = 0; i < scripts.length; i++) {
-                let scrText = _$(scripts[i]).text();
-                if (scrText.indexOf("self.__next_f.push") > -1) {
-                    let parsedPayload = parseNextPayload(scrText);
-                    if (parsedPayload) {
-                        let clean = extractCleanData(parsedPayload);
-                        if (!movie && clean.movie) movie = clean.movie;
-                        if (episodesList.length === 0 && clean.episodes && clean.episodes.length > 0) {
-                            episodesList = clean.episodes;
+                let pushArgs = JSON.parse(match[1]);
+                let rawString = pushArgs[1];
+                if (typeof rawString === 'string') {
+                    let cleanJsonStr = rawString.replace(/^\w+:/, '').replace(/\n$/, '');
+                    let payload = JSON.parse(cleanJsonStr);
+                    
+                    let extracted = extractCleanData(payload);
+                    if (extracted.movie && !movie) movie = extracted.movie;
+                    if (extracted.episodes && extracted.episodes.length > 0) {
+                        // Chỉ lấy mảng Episodes có link_m3u8 hoặc link_embed
+                        if (extracted.episodes[0].link_m3u8 || extracted.episodes[0].link_embed) {
+                            episodesList = extracted.episodes;
+                        } else if (episodesList.length === 0) {
+                            episodesList = extracted.episodes;
                         }
                     }
                 }
-            }
+            } catch(e) {}
         }
 
         var actors = "";
@@ -260,19 +233,20 @@ function parseMovieDetail(html, $url) {
             movie.actors.forEach(actor => { actors += actor.name + ", "; });
         }
 
-        // 3. Quét Payload Embed (Vì Onflix thường giấu link trong payload khác)
-        var scriptEmbed = _$(html).find("script:content('\"link_embed\\\":\\\"http')").text();
-        if (!scriptEmbed) {
-            scriptEmbed = _$(html).find("script:content('\"link_m3u8\\\":\\\"http')").text();
-        }
-        var rawVDEmbed = parseNextPayload(scriptEmbed);
-        var embedData = extractCleanData(rawVDEmbed);
-        
-        var $listEpi = (embedData.episodes && embedData.episodes.length > 0) ? embedData.episodes : episodesList;
         var serversMap = {};
 
-        if ($listEpi && Array.isArray($listEpi)) {
-            $listEpi.forEach(episode => {
+        // Nhúng link stream vào id
+        if (episodesList && Array.isArray(episodesList)) {
+            episodesList.forEach(episode => {
+                var streamLink = episode.link_m3u8;
+                // Nếu link m3u8 bị chặn (như ss.onflixstream.site), tự động fallback dùng link embed
+                if (!streamLink || streamLink.indexOf("https://ss.onflixstream.site") > -1) {
+                    if (episode.link_embed) streamLink = episode.link_embed;
+                }
+
+                // Nếu không có link xem -> bỏ qua
+                if (!streamLink || streamLink === "undefined" || streamLink === "null") return;
+
                 var rawServerName = episode.server_name || "Vietsub";
                 var cleanServerName = "Vietsub";
                 
@@ -284,15 +258,8 @@ function parseMovieDetail(html, $url) {
 
                 if (!serversMap[cleanServerName]) serversMap[cleanServerName] = {};
 
-                var streamLink = episode.link_m3u8;
-                if (!streamLink || streamLink.indexOf("https://ss.onflixstream.site") > -1) {
-                    if (episode.link_embed) streamLink = episode.link_embed;
-                }
-
                 var epSlug = "tap-" + (episode.slug || episode.name || "1");
-                
-                // Chống đẩy link rỗng vào mảng
-                if (streamLink && streamLink !== "undefined" && streamLink !== "null" && !serversMap[cleanServerName][epSlug]) {
+                if (!serversMap[cleanServerName][epSlug]) {
                     serversMap[cleanServerName][epSlug] = {
                         id: streamLink,            
                         name: "Tập " + (episode.slug || episode.name || "1"),     
@@ -311,7 +278,7 @@ function parseMovieDetail(html, $url) {
                 return numA - numB;
             });
 
-            // Chỉ thêm server nếu có ít nhất 1 tập phim
+            // Chỉ đẩy vào Server nếu tồn tại các tập phim thực sự có link
             if (epsArray.length > 0) {
                 servers.push({
                     name: sName,
@@ -320,17 +287,25 @@ function parseMovieDetail(html, $url) {
             }
         }
 
-        servers.sort((a, b) => {
-            const getPriority = (name) => {
-                if (name.includes("KK Phim")) return 1;  
-                if (name.includes("Ổ Phim")) return 2;    
-                if (name.includes("Vietsub")) return 3;
-                return 4;                                        
-            };
-            return getPriority(a.name) - getPriority(b.name);
-        });
+        // Chống lỗi folder rỗng tuyệt đối: Nếu không bắt được link do API sập, tạo 1 tập ảo để mở web
+        if (servers.length === 0) {
+            servers.push({
+                name: "Server Trực Tiếp",
+                episodes: [{ id: $url, name: "Xem Phim (Web)", slug: "full" }]
+            });
+        } else {
+            // Xếp hạng server
+            servers.sort((a, b) => {
+                const getPriority = (name) => {
+                    if (name.includes("KK Phim")) return 1;  
+                    if (name.includes("Ổ Phim")) return 2;    
+                    if (name.includes("Vietsub")) return 3;
+                    return 4;                                        
+                };
+                return getPriority(a.name) - getPriority(b.name);
+            });
+        }
 
-        // Xử lý Meta Tags nếu Next payload bị tịt
         let title = movie ? movie.title : "";
         if (!title) {
             let mTitle = html.match(/<meta property="og:title" content="([^"]+)"/i);
@@ -358,7 +333,7 @@ function parseMovieDetail(html, $url) {
             servers: servers,
             quality: movie ? movie.quality : "HD",
             year: movie ? movie.year : 2026,
-            status: servers.length > 0 ? (servers[0].episodes.length + " Tập") : "Cập nhật",
+            status: servers[0].episodes.length + " Tập",
             duration: movie ? movie.time : "",
             casts: actors,
             director: movie ? movie.directors : "",
@@ -372,31 +347,35 @@ function parseMovieDetail(html, $url) {
     }
 }
 
+// Bắt stream thông minh qua EmbedSniffer của VAX
 function parseDetailResponse(html, url) {
-	try {
-		var $stream = url;
-		var isEmbed = $stream.indexOf(".m3u8") === -1 && $stream.indexOf(".mp4") === -1;
-		
-		return JSON.stringify({
-			"url": $stream,
-			"isEmbed": isEmbed,
-			"mimeType": isEmbed ? "" : "application/x-mpegURL",
-			"headers": {
-				"Referer": BASEURL,
-				"Origin": BASEURL,
-				"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-				"Block-Ads": "true",
-				"Block-Redirects": "true"
-			},
-			"subtitles": []
-		});
-		
-	} catch (e) {
-		return JSON.stringify({ "url": url, "isEmbed": true, "headers": {} });
-	}
+    try {
+        var streamUrl = url;
+        
+        if (streamUrl.startsWith("//")) streamUrl = "https:" + streamUrl;
+        else if (streamUrl.startsWith("/")) streamUrl = BASEURL + streamUrl;
+
+        var isEmbed = streamUrl.indexOf(".m3u8") === -1 && streamUrl.indexOf(".mp4") === -1;
+        
+        return JSON.stringify({
+            "url": streamUrl,
+            "isEmbed": isEmbed,
+            "mimeType": isEmbed ? "" : "application/x-mpegURL",
+            "headers": {
+                "Referer": BASEURL + "/",
+                "Origin": BASEURL,
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Block-Ads": "true",
+                "Block-Redirects": "true"
+            },
+            "subtitles": []
+        });
+        
+    } catch (e) {
+        return JSON.stringify({ "url": url, "isEmbed": true, "headers": {} });
+    }
 }
 
-// =============================================================================
-// DOM LIBRARY _$
-// =============================================================================
-function _$(htmlOrBlock){if (htmlOrBlock && typeof htmlOrBlock === 'object' && htmlOrBlock.elements) {return htmlOrBlock;} var instance = {sourceHtml: typeof htmlOrBlock === 'string' ? htmlOrBlock : '',elements: Array.isArray(htmlOrBlock) ? htmlOrBlock : (htmlOrBlock ? [htmlOrBlock] : []),find: function (selector) {if (selector.indexOf(',') !== -1) {var results = [];var selectors = selector.split(',').map(function (s) {return s.trim();});for (var s = 0;s < selectors.length;s++) {if (selectors[s] === "") continue;var subInstance = this.find(selectors[s]);for (var r = 0;r < subInstance.elements.length;r++) {var element = subInstance.elements[r];if (results.indexOf(element) === -1) {results.push(element);}}} var multiInstance = _$(results);multiInstance.sourceHtml = this.sourceHtml;return multiInstance;} var results = [];var contentFilter = "";if (selector.indexOf(":content(") !== -1) {var contentMatch = selector.match( /:content\((?:"([^"]*)"|'([^']*)'|([^)]*))\)/);if (contentMatch) {contentFilter = contentMatch[1] || contentMatch[2] || contentMatch[ 3] || "";selector = selector.replace(/:content\((?:"[^"]*"|'[^']*'|[^)]*)\)/,"");}} var attrNameFilter = "";var attrValueFilter = "";var attrOperator = "=";var hasAttrFilter = false;var attrMatch = selector.match( /\[([a-zA-Z0-9_-]+)\s*([*^$]?=)\s*(?:"([^"]*)"|'([^']*)'|([^\]"']*))\]/ );if (attrMatch) {hasAttrFilter = true;attrNameFilter = attrMatch[1];attrOperator = attrMatch[2];attrValueFilter = attrMatch[3] || attrMatch[4] || attrMatch[5] || "";selector = selector.replace(/\[.*?\]/,"");} var notSelector = "";if (selector.indexOf(":not(") !== -1) {var notMatch = selector.match(/:not\(([^)]+)\)/);if (notMatch) {notSelector = notMatch[1];selector = selector.replace(/:not\([^)]+\)/,"");}} var isFirstFilter = selector.indexOf(":first") !== -1;var isLastFilter = selector.indexOf(":last") !== -1;selector = selector.replace(/:first|:last/g,"");var targetTagName = "";var targetId = "";var targetClasses = [];var selectorToParse = selector.trim();if (selectorToParse !== "") {var idIndex = selectorToParse.indexOf('#');if (idIndex !== -1) {var afterId = selectorToParse.substring(idIndex + 1);var nextDot = afterId.indexOf('.');targetId = nextDot === -1 ? afterId : afterId.substring(0, nextDot);selectorToParse = selectorToParse.substring(0, idIndex) + ( nextDot === -1 ? "" : "." + afterId.substring(nextDot + 1));} var classParts = selectorToParse.split('.');var possibleTag = classParts.shift();if (possibleTag) {targetTagName = possibleTag.toLowerCase();} targetClasses = classParts.filter(function (c) {return c.length > 0;});} var isAttrOnly = (selector === "" && hasAttrFilter);for (var i = 0;i < this.elements.length;i++) {var currentHtml = this.elements[i];var pos = 0;var subResults = [];while ((pos = currentHtml.indexOf('<',pos)) !== -1) {if (currentHtml.charAt(pos + 1) === '/' || currentHtml.charAt(pos + 1) === '!') {pos++;continue;} var endOpenTag = currentHtml.indexOf('>',pos);if (endOpenTag === -1) break;var fullOpenTag = currentHtml.substring(pos,endOpenTag + 1);var spacePos = fullOpenTag.indexOf(' ');var currentTagName = "";if (spacePos === -1) {currentTagName = fullOpenTag.substring(1,fullOpenTag.length - 1).toLowerCase();} else {currentTagName = fullOpenTag.substring(1,spacePos) .toLowerCase();} var isMatched = true;if (targetTagName && targetTagName !== currentTagName) {isMatched = false;} if (isMatched && targetId) {var idMatchStr = "";var idPos = fullOpenTag.indexOf('id="');if (idPos !== -1) {var startQuote = idPos + 4;idMatchStr = fullOpenTag.substring(startQuote,fullOpenTag .indexOf('"',startQuote));} else {idPos = fullOpenTag.indexOf("id='");if (idPos !== -1) {var startQuote = idPos + 4;idMatchStr = fullOpenTag.substring(startQuote,fullOpenTag.indexOf("'",startQuote));}} if (idMatchStr !== targetId) {isMatched = false;}} if (isMatched && targetClasses.length > 0) {var classMatchStr = "";var classPos = fullOpenTag.indexOf('class="');if (classPos !== -1) {var startQuote = classPos + 7;classMatchStr = fullOpenTag.substring(startQuote,fullOpenTag.indexOf('"',startQuote));} else {classPos = fullOpenTag.indexOf("class='");if (classPos !== -1) {var startQuote = classPos + 7;classMatchStr = fullOpenTag.substring(startQuote,fullOpenTag.indexOf("'",startQuote));}} if (classMatchStr) {var currentClasses = classMatchStr.trim().split(/\s+/);for (var c = 0;c < targetClasses.length;c++) {if (currentClasses.indexOf(targetClasses[c]) === -1) {isMatched = false;break;}}} else {isMatched = false;}} if (isMatched && hasAttrFilter) {var actualValue = "";var attrPos = fullOpenTag.indexOf(attrNameFilter + '="');if (attrPos !== -1) {var startQuote = attrPos + attrNameFilter.length + 2;actualValue = fullOpenTag.substring(startQuote,fullOpenTag.indexOf('"',startQuote));} else {attrPos = fullOpenTag.indexOf(attrNameFilter + "='");if (attrPos !== -1) {var startQuote = attrPos + attrNameFilter.length + 2;actualValue = fullOpenTag.substring(startQuote,fullOpenTag.indexOf("'",startQuote));}} if (attrPos === -1) {isMatched = false;} else {if (attrOperator === "=") {if (attrNameFilter === "class") {var classes = actualValue.trim().split(/\s+/);if (classes.indexOf(attrValueFilter) === -1) isMatched = false;} else if (actualValue !== attrValueFilter) {isMatched = false;}} else if (attrOperator === "*=") {if (actualValue.indexOf(attrValueFilter) === -1) isMatched = false;} else if (attrOperator === "^=") {if (actualValue.indexOf(attrValueFilter) !== 0) isMatched = false;} else if (attrOperator === "$=") {if (actualValue.slice(-attrValueFilter.length) !== attrValueFilter) isMatched = false;}}} if (isMatched) {var startTagPos = pos;var endTagPos = endOpenTag + 1;var selfClosingTags = ['img','source','input','br','hr','link','meta' ];if (selfClosingTags.indexOf(currentTagName) === -1 && fullOpenTag.indexOf('/>') === -1) {var depth = 1;var scanPos = endOpenTag + 1;var openStr = '<' + currentTagName;var closeStr = '</' + currentTagName + '>';while (depth > 0 && scanPos < currentHtml.length) {var nextOpen = currentHtml.indexOf(openStr,scanPos);var nextClose = currentHtml.indexOf(closeStr,scanPos);if (nextClose === -1) {scanPos = currentHtml.length;break;} if (nextOpen !== -1 && nextOpen < nextClose) {depth++;scanPos = nextOpen + openStr.length;} else {depth--;scanPos = nextClose + closeStr.length;if (depth === 0) endTagPos = nextClose + closeStr .length;}}} var foundBlock = currentHtml.substring(startTagPos,endTagPos);if (contentFilter) {var pureText = foundBlock.replace(/<[^>]+>/g,"").trim();if (pureText.indexOf(contentFilter) === -1) {pos = endTagPos;continue;}} if (notSelector) {var isNotClass = notSelector.indexOf('.') === 0;var isNotId = notSelector.indexOf('#') === 0;var notValue = notSelector.substring(1);var hasNot = false;if (isNotClass && fullOpenTag.indexOf('class="') !== -1 && fullOpenTag.indexOf(notValue) !== -1) hasNot = true;if (isNotId && fullOpenTag.indexOf('id="') !== -1 && fullOpenTag.indexOf(notValue) !== -1) hasNot = true;if (!hasNot) subResults.push(foundBlock);} else {subResults.push(foundBlock);} pos = endTagPos;} else {pos++;}} if (isFirstFilter && subResults.length > 0) subResults = [subResults[ 0]];if (isLastFilter && subResults.length > 0) subResults = [subResults[ subResults.length - 1]];results = results.concat(subResults);} var newInstance = _$(results);newInstance.sourceHtml = this.sourceHtml || currentHtml;return newInstance;},each: function (callback) {for (var i = 0;i < this.elements.length;i++) {var childInstance = _$(this.elements[i]);childInstance.sourceHtml = this.sourceHtml;callback.call(childInstance,i,this.elements[i]);} return this;},eq: function (index) {if (index < 0) index = this.elements.length + index;var matchedElement = this.elements[index];this.elements = matchedElement ? [matchedElement] : [];return this;},attr: function (attrName) {if (this.elements.length === 0) return "";var elem = this.elements[0];var searchStr = attrName + '="';var pos = elem.indexOf(searchStr);if (pos === -1) {searchStr = attrName + "='";pos = elem.indexOf(searchStr);} if (pos === -1) return "";var start = pos + searchStr.length;var quoteType = elem.charAt(start - 1);var end = elem.indexOf(quoteType,start);return end === -1 ? "" : elem.substring(start,end);},html: function () {if (this.elements.length === 0) return "";var elem = this.elements[0];var start = elem.indexOf('>') + 1;var end = elem.lastIndexOf('</');if (start > 0 && end > start) return elem.substring(start,end);return "";},text: function () {if (this.elements.length === 0) return "";var elem = this.elements[0];var start = elem.indexOf('>') + 1;var end = elem.lastIndexOf('</');if (start > 0 && end > start) {var content = elem.substring(start,end);return content.replace(/<\/?[^>]+(>|$)/g,"").trim();} return "";}};return instance;}
+function parseCategoriesResponse(apiResponseJson) { return "[]"; }
+function parseCountriesResponse(html) { return "[]"; }
+function parseYearsResponse(html) { return "[]"; }
