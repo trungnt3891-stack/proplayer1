@@ -9,8 +9,8 @@ function getManifest() {
     return JSON.stringify({
         "id": "narto_drama",
         "name": "Narto Drama",
-        "description": "Bản Master: Vuốt Dọc TikTok, Chặn 100% Quảng Cáo, Đăng Nhập",
-        "version": "1.1.0",
+        "description": "Bản Master: Auto Bỏ Qua Popup Quảng Cáo, Fix Ảnh Bìa, Vuốt Dọc TikTok",
+        "version": "1.1.1",
         "info": "Phim ngắn chia thành nhiều tập. Vuốt lên/xuống để qua tập và xem bằng chiều dọc.",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/narto-drama-logo-compressed.png",
@@ -19,7 +19,7 @@ function getManifest() {
         "loginUrl": BASEURL + "?lang=vi-VN",
         "type": "shortfilm",           // KÍCH HOẠT CHẾ ĐỘ VUỐT DỌC TIKTOK
         "layoutType": "VERTICAL",      // ÉP MÀN HÌNH XOAY DỌC
-        "playerType": "embedtoexoplay" // KÍCH HOẠT SNIFFER & CHẶN QUẢNG CÁO TỐI ƯU
+        "playerType": "embedtoexoplay" // CHẶN QUẢNG CÁO TỐI ƯU
     });
 }
 
@@ -135,11 +135,17 @@ function parseListResponse(html, $url) {
             while ((match = regex.exec(html)) !== null) {
                 var cUrl = match[1];
                 if (cUrl.indexOf('http') !== 0) cUrl = BASEURL + (cUrl.startsWith('/') ? '' : '/') + cUrl;
+                
+                var poster = match[2];
+                if (poster && poster.indexOf('http') !== 0) {
+                    poster = BASEURL + (poster.startsWith('/') ? '' : '/') + poster;
+                }
+
                 if (!seen[cUrl]) {
                     items.push({
                         id: cUrl,
-                        posterUrl: match[2],
-                        backdropUrl: match[2],
+                        posterUrl: poster,
+                        backdropUrl: poster,
                         title: match[3].trim(),
                         quality: "HD",
                         lang: "Vietsub"
@@ -156,6 +162,10 @@ function parseListResponse(html, $url) {
 
                 var imgTag = block.find("img");
                 var poster = imgTag.attr("src") || imgTag.attr("data-src") || "";
+                if (poster && poster.indexOf('http') !== 0) {
+                    poster = BASEURL + (poster.startsWith('/') ? '' : '/') + poster;
+                }
+
                 var title = imgTag.attr("alt") || block.text() || "";
 
                 if (href && title && !seen[href]) {
@@ -192,6 +202,12 @@ function parseMovieDetail(html, url) {
     try {
         var lname = _$(html).find("h1").text() || _$(html).find('meta[property="og:title"]').attr("content").split("-")[0].trim();
         var limg = _$(html).find('meta[property="og:image"]').attr("content") || _$(html).find(".poster").attr("src");
+        
+        // FIX LỖI ẢNH BÌA: Chuyển đổi relative path thành absolute URL
+        if (limg && limg.indexOf('http') !== 0) {
+            limg = BASEURL + (limg.startsWith('/') ? '' : '/') + limg;
+        }
+
         var ldes = _$(html).find(".movie-desc").text() || _$(html).find('meta[property="og:description"]').attr("content");
 
         var items = [];
@@ -259,7 +275,6 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// BỔ SUNG CƠ CHẾ CHẶN QUẢNG CÁO TỐI ƯU TRONG PARSE DETAIL RESPONSE
 function parseDetailResponse(html, url) {
     try {
         var streamUrl = url;
