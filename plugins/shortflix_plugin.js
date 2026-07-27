@@ -2,21 +2,21 @@
 // CONFIGURATION & METADATA
 // =============================================================================
 
-var BASEURL = "https://www.shortflix.net"; 
+var BASEURL = "https://www.shortflix.net";
 
 function getManifest() {
     return JSON.stringify({
         "id": "shortflix",
         "name": "ShortFlix",
-        "description": "Siêu phẩm Phim Ngắn. Hỗ trợ vuốt chuyển tập TikTok, chất lượng 1080p siêu tốc.",
+        "description": "Siêu phẩm Phim Ngắn. Hỗ trợ vuốt chuyển tập TikTok, 1080p siêu tốc.",
         "version": "1.0.0",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/images/shortflix-img.png",
         "isEnabled": true,
         "isAdult": false,
-        "type": "shortfilm",           // KÍCH HOẠT CHẾ ĐỘ VUỐT DỌC TIKTOK
+        "type": "shortfilm",           // BẮT BUỘC: Kích hoạt chế độ xoay dọc và vuốt lên/xuống (TikTok style)
         "layoutType": "VERTICAL",
-        "playerType": "exoplayer"      // PHÁT NATIVE SIÊU NHANH BẰNG EXOPLAYER
+        "playerType": "exoplayer"      // BẮT BUỘC: Trả thẳng link m3u8 vào ExoPlayer để phát ngay lập tức
     });
 }
 
@@ -28,27 +28,35 @@ function log(msg) {
     }
 }
 
-// Giao diện trang chủ mượt mà
+// 1. CHỈ ĐỂ 5 MỤC NỔI BẬT Ở TRANG CHỦ CHỐNG LAG (1 Grid, 4 Vuốt ngang)
 function getHomeSections() {
     return JSON.stringify([
-        { "slug": "/vi/home", "title": "Phim Ngắn Nổi Bật", "type": "Grid" },
-        { "slug": "/vi/genres?sortBy=last_episode_at", "title": "Mới Cập Nhật", "type": "Horizontal" }
+        { "slug": "/vi/home", "title": "Phim Mới Cập Nhật", "type": "Grid" },
+        { "slug": "/vi/genres/ngon-tinh", "title": "Ngôn Tình Tuyển Chọn", "type": "Horizontal" },
+        { "slug": "/vi/genres/sung-ngot", "title": "Sủng Ngọt", "type": "Horizontal" },
+        { "slug": "/vi/genres/nguoc-luyen", "title": "Ngược Luyến", "type": "Horizontal" },
+        { "slug": "/vi/genres/bao-thu", "title": "Báo Thù - Rửa Hận", "type": "Horizontal" }
     ]);
 }
 
+// 2. GIẤU TOÀN BỘ CÁC DANH MỤC CÒN LẠI VÀO TRONG MENU THỂ LOẠI
 function getPrimaryCategories() {
     return JSON.stringify([
         { "name": "Trang Chủ", "slug": "/vi/home" },
-        { "name": "Mới Cập Nhật", "slug": "/vi/genres?sortBy=last_episode_at" },
-        { "name": "Huyền Huyễn", "slug": "/vi/genres/huyen-huyen" },
+        { "name": "Phim Mới", "slug": "/vi/genres?sortBy=last_episode_at" },
+        { "name": "Đang Thịnh Hành", "slug": "/vi/genres?sortBy=trending" },
         { "name": "Ngôn Tình", "slug": "/vi/genres/ngon-tinh" },
+        { "name": "Huyền Huyễn", "slug": "/vi/genres/huyen-huyen" },
         { "name": "Sủng Ngọt", "slug": "/vi/genres/sung-ngot" },
         { "name": "Gia Đình", "slug": "/vi/genres/gia-dinh" },
         { "name": "Cổ Đại", "slug": "/vi/genres/co-dai" },
         { "name": "Ngược Luyến", "slug": "/vi/genres/nguoc-luyen" },
         { "name": "Báo Thù", "slug": "/vi/genres/bao-thu" },
         { "name": "Sự Trở Lại", "slug": "/vi/genres/su-tro-lai" },
-        { "name": "Vươn Lên Từ Số Không", "slug": "/vi/genres/vuon-len-tu-so-khong" }
+        { "name": "Vươn Lên Từ Số Không", "slug": "/vi/genres/vuon-len-tu-so-khong" },
+        { "name": "Tổng Tài", "slug": "/vi/genres/rich-family" },
+        { "name": "One Night Stand", "slug": "/vi/genres/one-night-stand" },
+        { "name": "Giả Tưởng", "slug": "/vi/genres/fantasy" }
     ]);
 }
 
@@ -75,7 +83,6 @@ function getUrlList(slug, filtersJson) {
         
         let resultUrl = BASEURL + (path.startsWith('/') ? '' : '/') + path;
 
-        // Xử lý page (ShortFlix dùng ?page= hoặc &page= tùy ngữ cảnh)
         if (page > 1) {
             resultUrl += (resultUrl.indexOf("?") > -1 ? "&" : "?") + "page=" + page;
         }
@@ -87,7 +94,7 @@ function getUrlList(slug, filtersJson) {
 }
 
 function getUrlSearch(keyword, filtersJson) {
-    // API Search của ShortFlix thường nhúng thẳng vào URL
+    // API Search của ShortFlix
     return BASEURL + "/vi/search?q=" + encodeURIComponent(keyword.trim());
 }
 
@@ -102,64 +109,29 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSERS
+// PARSERS LÕI (BÓC TÁCH PAYLOAD NEXT.JS)
 // =============================================================================
 
-// HÀM LÕI 1: Bóc tách chuỗi JSON Payload của Next.js
-function extractNextJsPayloads(html) {
-    let dataBlocks = [];
+// Hàm trích xuất dữ liệu ẩn trong React Server Components (Next.js)
+function extractJsonPayloads(html) {
+    let payloads = [];
     let regex = /self\.__next_f\.push\(\[(.*?)\]\)/g;
     let match;
     while ((match = regex.exec(html)) !== null) {
         try {
-            // Bao bọc lại thành mảng JSON chuẩn để parse
+            // Bao bọc thành mảng và parse an toàn
             let parsedArr = JSON.parse("[" + match[1] + "]");
             let rawString = parsedArr[1];
             if (typeof rawString === 'string') {
-                // Xóa tiền tố định danh (vd: "1:", "d:", "b:")
-                let cleanJsonStr = rawString.replace(/^[0-9a-zA-Z]+:/, '').replace(/\n$/, '');
-                dataBlocks.push(JSON.parse(cleanJsonStr));
-            }
-        } catch (e) {}
-    }
-    return dataBlocks;
-}
-
-// HÀM LÕI 2: Quét đệ quy tìm Video Objects
-function findVideosRecursive(obj, itemsArray, seenDict) {
-    if (!obj) return;
-    if (Array.isArray(obj)) {
-        for (let i = 0; i < obj.length; i++) findVideosRecursive(obj[i], itemsArray, seenDict);
-    } else if (typeof obj === 'object') {
-        // Đặc điểm của một đối tượng phim trên ShortFlix
-        if (obj.slug && obj.title && obj.thumbnailUrl) {
-            let url = "/vi/videos/" + obj.slug;
-            let fullUrl = BASEURL + url;
-            
-            if (!seenDict[fullUrl]) {
-                // Tạo một luợt xem mượt mà (VD: 154292 -> 154K)
-                let viewText = "HD";
-                if (obj.viewCount) {
-                    viewText = (obj.viewCount >= 1000) ? Math.floor(obj.viewCount / 1000) + "K views" : obj.viewCount + " views";
+                // Xóa các tiền tố rác của RSC (vd: "1:", "d:", "b:")
+                let cleanStr = rawString.replace(/^[a-zA-Z0-9]+:/, '').trim();
+                if (cleanStr.startsWith('{') || cleanStr.startsWith('[')) {
+                    payloads.push(JSON.parse(cleanStr));
                 }
-
-                itemsArray.push({
-                    id: fullUrl,
-                    title: obj.title,
-                    posterUrl: obj.thumbnailUrl,
-                    backdropUrl: obj.thumbnailUrl,
-                    quality: "HD",
-                    episode_current: viewText,
-                    lang: "Vietsub",
-                    year: new Date().getFullYear()
-                });
-                seenDict[fullUrl] = true;
             }
-        }
-        for (let key in obj) {
-            findVideosRecursive(obj[key], itemsArray, seenDict);
-        }
+        } catch(e) {}
     }
+    return payloads;
 }
 
 function parseListResponse(html, $url) {
@@ -167,17 +139,45 @@ function parseListResponse(html, $url) {
         var items = [];
         var seen = {};
 
-        // 1. Quét từ Payload ngầm của Next.js
-        let payloads = extractNextJsPayloads(html);
-        payloads.forEach(payload => {
-            findVideosRecursive(payload, items, seen);
-        });
+        // Lấy tất cả Payload giấu trong HTML
+        let payloads = extractJsonPayloads(html);
 
-        // 2. Dự phòng: Quét từ API JSON thẳng (nếu có gọi API)
-        if (items.length === 0 && html.trim().startsWith("{")) {
-            let data = JSON.parse(html);
-            findVideosRecursive(data, items, seen);
+        // Hàm Đệ Quy quét sâu vào Payload để gom danh sách phim
+        function traverseList(node) {
+            if (!node) return;
+            if (Array.isArray(node)) {
+                for (let i = 0; i < node.length; i++) traverseList(node[i]);
+            } else if (typeof node === 'object') {
+                // Nhận dạng chuẩn 1 object phim của ShortFlix
+                if (node.id && node.title && node.slug && node.thumbnailUrl) {
+                    let link = "/vi/videos/" + node.slug;
+                    let fullUrl = BASEURL + link;
+                    
+                    if (!seen[fullUrl]) {
+                        // Tính toán hiển thị số lượng người xem (viewCount)
+                        let viewText = "HD";
+                        if (node.viewCount !== undefined) {
+                            viewText = node.viewCount >= 1000 ? Math.floor(node.viewCount/1000) + "K Lượt xem" : node.viewCount + " Xem";
+                        }
+
+                        items.push({
+                            id: fullUrl,
+                            title: node.title.trim(),
+                            posterUrl: node.thumbnailUrl,
+                            backdropUrl: node.thumbnailUrl,
+                            quality: "1080p",
+                            episode_current: viewText,
+                            lang: "Vietsub",
+                            year: 2026
+                        });
+                        seen[fullUrl] = true;
+                    }
+                }
+                for (let key in node) traverseList(node[key]);
+            }
         }
+
+        payloads.forEach(traverseList);
         
         return JSON.stringify({
             "items": items,
@@ -196,125 +196,113 @@ function parseSearchResponse(html, $url) {
     return parseListResponse(html, $url);
 }
 
-// HÀM LÕI 3: Quét tìm thông tin chi tiết phim
-function findMovieDetailRecursive(obj, resultObj) {
-    if (!obj) return;
-    if (Array.isArray(obj)) {
-        for (let i = 0; i < obj.length; i++) findMovieDetailRecursive(obj[i], resultObj);
-    } else if (typeof obj === 'object') {
-        // Bắt object chính chứa mảng episodes
-        if (obj.slug && obj.episodes && Array.isArray(obj.episodes)) {
-            if (!resultObj.data) resultObj.data = obj;
-        }
-        // Trường hợp object bọc ngoài tên là "video"
-        if (obj.video && typeof obj.video === 'object' && obj.video.episodes) {
-            if (!resultObj.data) resultObj.data = obj.video;
-        }
-        for (let key in obj) {
-            findMovieDetailRecursive(obj[key], resultObj);
-        }
-    }
-}
-
 function parseMovieDetail(html, $url) {
     try {
-        let movieData = { data: null };
+        let movieInfo = {};
+        let episodesRaw = [];
 
-        let payloads = extractNextJsPayloads(html);
-        payloads.forEach(payload => {
-            findMovieDetailRecursive(payload, movieData);
-        });
+        // Lấy Payload
+        let payloads = extractJsonPayloads(html);
 
-        let movie = movieData.data;
-
-        let episodes = [];
-        if (movie && movie.episodes) {
-            movie.episodes.forEach(ep => {
-                let streamUrl = "";
-                
-                // MÓC TRỰC TIẾP LINK M3U8 TỪ MẢNG VERSIONS!!!
-                if (ep.versions && ep.versions.length > 0) {
-                    streamUrl = ep.versions[0].videoUrl;
+        // Đệ quy tìm Object Phim chứa tập phim (Episodes)
+        function traverseDetail(node) {
+            if (!node) return;
+            if (Array.isArray(node)) {
+                for (let i = 0; i < node.length; i++) traverseDetail(node[i]);
+            } else if (typeof node === 'object') {
+                // Bắt đối tượng chứa phim và các tập
+                if (node.title && node.slug && node.episodes && Array.isArray(node.episodes)) {
+                    movieInfo.title = node.title;
+                    movieInfo.poster = node.thumbnailUrl;
+                    movieInfo.desc = node.description;
+                    episodesRaw = node.episodes;
                 }
-
-                // Nếu có link m3u8, đưa thẳng vào ID để VAX phát luôn
-                if (streamUrl && streamUrl.startsWith("http")) {
-                    episodes.push({
-                        id: streamUrl, 
-                        name: "Tập " + ep.episodeNumber,
-                        slug: "tap-" + ep.episodeNumber
-                    });
-                }
-            });
+                for (let key in node) traverseDetail(node[key]);
+            }
         }
 
-        // Đảm bảo tập phim được sắp xếp tăng dần
+        payloads.forEach(traverseDetail);
+
+        let episodes = [];
+        
+        // 3. XỬ LÝ TẬP PHIM VÀ LẤY DIRECT LINK 1080p
+        episodesRaw.forEach(ep => {
+            let streamUrl = "";
+            
+            // ShortFlix giấu link m3u8 cực ngon trong mảng versions
+            if (ep.versions && ep.versions.length > 0) {
+                streamUrl = ep.versions[0].videoUrl; // Link .m3u8 trực tiếp!
+            }
+            
+            if (streamUrl && streamUrl.startsWith("http")) {
+                let epNum = ep.episodeNumber;
+                
+                // XỬ LÝ TẬP 0 (THƯỜNG LÀ TRAILER THEO YÊU CẦU CỦA BẠN)
+                let epName = epNum === 0 ? "Trailer / Tập 0" : "Tập " + epNum;
+                
+                episodes.push({
+                    id: streamUrl, // Ném THẲNG link m3u8 vào ID để VAX phát ngay không cần nghĩ!
+                    name: epName,
+                    slug: "tap-" + epNum
+                });
+            }
+        });
+
+        // Đảm bảo tập phim xếp chuẩn (0 -> 1 -> 2...)
         episodes.sort((a, b) => {
-            const numA = parseInt(a.name.replace(/[^\d]/g, '')) || 0;
-            const numB = parseInt(b.name.replace(/[^\d]/g, '')) || 0;
+            let numA = parseInt(a.slug.replace("tap-", "")) || 0;
+            let numB = parseInt(b.slug.replace("tap-", "")) || 0;
             return numA - numB;
         });
 
         let servers = [];
         if (episodes.length > 0) {
             servers.push({
-                name: "ShortFlix VIP",
+                name: "ShortFlix 1080P",
                 episodes: episodes
             });
         }
 
-        // Bóc Meta tags nếu JSON bị thiếu
-        let title = movie ? movie.title : "";
-        if (!title) {
+        // Nếu thiếu Meta Info, cào dự phòng từ thẻ Meta
+        if (!movieInfo.title) {
             let mTitle = html.match(/<meta property="og:title" content="([^"]+)"/i);
-            title = mTitle ? mTitle[1].replace(/\|.*$/, "").trim() : "Phim Ngắn";
+            movieInfo.title = mTitle ? mTitle[1].replace(/\|.*$/, "").trim() : "Phim Ngắn";
         }
-
-        let poster = movie ? movie.thumbnailUrl : "";
-        if (!poster) {
+        if (!movieInfo.poster) {
             let mImg = html.match(/<meta property="og:image" content="([^"]+)"/i);
-            poster = mImg ? mImg[1] : "";
+            movieInfo.poster = mImg ? mImg[1] : "";
         }
-
-        let desc = movie ? movie.description : "";
-        if (!desc) {
+        if (!movieInfo.desc) {
             let mDesc = html.match(/<meta property="og:description" content="([^"]+)"/i);
-            desc = mDesc ? mDesc[1] : "";
-        }
-        
-        let tags = [];
-        if (movie && movie.tags) {
-            movie.tags.forEach(t => tags.push(t.title));
+            movieInfo.desc = mDesc ? mDesc[1] : "";
         }
 
         return JSON.stringify({
             id: $url,
-            title: title,
-            posterUrl: poster,
-            backdropUrl: poster,
-            description: desc,
+            title: movieInfo.title,
+            posterUrl: movieInfo.poster,
+            backdropUrl: movieInfo.poster,
+            description: movieInfo.desc,
             servers: servers,
             quality: "1080p",
-            year: new Date().getFullYear(),
-            status: servers.length > 0 ? (servers[0].episodes.length + " Tập") : "Đang cập nhật",
-            category: tags.length > 0 ? tags.join(", ") : "Phim Ngắn",
+            year: 2026,
+            status: episodes.length > 0 ? (episodes.length + " Tập") : "Đang cập nhật",
+            category: "Phim Ngắn Dọc",
             lang: "Vietsub"
         });
 
     } catch (e) {
-        return JSON.stringify({ id: $url, title: "Lỗi dữ liệu", servers: [] });
+        return JSON.stringify({ id: $url, title: "Lỗi chi tiết", servers: [] });
     }
 }
 
-// BƯỚC CUỐI: TRẢ VỀ LINK M3U8 NATIVE CHO TRÌNH PHÁT VUỐT DỌC
+// Hàm cuối: Vì Link M3U8 đã được truyền thẳng qua id của Tập phim, ta chỉ cần khai báo cho ExoPlayer phát
 function parseDetailResponse(html, url) {
     try {
-        // Do hàm parseMovieDetail đã truyền thẳng link m3u8 vào biến "url"
-        // Nên ở đây ta chỉ cần trả lại đúng cái URL đó, khai báo isEmbed: false
         return JSON.stringify({
-            "url": url,
-            "isEmbed": false,
-            "mimeType": "application/x-mpegURL",
+            "url": url,                 // Nhận lại link m3u8 từ id tập phim
+            "isEmbed": false,           // BẮT BUỘC false ĐỂ KÍCH HOẠT VUỐT DỌC TIKTOK
+            "mimeType": "application/x-mpegURL", // Báo cho ExoPlayer biết đây là luồng HLS
             "headers": {
                 "Referer": BASEURL,
                 "Origin": BASEURL,
@@ -327,33 +315,6 @@ function parseDetailResponse(html, url) {
     }
 }
 
-// CÁC HÀM CƠ BẢN
 function parseCategoriesResponse(apiResponseJson) { return "[]"; }
 function parseCountriesResponse(html) { return "[]"; }
 function parseYearsResponse(html) { return "[]"; }
-
-// Menu JSON Fallback
-function buildMenu(listurl) {
-    let menulist = [];
-    if (!listurl) return menulist;
-    let lines = listurl.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-        let line = lines[i].trim();
-        if (!line || line.indexOf('@@') === -1) continue;
-        let parts = line.split('@@');
-        let link = parts[0] ? parts[0].trim() : "";
-        let name = parts[1] ? parts[1].trim() : "";
-        let check = parts[2] ? parts[2].trim() : undefined;
-        if (!link || !name) continue;
-        let item = {};
-        if (check === "false") {
-            item = { "slug": link, "title": name, "type": "Horizontal" };
-        } else if (check === "true") {
-            item = { "slug": link, "title": name, "type": "Grid" };
-        } else {
-            item = { "slug": link, "name": name };
-        }
-        menulist.push(item);
-    }
-    return menulist;
-}
