@@ -9,15 +9,15 @@ function getManifest() {
 	return JSON.stringify({
 		"id": "onflix",
 		"name": "Onflix",
-		"description": "Bản Master: Fix lấy link tập phim, 1 Folder Phim Mới duy nhất.",
-		"version": "2.0.3", // Cập nhật version để ép App xóa cache
+		"description": "Cập nhật danh sách hiển thị ngang ở trang chủ",
+		"version": "2.1.0", // Đổi version để ép App iOS xóa cache cũ
 		"baseUrl": BASEURL,
 		"iconUrl": BASEURL + "/app/asset/logo.png",
 		"isEnabled": true,
 		"isAdult": false,
 		"type": "MOVIE",
 		"layoutType": "VERTICAL",
-		"playerType": "embedtoexoplay" // Dùng sức mạnh native VAX để chặn quảng cáo webview
+		"playerType": "embedtoexoplay" // Dùng sức mạnh native VAX để chặn quảng cáo
 	});
 }
 
@@ -29,25 +29,104 @@ function log(msg) {
     }
 }
 
-// 1. CHỈ ĐỂ DUY NHẤT 1 FOLDER PHIM MỚI 
+// 1. THỂ HIỆN TRƯỢT NGANG (HORIZONTAL) TẤT CẢ CÁC FOLDER THEO YÊU CẦU
 function getHomeSections() {
     return JSON.stringify([
-        { 
-            "slug": "/movies?sort=newest&limit=24", 
-            "title": "Phim Mới", 
-            "type": "Grid" 
-        }
+        { "slug": "/movies?sort=newest&limit=24", "title": "Phim Mới Cập Nhật", "type": "Grid" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=18-plus", "title": "Phim 18+", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=action-&-adventure", "title": "Action & Adventure", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=am-nhac", "title": "Âm Nhạc", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=bi-an", "title": "Bí Ẩn", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=chien-tranh", "title": "Chiến Tranh", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=chinh-kich", "title": "Chính Kịch", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=chuong-trinh-truyen-hinh", "title": "Chương Trình Truyền Hình", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=dang-cap-nhat", "title": "Đang Cập Nhật", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=gay-can", "title": "Gây Cấn", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=gia-dinh", "title": "Gia Đình", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=gia-tuong", "title": "Giả Tưởng", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=hai-huoc", "title": "Hài Hước", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=hanh-dong", "title": "Hành Động", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=hoc-duong", "title": "Học Đường", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=huyen-huyen", "title": "Huyền Huyễn", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=khoa-hoc", "title": "Khoa Học", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=kinh-di", "title": "Kinh Dị", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=kinh-dien", "title": "Kinh Điển", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=lang-man", "title": "Lãng Mạn", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=lgbt", "title": "LGBT", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=lich-su", "title": "Lịch Sử", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=mien-tay", "title": "Miền Tây", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=hai", "title": "Phim Hài", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=ngan", "title": "Phim Ngắn", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=nhac", "title": "Phim Nhạc", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=short-drama", "title": "Short Drama", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=sitcom", "title": "Sitcom", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=tai-lieu", "title": "Tài Liệu", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=talk", "title": "Talk", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=tam-ly", "title": "Tâm Lý", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=than-thoai", "title": "Thần Thoại", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=than-tuong", "title": "Thần Tượng", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=the-thao", "title": "Thể Thao", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=tien-hiep", "title": "Tiên Hiệp", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=tinh-cam", "title": "Tình Cảm", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=tinh-tiet", "title": "Tình Tiết", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=tinh-yeu-ngot-ngao", "title": "Tình Yêu Ngọt Ngào", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=toi-pham", "title": "Tội Phạm", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=tre-em", "title": "Trẻ Em", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=vien-tuong", "title": "Viễn Tưởng", "type": "Horizontal" },
+        { "slug": "/movies?sort=year_desc&limit=24&category=vo-thuat", "title": "Võ Thuật", "type": "Horizontal" }
     ]);
 }
 
+// 2. CHUẨN HÓA DANH SÁCH THỂ LOẠI
 function getPrimaryCategories() {
     return JSON.stringify([
-        { "name": "Phim Mới", "slug": "/movies?sort=newest&limit=24" }
+        { "name": "Phim Mới", "slug": "/movies?sort=newest&limit=24" },
+        { "name": "Phim 18+", "slug": "/movies?sort=year_desc&limit=24&category=18-plus" },
+        { "name": "Action & Adventure", "slug": "/movies?sort=year_desc&limit=24&category=action-&-adventure" },
+        { "name": "Âm Nhạc", "slug": "/movies?sort=year_desc&limit=24&category=am-nhac" },
+        { "name": "Bí Ẩn", "slug": "/movies?sort=year_desc&limit=24&category=bi-an" },
+        { "name": "Chiến Tranh", "slug": "/movies?sort=year_desc&limit=24&category=chien-tranh" },
+        { "name": "Chính Kịch", "slug": "/movies?sort=year_desc&limit=24&category=chinh-kich" },
+        { "name": "Chương Trình Truyền Hình", "slug": "/movies?sort=year_desc&limit=24&category=chuong-trinh-truyen-hinh" },
+        { "name": "Đang Cập Nhật", "slug": "/movies?sort=year_desc&limit=24&category=dang-cap-nhat" },
+        { "name": "Gây Cấn", "slug": "/movies?sort=year_desc&limit=24&category=gay-can" },
+        { "name": "Gia Đình", "slug": "/movies?sort=year_desc&limit=24&category=gia-dinh" },
+        { "name": "Giả Tưởng", "slug": "/movies?sort=year_desc&limit=24&category=gia-tuong" },
+        { "name": "Hài Hước", "slug": "/movies?sort=year_desc&limit=24&category=hai-huoc" },
+        { "name": "Hành Động", "slug": "/movies?sort=year_desc&limit=24&category=hanh-dong" },
+        { "name": "Học Đường", "slug": "/movies?sort=year_desc&limit=24&category=hoc-duong" },
+        { "name": "Huyền Huyễn", "slug": "/movies?sort=year_desc&limit=24&category=huyen-huyen" },
+        { "name": "Khoa Học", "slug": "/movies?sort=year_desc&limit=24&category=khoa-hoc" },
+        { "name": "Kinh Dị", "slug": "/movies?sort=year_desc&limit=24&category=kinh-di" },
+        { "name": "Kinh Điển", "slug": "/movies?sort=year_desc&limit=24&category=kinh-dien" },
+        { "name": "Lãng Mạn", "slug": "/movies?sort=year_desc&limit=24&category=lang-man" },
+        { "name": "LGBT", "slug": "/movies?sort=year_desc&limit=24&category=lgbt" },
+        { "name": "Lịch Sử", "slug": "/movies?sort=year_desc&limit=24&category=lich-su" },
+        { "name": "Miền Tây", "slug": "/movies?sort=year_desc&limit=24&category=mien-tay" },
+        { "name": "Phim Hài", "slug": "/movies?sort=year_desc&limit=24&category=hai" },
+        { "name": "Phim Ngắn", "slug": "/movies?sort=year_desc&limit=24&category=ngan" },
+        { "name": "Phim Nhạc", "slug": "/movies?sort=year_desc&limit=24&category=nhac" },
+        { "name": "Short Drama", "slug": "/movies?sort=year_desc&limit=24&category=short-drama" },
+        { "name": "Sitcom", "slug": "/movies?sort=year_desc&limit=24&category=sitcom" },
+        { "name": "Tài Liệu", "slug": "/movies?sort=year_desc&limit=24&category=tai-lieu" },
+        { "name": "Talk", "slug": "/movies?sort=year_desc&limit=24&category=talk" },
+        { "name": "Tâm Lý", "slug": "/movies?sort=year_desc&limit=24&category=tam-ly" },
+        { "name": "Thần Thoại", "slug": "/movies?sort=year_desc&limit=24&category=than-thoai" },
+        { "name": "Thần Tượng", "slug": "/movies?sort=year_desc&limit=24&category=than-tuong" },
+        { "name": "Thể Thao", "slug": "/movies?sort=year_desc&limit=24&category=the-thao" },
+        { "name": "Tiên Hiệp", "slug": "/movies?sort=year_desc&limit=24&category=tien-hiep" },
+        { "name": "Tình Cảm", "slug": "/movies?sort=year_desc&limit=24&category=tinh-cam" },
+        { "name": "Tình Tiết", "slug": "/movies?sort=year_desc&limit=24&category=tinh-tiet" },
+        { "name": "Tình Yêu Ngọt Ngào", "slug": "/movies?sort=year_desc&limit=24&category=tinh-yeu-ngot-ngao" },
+        { "name": "Tội Phạm", "slug": "/movies?sort=year_desc&limit=24&category=toi-pham" },
+        { "name": "Trẻ Em", "slug": "/movies?sort=year_desc&limit=24&category=tre-em" },
+        { "name": "Viễn Tưởng", "slug": "/movies?sort=year_desc&limit=24&category=vien-tuong" },
+        { "name": "Võ Thuật", "slug": "/movies?sort=year_desc&limit=24&category=vo-thuat" }
     ]);
 }
 
 function getFilterConfig() { 
-    return JSON.stringify({}); // Trả về rỗng để tắt bộ lọc
+    return JSON.stringify({}); // Trả về rỗng để tránh lỗi bộ lọc
 }
 
 // =============================================================================
@@ -67,7 +146,7 @@ function getUrlList(slug, filtersJson) {
             } catch (jsonErr) {}
         }
         
-        // Luôn trỏ thẳng vào API để nhận JSON 
+        // Luôn trỏ thẳng vào API để nhận JSON cho nhanh và không bị lỗi
         let resultUrl = BASEAPI + (path.startsWith('/') ? '' : '/') + path;
 
         if (page > 1) {
@@ -80,6 +159,7 @@ function getUrlList(slug, filtersJson) {
     }
 }
 
+// 3. FIX LỖI TÌM KIẾM: Gọi thẳng vào API backend thay vì frontend HTML
 function getUrlSearch(keyword, filtersJson) {
     let page = 1;
     if (filtersJson) {
@@ -90,7 +170,7 @@ function getUrlSearch(keyword, filtersJson) {
         } catch (e) {}
     }
     
-    // Gọi API chuẩn của website Onflix
+    // API chuẩn của website Onflix: https://k8s.onflixcdn.com/api/search?q=...
     let searchUrl = BASEAPI + "/search?q=" + encodeURIComponent(keyword.trim()) + "&type=all";
     if (page > 1) {
         searchUrl += "&page=" + page;
@@ -115,6 +195,8 @@ function getUrlYears() { return ""; }
 function parseListResponse(html, $url) {
     try {
         var items = [];
+        
+        // Vì toàn bộ getUrlList & getUrlSearch đều gọi vào API -> Dữ liệu chắc chắn là JSON
         var videoData = JSON.parse(html);
         var currentpg = videoData.pagination ? videoData.pagination.current_page : 1;
         var total_pages = videoData.pagination ? videoData.pagination.total_pages : 1;
@@ -159,54 +241,47 @@ function parseListResponse(html, $url) {
 }
 
 function parseSearchResponse(html, $url) {
+    // API Search trả về JSON giống hệt API List, gọi chung 1 hàm
     return parseListResponse(html, $url);
 }
 
-// =============================================================================
-// THUẬT TOÁN BẮT LINK TẬP PHIM CHUẨN (TỪ CODE CỦA BẠN)
-// =============================================================================
-
 function parseNextPayload(raw) {
     try {
-        var match = raw.match(/self\.__next_f\.push\((.*)\)/);
+        const match = raw.match(/self\.__next_f\.push\((.*)\)/);
         if (!match) return null;
-        var pushArgs = JSON.parse(match[1]); 
-        var rawString = pushArgs[1];
-        var cleanJsonStr = rawString.replace(/^\w+:/, '').replace(/\n$/, '');
+
+        const pushArgs = JSON.parse(match[1]); 
+        const rawString = pushArgs[1];
+        const cleanJsonStr = rawString.replace(/^\w+:/, '').replace(/\n$/, '');
+
         return JSON.parse(cleanJsonStr);
     } catch (e) {
         return null;
     }
 }
 
+// Hàm lọc lấy đúng phim đang xem, bỏ qua phim đề xuất (related)
 function extractCleanData(data) {
-    var result = { movie: null, episodes: [] };
+    let result = { movie: null, episodes: [] };
 
     function traverse(node, isRelated) {
         if (!node) return;
 
         if (typeof node === 'object' && !Array.isArray(node)) {
-            // Lấy thông tin phim
             if (node.movie && typeof node.movie === 'object' && !result.movie && !isRelated) {
                 result.movie = node.movie;
             }
-            
-            // Lấy danh sách tập phim (CHỈ KHI CÓ CHỨA LINK_M3U8 HOẶC LINK_EMBED ĐỂ TRÁNH RỖNG)
-            if (Array.isArray(node.episodes) && node.episodes.length > 0 && !isRelated) {
-                if (node.episodes[0].link_m3u8 || node.episodes[0].link_embed) {
-                    result.episodes = node.episodes;
-                } else if (result.episodes.length === 0) {
-                    result.episodes = node.episodes;
-                }
+            if (Array.isArray(node.episodes) && node.episodes.length > 0 && result.episodes.length === 0 && !isRelated) {
+                result.episodes = node.episodes;
             }
 
-            for (var key in node) {
+            for (let key in node) {
                 if (node.hasOwnProperty(key)) {
                     traverse(node[key], isRelated || key === 'related' || key === 'collection');
                 }
             }
         } else if (Array.isArray(node)) {
-            for (var i = 0; i < node.length; i++) {
+            for (let i = 0; i < node.length; i++) {
                 traverse(node[i], isRelated);
             }
         }
@@ -218,26 +293,33 @@ function extractCleanData(data) {
 
 function parseMovieDetail(html, $url) {
     try {
-        var movie = null;
-        var episodesList = [];
+        let movie = null;
+        let episodesList = [];
 
-        // QUÉT TẤT CẢ THẺ SCRIPT CHỨA PAYLOAD CỦA NEXT.JS
-        var scripts = _$(html).find("script").elements;
-        for (var i = 0; i < scripts.length; i++) {
-            var scrText = _$(scripts[i]).text();
-            
-            // Tìm các đoạn chứa payload
-            if (scrText.indexOf("self.__next_f.push") > -1) {
-                var parsedPayload = parseNextPayload(scrText);
-                if (parsedPayload) {
-                    var cleanData = extractCleanData(parsedPayload);
-                    
-                    if (!movie && cleanData.movie) {
-                        movie = cleanData.movie;
-                    }
-                    // Nếu mảng episodes lấy được có dữ liệu, gán vào episodesList
-                    if (episodesList.length === 0 && cleanData.episodes && cleanData.episodes.length > 0) {
-                        episodesList = cleanData.episodes;
+        // 1. Quét thẻ __NEXT_DATA__
+        let nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/i);
+        if (nextDataMatch) {
+            try {
+                let nextJson = JSON.parse(nextDataMatch[1]);
+                let extracted = extractCleanData(nextJson);
+                if (extracted.movie) movie = extracted.movie;
+                if (extracted.episodes) episodesList = extracted.episodes;
+            } catch (err) {}
+        }
+
+        // 2. Quét Next.js RSC payload (bổ trợ)
+        if (!movie || episodesList.length === 0) {
+            var scripts = _$(html).find("script").elements;
+            for (let i = 0; i < scripts.length; i++) {
+                let scrText = _$(scripts[i]).text();
+                if (scrText.indexOf("self.__next_f.push") > -1) {
+                    let parsedPayload = parseNextPayload(scrText);
+                    if (parsedPayload) {
+                        let clean = extractCleanData(parsedPayload);
+                        if (!movie && clean.movie) movie = clean.movie;
+                        if (episodesList.length === 0 && clean.episodes && clean.episodes.length > 0) {
+                            episodesList = clean.episodes;
+                        }
                     }
                 }
             }
@@ -245,41 +327,42 @@ function parseMovieDetail(html, $url) {
 
         var actors = "";
         if (movie && movie.actors) {
-            movie.actors.forEach(function(actor) { actors += actor.name + ", "; });
+            movie.actors.forEach(actor => { actors += actor.name + ", "; });
         }
 
+        // 3. Quét Payload Embed (Vì Onflix thường giấu link trong payload khác)
+        var scriptEmbed = _$(html).find("script:content('\"link_embed\\\":\\\"http')").text();
+        if (!scriptEmbed) {
+            scriptEmbed = _$(html).find("script:content('\"link_m3u8\\\":\\\"http')").text();
+        }
+        var rawVDEmbed = parseNextPayload(scriptEmbed);
+        var embedData = extractCleanData(rawVDEmbed);
+        
+        var $listEpi = (embedData.episodes && embedData.episodes.length > 0) ? embedData.episodes : episodesList;
         var serversMap = {};
 
-        // NẾU TÌM ĐƯỢC DANH SÁCH TẬP
-        if (episodesList && Array.isArray(episodesList)) {
-            episodesList.forEach(function(episode) {
-                // Ưu tiên m3u8, nếu m3u8 là trang xem chung/chặn thì lấy embed
-                var streamLink = episode.link_m3u8;
-                if (!streamLink || streamLink.indexOf("https://ss.onflixstream.site") > -1) {
-                    if (episode.link_embed) {
-                        streamLink = episode.link_embed;
-                    }
-                }
-
-                // Nếu không có link xem -> bỏ qua để không tạo thư mục rỗng
-                if (!streamLink || streamLink === "undefined" || streamLink === "null") return;
-
+        if ($listEpi && Array.isArray($listEpi)) {
+            $listEpi.forEach(episode => {
                 var rawServerName = episode.server_name || "Vietsub";
                 var cleanServerName = "Vietsub";
                 
-                if (rawServerName.indexOf("PA") > -1 || rawServerName.toLowerCase().indexOf("kk") > -1) cleanServerName = "KK Phim";
-                else if (rawServerName.indexOf("OP") > -1 || rawServerName.toLowerCase().indexOf("ổ phim") > -1) cleanServerName = "Ổ Phim";
-                else if (rawServerName.indexOf("NC") > -1 || rawServerName.toLowerCase().indexOf("nguồn c") > -1) cleanServerName = "Nguồn C";
-                else if (rawServerName.toLowerCase().indexOf("thuyết minh") > -1) cleanServerName = "Thuyết Minh";
+                if (rawServerName.includes("PA") || rawServerName.toLowerCase().includes("kk")) cleanServerName = "KK Phim";
+                else if (rawServerName.includes("OP") || rawServerName.toLowerCase().includes("ổ phim")) cleanServerName = "Ổ Phim";
+                else if (rawServerName.includes("NC") || rawServerName.toLowerCase().includes("nguồn c")) cleanServerName = "Nguồn C";
+                else if (rawServerName.toLowerCase().includes("thuyết minh")) cleanServerName = "Thuyết Minh";
                 else cleanServerName = rawServerName;
 
-                if (!serversMap[cleanServerName]) {
-                    serversMap[cleanServerName] = {};
+                if (!serversMap[cleanServerName]) serversMap[cleanServerName] = {};
+
+                var streamLink = episode.link_m3u8;
+                if (!streamLink || streamLink.indexOf("https://ss.onflixstream.site") > -1) {
+                    if (episode.link_embed) streamLink = episode.link_embed;
                 }
 
                 var epSlug = "tap-" + (episode.slug || episode.name || "1");
                 
-                if (!serversMap[cleanServerName][epSlug]) {
+                // Chống đẩy link rỗng vào mảng
+                if (streamLink && streamLink !== "undefined" && streamLink !== "null" && !serversMap[cleanServerName][epSlug]) {
                     serversMap[cleanServerName][epSlug] = {
                         id: streamLink,            
                         name: "Tập " + (episode.slug || episode.name || "1"),     
@@ -292,13 +375,13 @@ function parseMovieDetail(html, $url) {
         var servers = [];
         for (var sName in serversMap) {
             var epsArray = Object.values(serversMap[sName]);
-            epsArray.sort(function(a, b) {
-                var numA = parseInt(a.name.replace(/[^\d]/g, '')) || 0;
-                var numB = parseInt(b.name.replace(/[^\d]/g, '')) || 0;
+            epsArray.sort((a, b) => {
+                const numA = parseInt(a.name.replace(/[^\d]/g, '')) || 0;
+                const numB = parseInt(b.name.replace(/[^\d]/g, '')) || 0;
                 return numA - numB;
             });
 
-            // Chỉ đẩy vào Server nếu tồn tại các tập phim thực sự có link
+            // Chỉ thêm server nếu có ít nhất 1 tập phim
             if (epsArray.length > 0) {
                 servers.push({
                     name: sName,
@@ -307,40 +390,32 @@ function parseMovieDetail(html, $url) {
             }
         }
 
-        // Chống lỗi folder rỗng tuyệt đối: Nếu API lỗi không lấy được mảng nào, tạo 1 tập giả để mở webview
-        if (servers.length === 0) {
-            servers.push({
-                name: "Server Trực Tiếp",
-                episodes: [{ id: $url, name: "Xem Phim", slug: "full" }]
-            });
-        } else {
-            servers.sort(function(a, b) {
-                function getPriority(name) {
-                    if (name.indexOf("KK Phim") > -1) return 1;  
-                    if (name.indexOf("Ổ Phim") > -1) return 2;    
-                    if (name.indexOf("Vietsub") > -1) return 3;
-                    return 4;                                        
-                }
-                return getPriority(a.name) - getPriority(b.name);
-            });
-        }
+        servers.sort((a, b) => {
+            const getPriority = (name) => {
+                if (name.includes("KK Phim")) return 1;  
+                if (name.includes("Ổ Phim")) return 2;    
+                if (name.includes("Vietsub")) return 3;
+                return 4;                                        
+            };
+            return getPriority(a.name) - getPriority(b.name);
+        });
 
-        // Xử lý thông tin hiển thị (fallback sang HTML tags nếu json tịt)
-        var title = movie ? movie.title : "";
+        // Xử lý Meta Tags nếu Next payload bị tịt
+        let title = movie ? movie.title : "";
         if (!title) {
-            var mTitle = html.match(/<meta property="og:title" content="([^"]+)"/i);
+            let mTitle = html.match(/<meta property="og:title" content="([^"]+)"/i);
             title = mTitle ? mTitle[1].split('|')[0].trim() : "Phim Onflix";
         }
 
-        var poster = movie ? movie.poster_url : "";
+        let poster = movie ? movie.poster_url : "";
         if (!poster) {
-            var mImg = html.match(/<meta property="og:image" content="([^"]+)"/i);
+            let mImg = html.match(/<meta property="og:image" content="([^"]+)"/i);
             poster = mImg ? mImg[1] : "";
         }
 
-        var desc = movie ? movie.content : "";
+        let desc = movie ? movie.content : "";
         if (!desc) {
-            var mDesc = html.match(/<meta name="description" content="([^"]+)"/i);
+            let mDesc = html.match(/<meta name="description" content="([^"]+)"/i);
             desc = mDesc ? mDesc[1] : "";
         }
 
@@ -353,7 +428,7 @@ function parseMovieDetail(html, $url) {
             servers: servers,
             quality: movie ? movie.quality : "HD",
             year: movie ? movie.year : 2026,
-            status: servers[0].episodes.length + " Tập",
+            status: servers.length > 0 ? (servers[0].episodes.length + " Tập") : "Cập nhật",
             duration: movie ? movie.time : "",
             casts: actors,
             director: movie ? movie.directors : "",
@@ -363,43 +438,33 @@ function parseMovieDetail(html, $url) {
         });
     } 
     catch (e) {
-        log("Lỗi parseMovieDetail: " + e);
         return JSON.stringify({ id: $url, title: "Lỗi chi tiết phim", servers: [] });
     }
 }
 
 function parseDetailResponse(html, url) {
-    try {
-        var streamUrl = url;
-        
-        if (streamUrl.indexOf("//") === 0) streamUrl = "https:" + streamUrl;
-        else if (streamUrl.indexOf("/") === 0) streamUrl = BASEURL + streamUrl;
-
-        // Nếu link có m3u8 thì là link trực tiếp, không thì là nhúng embed
-        var isEmbed = streamUrl.indexOf(".m3u8") === -1 && streamUrl.indexOf(".mp4") === -1;
-        
-        return JSON.stringify({
-            "url": streamUrl,
-            "isEmbed": isEmbed,
-            "mimeType": isEmbed ? "" : "application/x-mpegURL",
-            "headers": {
-                "Referer": BASEURL + "/",
-                "Origin": BASEURL,
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Block-Ads": "true",
-                "Block-Redirects": "true"
-            },
-            "subtitles": []
-        });
-        
-    } catch (e) {
-        return JSON.stringify({ "url": url, "isEmbed": true, "headers": {} });
-    }
+	try {
+		var $stream = url;
+		var isEmbed = $stream.indexOf(".m3u8") === -1 && $stream.indexOf(".mp4") === -1;
+		
+		return JSON.stringify({
+			"url": $stream,
+			"isEmbed": isEmbed,
+			"mimeType": isEmbed ? "" : "application/x-mpegURL",
+			"headers": {
+				"Referer": BASEURL,
+				"Origin": BASEURL,
+				"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+				"Block-Ads": "true",
+				"Block-Redirects": "true"
+			},
+			"subtitles": []
+		});
+		
+	} catch (e) {
+		return JSON.stringify({ "url": url, "isEmbed": true, "headers": {} });
+	}
 }
-
-function parseCategoriesResponse(apiResponseJson) { return "[]"; }
-function parseCountriesResponse(html) { return "[]"; }
-function parseYearsResponse(html) { return "[]"; }
 
 // =============================================================================
 // DOM LIBRARY _$
