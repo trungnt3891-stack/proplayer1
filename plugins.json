@@ -94,6 +94,13 @@
             "iconUrl": "https://narto-drama.com/narto-drama-logo-compressed.png",
     },
     {
+            "id": "motchill",
+            "name": "Nguồn Motchill",
+            "version": "1.0.9",
+            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/motchill_plugin.js",
+            "iconUrl": "https://motchille.cx/motchill.png",
+    },
+    {
       "id": "Anime09",
       "name": "Anime09",
       "version": "1.0.3",
