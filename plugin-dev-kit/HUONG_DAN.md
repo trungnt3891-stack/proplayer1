@@ -139,9 +139,45 @@ Khi đăng ký plugin trên file JSON hoặc thêm nguồn tùy chỉnh, đườ
     "type": "MOVIE",
     "layoutType": "VERTICAL",
     "playerType": "exoplayer",
-    "adblock": true
+    "adblock": true,
+    "debug": false
 }
 ```
+
+**`debug` — Console Toast dành cho phát triển plugin:**
+- Không khai báo `debug`, hoặc đặt `"debug": false`: Console Toast **không hiển thị**.
+- Đặt `"debug": true`: bật Console Toast cho plugin đó.
+- App cũng tương thích với dạng string `"debug": "true"` và `"debug": "false"`, nhưng nên dùng Boolean chuẩn `true`/`false`.
+- Vị trí cài plugin, tên file, ID có prefix hay không **không ảnh hưởng**. Console chỉ dựa vào `debug` trong `getManifest()`.
+- Khi `debug=true`, app tự ghi `CALL`, `RESULT` và `ERROR` cho mọi hàm plugin chạy qua QuickJS. Arguments/kết quả dài được rút gọn để tránh làm đầy màn hình.
+- Vì đã có auto-log, không cần tự thêm `log()` hoặc `console.log()` chỉ để biết hàm nào được gọi và trả gì.
+- Chỉ dùng `console.log()` khi cần xem biến/trạng thái nội bộ cụ thể bên trong parser.
+
+Ví dụ:
+
+```javascript
+function getManifest() {
+    return JSON.stringify({
+        id: "my_plugin",
+        name: "My Plugin",
+        version: "1.0.0",
+        baseUrl: "https://example.com",
+        playerType: "exoplayer",
+        debug: true
+    });
+}
+```
+
+Console tự động có dạng:
+
+```text
+[CALL] getUrlList(/latest-updates/, {"page":1})
+[RESULT] getUrlList -> https://example.com/latest-updates/
+[CALL] parseMovieDetail(<html...>, https://example.com/video/123)
+[RESULT] parseMovieDetail -> {"id":"...","title":"...","servers":[...]}...
+```
+
+> Biến riêng như `DEV = "true"` không bật Console Toast. Cờ phải nằm trong object do `getManifest()` trả về và có tên chính xác là `debug`.
 
 **`adblock` option (Bật/Tắt chặn quảng cáo nền):**
 - **Không khai báo** (hoặc `true`): Mặc định **BẬT** bộ chặn quảng cáo nền cho plugin này.
@@ -164,6 +200,50 @@ Khi đăng ký plugin trên file JSON hoặc thêm nguồn tùy chỉnh, đườ
 | `"embed"` | Khi chỉ có link iframe, bắt buộc hiển thị phát bằng WebView |
 | `"embedtoexoplay"` | Tải iframe qua WebView ngầm và chạy bộ dò mạng (Sniffer) để lấy link stream phát bằng ExoPlayer |
 | `"auto"` | App tự phán: URL chứa `.m3u8`/`.mp4` → ExoPlayer, còn lại → WebView |
+
+### Link Stream Trực Tiếp, MIME Và Header Player
+
+App nhận diện link media trực tiếp theo các dấu hiệu phổ biến: `.m3u8`, `.m3u9`, `.mpd`, `.mp4`, `.mkv`, `.vl`, `/get_file/` và `/get_video/`. Nhận diện này được dùng nhất quán khi mở phim, đổi tập và đổi server/chất lượng.
+
+Khi plugin đã lấy được link thật, nên trả rõ URL, MIME và các HTTP header cần thiết:
+
+```javascript
+function parseDetailResponse(html, pageUrl) {
+    return JSON.stringify({
+        url: "https://cdn.example.com/get_file/video.mp4",
+        isEmbed: false,
+        mimeType: "video/mp4",
+        headers: {
+            Referer: pageUrl || BASEURL + "/",
+            "User-Agent": "Mozilla/5.0 ..."
+        },
+        subtitles: []
+    });
+}
+```
+
+MIME thường dùng:
+
+| Stream | `mimeType` |
+|--------|------------|
+| MP4 progressive | `video/mp4` |
+| HLS / M3U8 | `application/x-mpegURL` |
+| MPEG-DASH / MPD | `application/dash+xml` |
+| MKV | `video/x-matroska` |
+
+Lưu ý về header:
+- `Referer`, `User-Agent`, cookie và header do plugin/sniffer trả về được chuyển riêng theo từng stream tới player.
+- Khi đổi tập/server/chất lượng, app tạo data source riêng cho lệnh mới để header không bị lẫn với stream trước.
+- Các header điều khiển nội bộ như `Custom-Js`, `Allowed-Domains`, `Block-Ads`, `Block-Redirects`, `Stream-Regex`, `Block-Scripts`, `Block-Css`, `Custom-Header` và `Bypass-Rule` chỉ dành cho WebView/sniffer; app lọc chúng trước khi gửi request media tới ExoPlayer.
+- CDN chặn hotlink thường cần `Referer` đúng trang nguồn. Nếu player buffering mãi, kiểm tra URL còn hạn, `Referer`, `User-Agent`, cookie và response HTTP trước.
+
+### Embed, WebView Và Custom-Js
+
+- `playerType: "embed"`: hiển thị trang/iframe bằng WebView.
+- `playerType: "embedtoexoplay"`: WebView/sniffer chạy trước để bắt link media, sau đó gửi URL + header đã bắt được sang ExoPlayer.
+- `Custom-Js` được thực thi trong luồng WebView/sniffer và không được gửi như HTTP header media.
+- Mỗi lần sniffer bắt được stream, URL và header của lần bắt đó được đóng gói riêng trước khi gửi player.
+- Nếu đã có URL trực tiếp, dùng `isEmbed: false` và MIME phù hợp thay vì ép qua WebView.
 
 ---
 
