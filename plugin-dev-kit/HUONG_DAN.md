@@ -98,12 +98,15 @@ Khi đăng ký plugin trên file JSON hoặc thêm nguồn tùy chỉnh, đườ
 
 ### Nhóm 2: URL (Sinh đường dẫn)
 
-| Hàm | Tham số | Trả về |
-|-----|---------|--------|
-| `getUrlList(slug, filtersJson)` | slug mục + filters | URL string |
-| `getUrlSearch(keyword, filtersJson)` | từ khóa | URL string |
-| `getUrlDetail(slug)` | slug phim | URL string |
-| `getUrlCategories()` | — | URL string |
+| Hàm | Tham số | Trả về | Tùy chọn / Ghi chú |
+|-----|---------|--------|-------------------|
+| `getUrlList(slug, filtersJson)` | slug mục + filters | URL string | ✅ Bắt buộc |
+| `getUrlSearch(keyword, filtersJson)` | từ khóa | URL string | ✅ Bắt buộc |
+| `getUrlDetail(slug)` | slug phim | URL string | ✅ Bắt buộc |
+| `getStreamLink(movieSlug)` | slug phim | JSON string spec | Tùy chọn (Bỏ qua fetch HTML) |
+| `getUrlCategories()` | — | URL string | Tùy chọn (Trang thể loại) |
+| `getUrlCountries()` | — | URL string | Tùy chọn (Trang quốc gia) |
+| `getUrlYears()` | — | URL string | Tùy chọn (Trang năm) |
 
 ### Nhóm 3: Parser (Xử lý dữ liệu) ⭐
 
@@ -114,6 +117,9 @@ Khi đăng ký plugin trên file JSON hoặc thêm nguồn tùy chỉnh, đườ
 | `parseMovieDetail(html)` | HTML chi tiết | `{ id, title, servers: [...], ... }` |
 | `parseDetailResponse(html)` | HTML trang xem | `{ url, headers, mimeType, ... }` |
 | `parseEmbedResponse(html, url)` | HTML embed page | `{ url, isEmbed, mimeType, ... }` |
+| `parseCategoriesResponse(html)` | HTML thể loại | Mảng `Category` hoặc `FilterOption` |
+| `parseCountriesResponse(html)` | HTML quốc gia | Mảng `FilterOption` |
+| `parseYearsResponse(html)` | HTML năm | Mảng `FilterOption` |
 
 ---
 
