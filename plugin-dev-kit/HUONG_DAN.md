@@ -318,6 +318,13 @@ Khi plugin khai báo `"playerType": "embedtoexoplay"` trong `getManifest()`, ứ
 | `User-Agent` | Đặt User-Agent cho WebView | `"Mozilla/5.0 ..."` |
 | `Referer` | Đặt Referer cho WebView | `"https://site.com/"` |
 
+#### 🛠️ Hàm Hỗ Trợ trong `Custom-Js` (`SnifferBridge`):
+Trong mã `Custom-Js`, plugin có thể gọi các hàm Bridge sau:
+- `SnifferBridge.play(streamUrl, headersJson)` / `playVideo(...)` / `sendToPlayer(...)`: Truyền trực tiếp link stream tìm được cho ExoPlayer.
+- `SnifferBridge.toast(message)`: Hiển thị Toast thông báo nhanh (mặc định 2 giây).
+- `SnifferBridge.toast(message, timerMs)`: Hiển thị Toast với thời gian tùy chỉnh (`timerMs` tính bằng miligiây, ví dụ `5000` = 5 giây).
+- `SnifferBridge.log(message)`: Ghi log ra tab Console nổi của App.
+
 > ℹ️ **LƯU Ý VỀ ANTI-AD CSS TỰ ĐỘNG:**
 > Khi `Block-Ads: true`, App đã tự động áp dụng bộ quy tắc CSS tổng quát để diệt toàn bộ thẻ `div`, `iframe`, `a`, `popunder` quảng cáo:
 > ```css
