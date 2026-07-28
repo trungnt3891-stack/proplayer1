@@ -9,8 +9,8 @@ function getManifest() {
         "id": "motchill_ios",
         "name": "Motchill iOS",
         "description": "Bản Master cho iOS: Parse JSON Next.js, Bắt m3u8 trực tiếp, Chặn 100% Quảng Cáo",
-        "version": "1.0.0",
-        "info": "Plugin bóc tách dữ liệu JSON cực nhanh. Không dùng Webview giúp chặn tuyệt đối Popup.",
+        "version": "1.0.1",
+        "info": "Plugin bóc tách dữ liệu JSON cực nhanh. Fix lỗi hiển thị 1 tập. Không dùng Webview giúp chặn tuyệt đối Popup.",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/motchill.png",
         "isEnabled": true,
@@ -117,6 +117,15 @@ function getUrlYears() { return ""; }
 // PARSERS MẠNH MẼ CHO IOS (KHÔNG DÙNG REGEX LOOKBEHIND)
 // =============================================================================
 
+function decodeHTMLEntities(text) {
+    if (!text) return "";
+    return text.replace(/&amp;/g, '&')
+               .replace(/&lt;/g, '<')
+               .replace(/&gt;/g, '>')
+               .replace(/&quot;/g, '"')
+               .replace(/&#39;/g, "'");
+}
+
 function parseListResponse(html, $url) {
     try {
         var items = [];
@@ -156,7 +165,7 @@ function parseListResponse(html, $url) {
             if (href && title && !seen[href]) {
                 items.push({
                     "id": href,
-                    "title": title,
+                    "title": decodeHTMLEntities(title),
                     "posterUrl": poster,
                     "backdropUrl": poster,
                     "quality": "HD",
@@ -187,7 +196,7 @@ function parseSearchResponse(html, url) {
     return parseListResponse(html, url);
 }
 
-// BÓC TÁCH JSON ẨN ĐỂ LẤY SẠCH LINK .M3U8 (Vượt Qua Hoàn Toàn Giai Đoạn Webview)
+// FIX: BÓC TÁCH JSON LẤY TOÀN BỘ TẬP PHIM CHUẨN XÁC THEO MOVIE_ID
 function parseMovieDetail(html, url) {
     try {
         var doc = _$(html);
@@ -203,51 +212,93 @@ function parseMovieDetail(html, url) {
             category.push(this.text().trim());
         });
 
-        var serversMap = {};
-        
         // Lột sạch HTML escape để chuẩn hóa chuỗi JSON của Next.js
         var cleanHtml = html.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
         
-        // Quét tìm mảng "episodes" ẩn sâu bên trong Script
-        var epsMatch = cleanHtml.match(/"episodes":\[(.*?)\]/);
+        // 1. TÌM MOVIE_ID CỦA PHIM HIỆN TẠI (Tránh lẫn lộn với phim đề xuất)
+        var currentSlug = "";
+        var sm = url.match(/\/phim\/([^/?#]+)/);
+        if(sm) currentSlug = sm[1];
         
-        if (epsMatch && epsMatch[1]) {
-            var epsStr = epsMatch[1];
-            // Quét từng đối tượng tập phim (Tránh lỗi lookbehind trên iOS)
-            var epObjRegex = /{"id":"[^"]+","movie_id":"[^"]+","server":"([^"]+)","name":"([^"]+)","slug":"([^"]+)","type":"([^"]+)","link":"([^"]+)"/g;
-            var epM;
-            while ((epM = epObjRegex.exec(epsStr)) !== null) {
-                var serverName = epM[1];
-                var epName = epM[2];
-                var type = epM[4];
-                var link = epM[5];
-
-                if (!serversMap[serverName]) serversMap[serverName] = [];
-
-                if (link.indexOf("/") === 0) {
-                    link = BASEURL + link;
+        var targetMovieId = "";
+        if (currentSlug) {
+            // Tìm vị trí của slug trong mã nguồn, sau đó lùi lại để bắt ID phim tương ứng
+            var slugPos = cleanHtml.indexOf('"slug":"' + currentSlug + '"');
+            if (slugPos !== -1) {
+                var chunk = cleanHtml.substring(Math.max(0, slugPos - 500), slugPos);
+                var idMatches = chunk.match(/"id":"?(\d+)"?/g);
+                if (idMatches && idMatches.length > 0) {
+                    var lastMatch = idMatches[idMatches.length - 1];
+                    targetMovieId = lastMatch.match(/"id":"?(\d+)"?/)[1];
                 }
-
-                // Gắn cờ phía sau URL để hàm parseDetailResponse biết cần làm gì
-                var finalLink = link;
-                if (type === "m3u8") {
-                    finalLink += "#m3u8";
-                } else if (type === "embed") {
-                    finalLink += "#embed";
-                }
-
-                serversMap[serverName].push({
-                    name: (epName.toLowerCase().indexOf("tập") === -1 && epName.toLowerCase().indexOf("full") === -1) ? "Tập " + epName : epName,
-                    slug: epM[3],
-                    url: finalLink 
-                });
             }
+        }
+
+        // 2. GOM TẤT CẢ CÁC TẬP TỪ MỌI MẢNG JSON
+        var epsByMovieId = {};
+        // Regex bắt gọn từng block tập phim trong chuỗi JSON mà không cần lookbehind
+        var epObjRegex = /"movie_id":"([^"]+)","server":"([^"]+)","name":"([^"]+)","slug":"([^"]+)","type":"([^"]+)","link":"([^"]+)"/g;
+        var epM;
+        
+        while ((epM = epObjRegex.exec(cleanHtml)) !== null) {
+            var mId = epM[1];
+            if (!epsByMovieId[mId]) epsByMovieId[mId] = [];
+            epsByMovieId[mId].push({
+                server: epM[2],
+                name: epM[3],
+                slug: epM[4],
+                type: epM[5],
+                link: epM[6]
+            });
+        }
+
+        // 3. LỌC CHÍNH XÁC TẬP CỦA PHIM HIỆN TẠI
+        var targetEps = [];
+        if (targetMovieId && epsByMovieId[targetMovieId]) {
+            targetEps = epsByMovieId[targetMovieId];
+        } else {
+            // Backup: Nếu không tìm thấy ID, lấy bộ mảng chứa nhiều tập nhất
+            var maxLen = 0;
+            for (var k in epsByMovieId) {
+                if (epsByMovieId[k].length > maxLen) {
+                    maxLen = epsByMovieId[k].length;
+                    targetEps = epsByMovieId[k];
+                }
+            }
+        }
+
+        // 4. PHÂN LOẠI VÀO CÁC SERVER
+        var serversMap = {};
+        for (var i = 0; i < targetEps.length; i++) {
+            var ep = targetEps[i];
+            var srvName = ep.server.replace(/\\/g, '');
+            if (!serversMap[srvName]) serversMap[srvName] = [];
+            
+            var link = ep.link.replace(/\\/g, '');
+            if (link.indexOf("/") === 0) {
+                link = BASEURL + link;
+            }
+
+            // Đánh dấu thuộc tính m3u8 hoặc embed để parseDetail xử lý
+            var finalLink = link;
+            if (ep.type === "m3u8") {
+                finalLink += "#m3u8";
+            } else if (ep.type === "embed") {
+                finalLink += "#embed";
+            }
+
+            var epName = ep.name.replace(/\\/g, '');
+            serversMap[srvName].push({
+                name: (epName.toLowerCase().indexOf("tập") === -1 && epName.toLowerCase().indexOf("full") === -1) ? "Tập " + epName : epName,
+                slug: ep.slug,
+                url: finalLink 
+            });
         }
 
         var servers = [];
         for (var key in serversMap) {
             if (serversMap.hasOwnProperty(key)) {
-                // Sắp xếp tập theo thứ tự
+                // Ép kiểu sắp xếp chuẩn
                 var eps = serversMap[key].sort(function(a, b) {
                     var numA = parseInt((a.name.match(/\d+/) || [0])[0]);
                     var numB = parseInt((b.name.match(/\d+/) || [0])[0]);
@@ -270,15 +321,18 @@ function parseMovieDetail(html, url) {
             backdropUrl: poster,
             description: desc,
             quality: "HD",
+            year: 2026,
+            rating: 8.5,
             category: category.join(", "),
             servers: servers
         });
     } catch (e) {
+        log("parseMovieDetail error: " + e);
         return JSON.stringify({ id: url, title: "Lỗi chi tiết", servers: [] });
     }
 }
 
-// BỘ LỌC LINK STREAM BẬC THẦY (Phát Native m3u8 ngay lập tức)
+// BỘ LỌC LINK STREAM BẬC THẦY (Phát Native m3u8 cực nhạy)
 function parseDetailResponse(html, url) {
     try {
         var finalUrl = url;
@@ -289,16 +343,16 @@ function parseDetailResponse(html, url) {
         url = url.replace(/#(m3u8|embed)$/, "");
         finalUrl = url;
 
-        // 1. PhimAPI (Server S): API cung cấp link m3u8 lộ thiên ở tham số query `url=...`
+        // 1. PhimAPI (Server S): API cung cấp link m3u8 lộ thiên ở tham số query
         var phimApiMatch = url.match(/url=(https?:\/\/[^&"]+)/i);
         if (phimApiMatch) {
             finalUrl = decodeURIComponent(phimApiMatch[1]);
-            isEmbed = false; // NATIVE NGAY LẬP TỨC!
+            isEmbed = false; 
         }
-        // 2. T Vietsub (Server T): Motchill trả về file Playlist.m3u8 ở dạng path /player/master/...
+        // 2. T Vietsub (Server T): Motchill trả về file Playlist.m3u8 ở dạng path nội bộ
         else if (isM3u8Hash || url.indexOf("/player/master/") !== -1) {
             finalUrl = url;
-            isEmbed = false; // NATIVE NGAY LẬP TỨC!
+            isEmbed = false;
         }
         // 3. Fallback Embed (Như Opstream)
         else {
@@ -306,7 +360,7 @@ function parseDetailResponse(html, url) {
             isEmbed = true;
         }
 
-        // KẾT QUẢ CHO LINK NATIVE (Không quảng cáo, load thần tốc)
+        // KẾT QUẢ CHO LINK NATIVE (Không quảng cáo, load thần tốc cho ExoPlayer/AVPlayer)
         if (!isEmbed) {
             return JSON.stringify({
                 url: finalUrl,
@@ -319,7 +373,7 @@ function parseDetailResponse(html, url) {
                 }
             });
         } 
-        // KẾT QUẢ NẾU BẮT BUỘC DÙNG IFRAME 
+        // KẾT QUẢ NẾU BẮT BUỘC DÙNG IFRAME (Inject JS chặn popup click ảo)
         else {
             var killAdsJs = `
                 setInterval(function() {
@@ -406,7 +460,7 @@ function buildMenu(listurl) {
 }
 
 // =============================================================================
-// BỘ DOM ẢO _$ (CHUẨN VAX) ĐỂ CHẠY CÀO HTML DỰ PHÒNG
+// BỘ DOM ẢO _$ (CHUẨN VAX)
 // =============================================================================
 function _$(htmlOrBlock){ 
 	if (htmlOrBlock && typeof htmlOrBlock === 'object' && htmlOrBlock.elements) { return htmlOrBlock; } var instance = { sourceHtml: typeof htmlOrBlock === 'string' ? htmlOrBlock : '', elements: Array.isArray(htmlOrBlock) ? htmlOrBlock : (htmlOrBlock ? [htmlOrBlock] : []), length: 0, find: function (selector) { if (selector.indexOf(',') !== -1) { var results = []; var selectors = selector.split(',').map(function (s) { return s.trim(); }); for (var s = 0; s < selectors.length; s++) { if (selectors[s] === "") continue; var subInstance = this.find(selectors[s]); for (var r = 0; r < subInstance.elements.length; r++) { var element = subInstance.elements[r]; if (results.indexOf(element) === -1) { results.push(element); } } } var multiInstance = _$(results); multiInstance.sourceHtml = this.sourceHtml; return multiInstance; } var results = []; var contentFilter = ""; if (selector.indexOf(":content(") !== -1) { var contentMatch = selector.match(/:content\((?:"([^"]*)"|'([^']*)'|([^)]*))\)/); if (contentMatch) { contentFilter = contentMatch[1] || contentMatch[2] || contentMatch[3] || ""; selector = selector.replace(/:content\((?:"[^"]*"|'[^']*'|[^)]*)\)/, ""); } } var attrNameFilter = ""; var attrValueFilter = ""; var attrOperator = "="; var hasAttrFilter = false; var attrMatch = selector.match(/\[([a-zA-Z0-9_-]+)\s*([*^$]?=)\s*(?:"([^"]*)"|'([^']*)'|([^\]"']*))\]/); if (attrMatch) { hasAttrFilter = true; attrNameFilter = attrMatch[1]; attrOperator = attrMatch[2]; attrValueFilter = attrMatch[3] || attrMatch[4] || attrMatch[5] || ""; selector = selector.replace(/\[.*?\]/, ""); } var notSelector = ""; if (selector.indexOf(":not(") !== -1) { var notMatch = selector.match(/:not\(([^)]+)\)/); if (notMatch) { notSelector = notMatch[1]; selector = selector.replace(/:not\([^)]+\)/, ""); } } var isFirstFilter = selector.indexOf(":first") !== -1; var isLastFilter = selector.indexOf(":last") !== -1; selector = selector.replace(/:first|:last/g, ""); var targetTagName = ""; var targetId = ""; var targetClasses = []; var selectorToParse = selector.trim(); if (selectorToParse !== "") { var idIndex = selectorToParse.indexOf('#'); if (idIndex !== -1) { var afterId = selectorToParse.substring(idIndex + 1); var nextDot = afterId.indexOf('.'); targetId = nextDot === -1 ? afterId : afterId.substring(0, nextDot); selectorToParse = selectorToParse.substring(0, idIndex) + (nextDot === -1 ? "" : "." + afterId.substring(nextDot + 1)); } var classParts = selectorToParse.split('.'); var possibleTag = classParts.shift(); if (possibleTag) { targetTagName = possibleTag.toLowerCase(); } targetClasses = classParts.filter(function (c) { return c.length > 0; }); } for (var i = 0; i < this.elements.length; i++) { var currentHtml = this.elements[i]; var pos = 0; var subResults = []; while ((pos = currentHtml.indexOf('<', pos)) !== -1) { if (currentHtml.charAt(pos + 1) === '/' || currentHtml.charAt(pos + 1) === '!') { pos++; continue; } var endOpenTag = -1; var insideQuote = false; var quoteChar = ''; for (var j = pos + 1; j < currentHtml.length; j++) { var char = currentHtml.charAt(j); if ((char === '"' || char === "'") && currentHtml.charAt(j - 1) !== '\\') { if (!insideQuote) { insideQuote = true; quoteChar = char; } else if (char === quoteChar) { insideQuote = false; } } if (char === '>' && !insideQuote) { endOpenTag = j; break; } } if (endOpenTag === -1) break; var fullOpenTag = currentHtml.substring(pos, endOpenTag + 1); var tagMatch = fullOpenTag.match(/^<([a-zA-Z0-9_-]+)/); var currentTagName = tagMatch ? tagMatch[1].toLowerCase() : ""; var isMatched = true; if (targetTagName && targetTagName !== currentTagName) { isMatched = false; } var getClassAttr = fullOpenTag.match(/class\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i); var classMatchStr = getClassAttr ? (getClassAttr[1] || getClassAttr[2] || getClassAttr[3] || "") : ""; var getIdAttr = fullOpenTag.match(/id\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i); var idMatchStr = getIdAttr ? (getIdAttr[1] || getIdAttr[2] || getIdAttr[3] || "") : ""; if (isMatched && targetId && idMatchStr !== targetId) { isMatched = false; } if (isMatched && targetClasses.length > 0) { if (classMatchStr) { var currentClasses = classMatchStr.trim().split(/\s+/); for (var c = 0; c < targetClasses.length; c++) { if (currentClasses.indexOf(targetClasses[c]) === -1) { isMatched = false; break; } } } else { isMatched = false; } } if (isMatched && hasAttrFilter) { var actualValue = ""; if (attrNameFilter === "class") { actualValue = classMatchStr; } else if (attrNameFilter === "id") { actualValue = idMatchStr; } else { var getAnyAttr = fullOpenTag.match(new RegExp(attrNameFilter + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s>]+))', 'i')); actualValue = getAnyAttr ? (getAnyAttr[1] || getAnyAttr[2] || getAnyAttr[3] || "") : ""; } var attrExists = fullOpenTag.search(new RegExp(attrNameFilter + '\\s*=', 'i')) !== -1; if (!attrExists) { isMatched = false; } else { if (attrOperator === "=") { if (attrNameFilter === "class") { var classes = actualValue.trim().split(/\s+/); if (classes.indexOf(attrValueFilter) === -1) isMatched = false; } else if (actualValue !== attrValueFilter) { isMatched = false; } } else if (attrOperator === "*=") { if (actualValue.indexOf(attrValueFilter) === -1) isMatched = false; } else if (attrOperator === "^=") { if (actualValue.indexOf(attrValueFilter) !== 0) isMatched = false; } else if (attrOperator === "$=") { if (actualValue.slice(-attrValueFilter.length) !== attrValueFilter) isMatched = false; } } } if (isMatched) { var startTagPos = pos; var endTagPos = endOpenTag + 1; var selfClosingTags = ['img', 'source', 'input', 'br', 'hr', 'link', 'meta']; if (selfClosingTags.indexOf(currentTagName) === -1 && fullOpenTag.indexOf('/>') === -1) { var depth = 1; var tagRegex = new RegExp('<(/?)' + currentTagName + '(?:\\s+[^>]*|\\s*>)', 'gi'); tagRegex.lastIndex = endOpenTag + 1; var match; while ((match = tagRegex.exec(currentHtml)) !== null) { var isClose = match[1] === '/'; var fullMatched = match[0]; if (isClose) { depth--; } else if (fullMatched.indexOf('/>') === -1) { depth++; } if (depth === 0) { endTagPos = tagRegex.lastIndex; break; } } if (depth > 0) { endTagPos = currentHtml.length; } } var foundBlock = currentHtml.substring(startTagPos, endTagPos); if (contentFilter) { var pureText = ""; if (currentTagName === "script" || currentTagName === "style") { var innerStart = foundBlock.indexOf('>') + 1; var innerEnd = foundBlock.search(/<\/(?:script|style)/i); pureText = innerEnd !== -1 ? foundBlock.substring(innerStart, innerEnd) : foundBlock.substring(innerStart); } else { pureText = foundBlock.replace(/<[^>]+>/g, "").trim(); } var keywords = contentFilter.split('|'); var isContentMatched = false; for (var k = 0; k < keywords.length; k++) { if (pureText.indexOf(keywords[k].trim()) !== -1) { isContentMatched = true; break; } } if (!isContentMatched) { pos = endTagPos; continue; } } if (notSelector) { var isNotClass = notSelector.indexOf('.') === 0; var isNotId = notSelector.indexOf('#') === 0; var notValue = notSelector.substring(1); var hasNot = false; if (isNotClass && classMatchStr.indexOf(notValue) !== -1) hasNot = true; if (isNotId && idMatchStr.indexOf(notValue) !== -1) hasNot = true; if (!hasNot) subResults.push(foundBlock); } else { subResults.push(foundBlock); } pos = endTagPos; } else { pos++; } } if (isFirstFilter && subResults.length > 0) subResults = [subResults[0]]; if (isLastFilter && subResults.length > 0) subResults = [subResults[subResults.length - 1]]; results = results.concat(subResults); } var newInstance = _$(results); newInstance.sourceHtml = this.sourceHtml || currentHtml; return newInstance; }, each: function (callback) { for (var i = 0; i < this.elements.length; i++) { var childInstance = _$(this.elements[i]); childInstance.sourceHtml = this.sourceHtml; callback.call(childInstance, i, this.elements[i]); } return this; }, eq: function (index) { if (index < 0) index = this.elements.length + index; var matchedElement = this.elements[index]; this.elements = matchedElement ? [matchedElement] : []; this.length = this.elements.length; return this; }, attr: function (attrName) { if (this.elements.length === 0) return ""; var elem = this.elements[0]; var getAttr = elem.match(new RegExp(attrName + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s>]+))', 'i')); return getAttr ? (getAttr[1] || getAttr[2] || getAttr[3] || "") : ""; }, html: function () { if (this.elements.length === 0) return ""; var elem = this.elements[0]; var start = elem.indexOf('>') + 1; var matchClose = elem.match(/<\/([a-zA-Z0-9_-]+)\s*>\s*$/i); if (matchClose) { var end = elem.lastIndexOf(matchClose[0]); if (start > 0 && end >= start) return elem.substring(start, end); } return start > 0 ? elem.substring(start) : ""; }, text: function (separator) { if (this.elements.length === 0) return ""; var elem = this.elements[0]; var start = elem.indexOf('>') + 1; var end = elem.lastIndexOf('</'); if (start > 0 && end > start) { var content = elem.substring(start, end); var pureText = content.replace(/<\/?[^>]+(>|$)/g, "\n"); if (typeof separator === 'string') { return pureText .split('\n') .map(function (item) { return item.trim(); }) .filter(function (item) { return item !== ''; }) .join(separator); } return pureText .split('\n') .map(function (item) { return item.trim(); }) .filter(function (item) { return item !== ''; }) .join(' '); } return ""; }, textAll: function (separator) { if (this.elements.length === 0) return ""; var sep = typeof separator === 'string' ? separator : " "; var allTexts = []; for (var i = 0; i < this.elements.length; i++) { var elem = this.elements[i]; var start = elem.indexOf('>') + 1; var end = elem.lastIndexOf('</'); if (start > 0 && end > start) { var content = elem.substring(start, end); var pureText = content.replace(/<\/?[^>]+(>|$)/g, "\n"); var cleanText = pureText .split('\n') .map(function (item) { return item.trim(); }) .filter(function (item) { return item !== ''; }) .join(' '); if (cleanText !== '') { allTexts.push(cleanText); } } } return allTexts.join(sep); }, next: function () { var results = []; if (!this.sourceHtml) return this; for (var i = 0; i < this.elements.length; i++) { var elem = this.elements[i]; var idx = this.sourceHtml.indexOf(elem); if (idx === -1) continue; var scanPos = idx + elem.length; var nextOpen = this.sourceHtml.indexOf('<', scanPos); if (nextOpen !== -1) { if (this.sourceHtml.charAt(nextOpen + 1) === '/') continue; var endOpenTag = this.sourceHtml.indexOf('>', nextOpen); if (endOpenTag === -1) continue; var fullOpenTag = this.sourceHtml.substring(nextOpen, endOpenTag + 1); var spacePos = fullOpenTag.indexOf(' '); var currentTagName = (spacePos === -1) ? fullOpenTag.substring(1, fullOpenTag.length - 1).toLowerCase() : fullOpenTag.substring(1, spacePos).toLowerCase(); var startTagPos = nextOpen; var endTagPos = endOpenTag + 1; var selfClosingTags = ['img', 'source', 'input', 'br', 'hr', 'link', 'meta']; if (selfClosingTags.indexOf(currentTagName) === -1 && fullOpenTag.indexOf('/>') === -1) { var depth = 1; var tagRegex = new RegExp('<(/?)' + currentTagName + '(?:\\s+[^>]*|\\s*>)', 'gi'); tagRegex.lastIndex = endOpenTag + 1; var match; while ((match = tagRegex.exec(this.sourceHtml)) !== null) { if (match[1] === '/') depth--; else if (match[0].indexOf('/>') === -1) depth++; if (depth === 0) { endTagPos = tagRegex.lastIndex; break; } } } results.push(this.sourceHtml.substring(startTagPos, endTagPos)); } } var nextInstance = _$(results); nextInstance.sourceHtml = this.sourceHtml; this.elements = results; this.length = results.length; return this; }, parent: function () { var results = []; if (!this.sourceHtml) return this; for (var i = 0; i < this.elements.length; i++) { var elem = this.elements[i]; var idx = this.sourceHtml.indexOf(elem); if (idx <= 0) continue; var scanPos = idx - 1; while (scanPos >= 0) { var openTagPos = this.sourceHtml.lastIndexOf('<', scanPos); if (openTagPos === -1) break; if (this.sourceHtml.charAt(openTagPos + 1) !== '/' && this.sourceHtml.charAt(openTagPos + 1) !== '!') { var endOpenTag = this.sourceHtml.indexOf('>', openTagPos); if (endOpenTag !== -1 && endOpenTag > openTagPos) { var fullOpenTag = this.sourceHtml.substring(openTagPos, endOpenTag + 1); var spacePos = fullOpenTag.indexOf(' '); var currentTagName = (spacePos === -1) ? fullOpenTag.substring(1, fullOpenTag.length - 1).toLowerCase() : fullOpenTag.substring(1, spacePos).toLowerCase(); var endTagPos = endOpenTag + 1; var selfClosingTags = ['img', 'source', 'input', 'br', 'hr', 'link', 'meta']; if (selfClosingTags.indexOf(currentTagName) === -1 && fullOpenTag.indexOf('/>') === -1) { var depth = 1; var tagRegex = new RegExp('<(/?)' + currentTagName + '(?:\\s+[^>]*|\\s*>)', 'gi'); tagRegex.lastIndex = endOpenTag + 1; var match; while ((match = tagRegex.exec(this.sourceHtml)) !== null) { if (match[1] === '/') depth--; else if (match[0].indexOf('/>') === -1) depth++; if (depth === 0) { endTagPos = tagRegex.lastIndex; break; } } } if (endTagPos >= idx + elem.length) { var parentBlock = this.sourceHtml.substring(openTagPos, endTagPos); if (results.indexOf(parentBlock) === -1) results.push(parentBlock); break; } } } scanPos = openTagPos - 1; } } var parentInstance = _$(results); parentInstance.sourceHtml = this.sourceHtml; this.elements = results; this.length = results.length; return this; }, closest: function (selector) { var results = []; if (!this.sourceHtml || this.elements.length === 0) return _$([]); for (var i = 0; i < this.elements.length; i++) { var currentElem = this.elements[i]; var currentObj = _$(currentElem); currentObj.sourceHtml = this.sourceHtml; var selfCheck = _$(this.sourceHtml).find(selector); var isSelfMatched = false; for (var s = 0; s < selfCheck.elements.length; s++) { if (selfCheck.elements[s] === currentElem) { isSelfMatched = true; break; } } if (isSelfMatched) { if (results.indexOf(currentElem) === -1) results.push(currentElem); continue; } var parentObj = currentObj.parent(); while (parentObj.elements.length > 0) { var parentElem = parentObj.elements[0]; var checkMatch = _$(this.sourceHtml).find(selector); var isMatched = false; for (var j = 0; j < checkMatch.elements.length; j++) { if (checkMatch.elements[j] === parentElem) { isMatched = true; break; } } if (isMatched) { if (results.indexOf(parentElem) === -1) results.push(parentElem); break; } parentObj = parentObj.parent(); } } var closestInstance = _$(results); closestInstance.sourceHtml = this.sourceHtml; return closestInstance; } }; instance.length = instance.elements.length; return instance; }
