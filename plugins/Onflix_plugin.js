@@ -3,7 +3,7 @@
 // TỪ NAY VỀ SAU, NẾU WEB ĐỔI TÊN MIỀN, BẠN CHỈ CẦN SỬA 2 DÒNG NÀY:
 // =============================================================================
 
-var BASEURL = "https://onflix.lol"; // Sửa tên miền web tại đây
+var BASEURL = "https://onflix.lat"; // Sửa tên miền web tại đây
 var BASEAPI = "https://k8s.onflixcdn.com/api"; // Sửa tên miền API tại đây (nếu có đổi)
 
 function getManifest() {
