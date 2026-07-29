@@ -1,43 +1,54 @@
 // =============================================================================
-// CẤU HÌNH DOMAIN MOTCHILL
+// CẤU HÌNH DOMAIN (CHỈ CẦN SỬA TÊN MIỀN Ở ĐÂY NẾU WEB CÓ THAY ĐỔI)
 // =============================================================================
-var MAIN_DOMAIN = "motchillw.blue"; 
+var MAIN_DOMAIN = "www.shortflix.net"; 
 var BASEURL = "https://" + MAIN_DOMAIN; 
+var BASEAPI = "https://" + MAIN_DOMAIN + "/api/search?limit=100&language=vi_VN&lang=vi_VN";
+
+// =============================================================================
+// GLOBAL CURSOR CACHE (BỘ NHỚ LƯU CURSOR ĐỘNG TRONG BỘ NHỚ RAM)
+// =============================================================================
+var CURSOR_CACHE = {};
+var URL_TO_PAGE_MAP = {};
+var URL_TO_PATH_MAP = {};
 
 function getManifest() {
     return JSON.stringify({
-        "id": "motchill_ios",
-        "name": "Motchill iOS",
-        "description": "Bản Webview: Vuốt dọc tự chuyển tập, Tự động xoay dọc màn hình, Chặn Quảng Cáo",
-        "version": "1.0.2",
-        "info": "Tối ưu cho phim ngắn: Dùng giao diện web gốc để tự động chuyển tập, tự động ép xoay dọc.",
+        "id": "shortflix",
+        "name": "Phim Ngắn Shortflix",
+        "description": "Bản Webview: Vuốt dọc tự chuyển tập, Tự động xoay dọc, Chặn Quảng Cáo",
+        "version": "1.3.2", 
         "baseUrl": BASEURL,
-        "iconUrl": BASEURL + "/motchill.png",
+        "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/shortflix.png",
         "isEnabled": true,
-        "type": "shortfilm",         // BẮT BUỘC ĐỂ ÉP GIAO DIỆN TIKTOK/PHIM NGẮN
-        "layoutType": "VERTICAL",    // BẮT BUỘC ÉP XOAY DỌC MÀN HÌNH
-        "playerType": "webview"      // MỞ TRONG WEBVIEW ĐỂ TẬN DỤNG TÍNH NĂNG VUỐT/CHUYỂN TẬP CỦA WEB
+        "hasLogin": true,                     
+        "loginUrl": BASEURL + "/vi/login",    
+        "type": "shortfilm",                  // [ĐÃ SỬA] KÍCH HOẠT CHẾ ĐỘ PHIM NGẮN (TIKTOK)
+        "layoutType": "VERTICAL",             // [ĐÃ SỬA] ÉP AUTO XOAY DỌC MÀN HÌNH
+        "playerType": "webview"               // [ĐÃ SỬA] CHUYỂN SANG WEBVIEW ĐỂ VUỐT
     });
 }
 
 function log(msg) {
     if (typeof nativeLog !== 'undefined') {
-        nativeLog("[motchill_ios] " + msg);
+        nativeLog("[shortflix] " + msg);
     } else if (typeof console !== 'undefined' && console.log) {
-        console.log("[motchill_ios] " + msg);
+        console.log("[shortflix] " + msg);
     }
 }
 
+// CHỈ ĐỂ 5 MỤC NỔI BẬT Ở TRANG CHỦ THEO YÊU CẦU
 function getHomeSections() {
     return JSON.stringify([
-        { "slug": "danh-sach/phim-bo", "title": "Phim Bộ Mới", "type": "Horizontal" },
-        { "slug": "danh-sach/phim-le", "title": "Phim Lẻ Mới", "type": "Horizontal" },
-        { "slug": "the-loai/hoat-hinh", "title": "Hoạt Hình - Anime", "type": "Horizontal" },
-        { "slug": "quoc-gia/han-quoc", "title": "Phim Hàn Quốc", "type": "Horizontal" },
-        { "slug": "quoc-gia/trung-quoc", "title": "Phim Trung Quốc", "type": "Horizontal" }
+        { "slug": "&sortBy=last_episode_at", "title": "Phim Mới Cập Nhật", "type": "Grid" },
+        { "slug": "&genre=tong-tai", "title": "Phim Tổng Tài", "type": "Horizontal" },
+        { "slug": "&genre=co-dai", "title": "Phim Cổ Đại", "type": "Horizontal" },
+        { "slug": "&genre=ngon-tinh", "title": "Phim Ngôn Tình", "type": "Horizontal" },
+        { "slug": "&q=l%E1%BB%93ng+ti%E1%BA%BFng", "title": "Phim Lồng Tiếng", "type": "Horizontal" }
     ]);
 }
 
+// ĐẨY TOÀN BỘ DANH MỤC VÀO MENU PRIMARY CATEGORIES
 function getPrimaryCategories() {
     var listurl = getLISTmenu();
     var menulist = buildMenu(listurl);
@@ -49,6 +60,74 @@ function getFilterConfig() {
 }
 
 // =============================================================================
+// HELPER: CURSOR BASE64 ENCODE / DECODE (GIỮ NGUYÊN TỪ CODE ANDROID)
+// =============================================================================
+
+function encodeBase64(str) {
+    if (typeof btoa !== 'undefined') {
+        try { return btoa(str); } catch (e) {}
+    }
+    var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    var output = '';
+    for (var block, charCode, idx = 0, map = chars;
+        str.charAt(idx | 0) || (map = '=', idx % 1);
+        output += map.charAt(63 & block >> 8 - idx % 1 * 8)) {
+        charCode = str.charCodeAt(idx += 3/4);
+        block = block << 8 | charCode;
+    }
+    return output;
+}
+
+function decodeBase64(str) {
+    if (typeof atob !== 'undefined') {
+        try { return atob(str); } catch (e) {}
+    }
+    var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    var output = '';
+    str = String(str).replace(/=+$/, '');
+    for (var bc = 0, bs, buffer, idx = 0;
+        buffer = str.charAt(idx++);
+        ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer, bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0
+    ) {
+        buffer = chars.indexOf(buffer);
+    }
+    return output;
+}
+
+function parseCursor(cursorBase64) {
+    if (!cursorBase64) return null;
+    try {
+        var jsonStr = decodeBase64(cursorBase64);
+        return JSON.parse(jsonStr);
+    } catch (e) {
+        return null;
+    }
+}
+
+function createCursor(lastItem) {
+    if (!lastItem) return "";
+    try {
+        var rawOrder = lastItem.orderValue || lastItem.updatedAt || lastItem.publishedAt || lastItem.last_episode_at || 0;
+        var orderVal = Number(rawOrder);
+        
+        if (isNaN(orderVal) && typeof rawOrder === 'string') {
+            var dateParsed = Date.parse(rawOrder);
+            orderVal = !isNaN(dateParsed) ? dateParsed : 0;
+        }
+
+        var cursorObj = {
+            id: String(lastItem.id || ""),
+            timestamp: 0,
+            orderValue: orderVal || 0
+        };
+        
+        return encodeBase64(JSON.stringify(cursorObj));
+    } catch (e) {
+        return "";
+    }
+}
+
+// =============================================================================
 // URL GENERATION
 // =============================================================================
 
@@ -56,12 +135,15 @@ function getUrlList(slug, filtersJson) {
     try {
         var page = 1;
         var path = slug || "";
+        var cursor = "";
 
         if (filtersJson) {
             var fixedJson = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
             try {
                 var filters = JSON.parse(fixedJson);
                 page = parseInt(filters.page) || 1;
+                cursor = filters.cursor || ""; 
+                
                 if (filters.category) {
                     if (Array.isArray(filters.category) && filters.category.length > 0) {
                         path = filters.category[0].slug;
@@ -73,40 +155,41 @@ function getUrlList(slug, filtersJson) {
         }
 
         var resultUrl = "";
-        if (path.indexOf("http") === 0) {
+        if (path && path.indexOf("http") === 0) {
             resultUrl = path;
         } else {
-            resultUrl = BASEURL + (path.startsWith('/') ? path : '/' + path);
+            resultUrl = BASEAPI + (path ? path : "");
         }
 
-        if (page > 1) {
-            var sep = resultUrl.indexOf("?") > -1 ? "&" : "?";
-            resultUrl += sep + "page=" + page;
+        if (page > 1 && !cursor) {
+            var cacheKey = path + "_page_" + page;
+            cursor = CURSOR_CACHE[cacheKey] || "";
         }
 
-        return resultUrl.replace(/([^:]\/)\/+/g, "$1");
+        if (cursor) {
+            var separator = resultUrl.indexOf("?") > -1 ? "&" : "?";
+            resultUrl += separator + "cursor=" + encodeURIComponent(cursor);
+        }
+
+        resultUrl = resultUrl.replace(/([^:]\/)\/+/g, "$1");
+
+        URL_TO_PAGE_MAP[resultUrl] = page;
+        URL_TO_PATH_MAP[resultUrl] = path;
+
+        return resultUrl;
     } catch (e) {
-        return BASEURL;
+        return slug || BASEAPI;
     }
 }
 
 function getUrlSearch(keyword, filtersJson) {
-    var page = 1;
-    if (filtersJson) {
-        try {
-            var filters = JSON.parse(filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':'));
-            page = parseInt(filters.page) || 1;
-        } catch (e) {}
-    }
-    var resultUrl = BASEURL + "/search?q=" + encodeURIComponent(keyword);
-    if (page > 1) resultUrl += "&page=" + page;
-    return resultUrl;
+    return BASEAPI + "&q=" + encodeURIComponent(keyword);
 }
 
 function getUrlDetail(slug) {
     if (!slug) return "";
     if (slug.indexOf('http') === 0) return slug;
-    return BASEURL + (slug.startsWith('/') ? slug : '/' + slug);
+    return BASEURL + "/" + slug.replace(/^\//, "");
 }
 
 function getUrlCategories() { return BASEURL; }
@@ -117,77 +200,73 @@ function getUrlYears() { return ""; }
 // PARSERS
 // =============================================================================
 
-function decodeHTMLEntities(text) {
-    if (!text) return "";
-    return text.replace(/&amp;/g, '&')
-               .replace(/&lt;/g, '<')
-               .replace(/&gt;/g, '>')
-               .replace(/&quot;/g, '"')
-               .replace(/&#39;/g, "'");
-}
-
 function parseListResponse(html, $url) {
     try {
         var items = [];
-        var seen = {};
+        var $data = JSON.parse(html);
+        var nextCursor = "";
         
-        var doc = _$(html);
-        
-        doc.find("div.movie-card, div.group.relative.overflow-hidden").each(function() {
-            var aTag = this.find("a");
-            var href = aTag.attr("href");
-            if (!href) return;
+        if ($data && $data.items && $data.items.length > 0) {
+            for (var $j = 0; $j < $data.items.length; $j++) {
+                var $item = $data.items[$j];
+                var year = "";
+                var lang = "";
+                var current = $item.status ? $item.status.replace("PUBLISHED", "Hoàn Thành") : "";
+                
+                var itemSlug = $item.slug || $item.id || "";
+                var href = BASEURL + "/vi/videos/" + itemSlug;
+                
+                var quality = "HD";
+                var title = $item.title || "";
+                var src = $item.thumbnailUrl || "";
 
-            if (href.indexOf('http') !== 0) {
-                href = BASEURL + (href.startsWith('/') ? '' : '/') + href;
+                if (href) {
+                    var cleanThumb = src.replace(/&amp;/g, '&');
+                    items.push({
+                        "id": href,
+                        "title": title.trim(),
+                        "posterUrl": cleanThumb,
+                        "backdropUrl": cleanThumb,
+                        "quality": quality,
+                        "lang": lang,
+                        "episode_current": current
+                    });
+                }
             }
 
-            var imgTag = this.find("img");
-            var poster = imgTag.attr("src") || imgTag.attr("data-src") || "";
-            if (poster.indexOf('http') !== 0 && poster !== "") {
-                poster = BASEURL + (poster.startsWith('/') ? '' : '/') + poster;
+            if ($data.nextCursor) {
+                nextCursor = $data.nextCursor;
+            } else {
+                var lastRawItem = $data.items[$data.items.length - 1];
+                nextCursor = createCursor(lastRawItem);
             }
 
-            var title = this.find("h3").text() || aTag.attr("title") || imgTag.attr("alt") || "";
-            title = title.trim();
+            var currentPage = URL_TO_PAGE_MAP[$url] || 1;
+            var currentPath = URL_TO_PATH_MAP[$url] || "";
+            var nextPage = currentPage + 1;
 
-            var epCurrent = "HD";
-            var bottomBadge = this.find("div.absolute.bottom-1").text();
-            var topBadge = this.find("span.bg-orange-500").text() || this.find("span.bg-yellow-500").text();
-
-            if (bottomBadge) {
-                epCurrent = bottomBadge.trim();
-            } else if (topBadge) {
-                epCurrent = topBadge.trim();
+            if (nextCursor) {
+                var cacheKey = currentPath + "_page_" + nextPage;
+                CURSOR_CACHE[cacheKey] = nextCursor;
             }
-
-            if (href && title && !seen[href]) {
-                items.push({
-                    "id": href,
-                    "title": decodeHTMLEntities(title),
-                    "posterUrl": poster,
-                    "backdropUrl": poster,
-                    "quality": "HD",
-                    "episode_current": epCurrent,
-                    "lang": "Vietsub"
-                });
-                seen[href] = true;
-            }
-        });
-
-        var currentPage = 1;
-        var pageMatch = $url ? $url.match(/page=(\d+)/) : null;
-        if (pageMatch) currentPage = parseInt(pageMatch[1]);
+        }
 
         return JSON.stringify({
             "items": items,
+            "nextCursor": nextCursor,
             "pagination": {
-                "currentPage": currentPage,
-                "totalPages": items.length >= 10 ? currentPage + 1 : currentPage
+                "currentPage": 1,
+                "totalPages": items.length > 0 ? 999 : 1,
+                "nextCursor": nextCursor
             }
         });
+
     } catch (e) {
-        return JSON.stringify({ "items": [], "pagination": { "currentPage": 1, "totalPages": 1 } });
+        return JSON.stringify({
+            "items": [],
+            "nextCursor": "",
+            "pagination": { "currentPage": 1, "totalPages": 1 }
+        });
     }
 }
 
@@ -195,92 +274,93 @@ function parseSearchResponse(html, url) {
     return parseListResponse(html, url);
 }
 
-// FIX: TRẢ VỀ DUY NHẤT 1 LINK WEBVIEW ĐỂ NGƯỜI DÙNG TỰ VUỐT/CHỌN TẬP
+// FIX: CHỈ TRẢ VỀ DUY NHẤT 1 LINK WEBVIEW ĐỂ TỰ VUỐT, KHÔNG CẦN CHIA TẬP NỮA
 function parseMovieDetail(html, url) {
     try {
-        var doc = _$(html);
-        var title = doc.find("h1").text().trim() || "Phim Mới";
+        var id = url;
+        var lname = _$(html).find("h1").text() || "Đang cập nhật...";
+        var limg = _$(html).find('meta[property="og:image"]').attr("content");
+        var ldes = _$(html).find(".order-6:content('Giới thiệu')").text();
+        var category = _$(html).find(".text-sm:content('Thể loại:')").parent().text(" - ").replace("Thể loại - : - ", "");
+        var episode_current = _$(html).find("span:content('Tập mới nhất:')").parent().text().trim().replace("Tập mới nhất:", "");
         
-        var poster = doc.find("img.object-cover").attr("src") || "";
-        if (poster && poster.indexOf('http') !== 0) poster = BASEURL + poster;
-
-        var desc = doc.find(".prose.prose-invert").text() || "Đang cập nhật...";
-
-        var category = [];
-        doc.find("a[href*='/the-loai/'] span").each(function() {
-            category.push(this.text().trim());
-        });
-
-        // Tìm link nút "Xem Phim" hoặc lấy link tập đầu tiên có trong mã nguồn
-        var watchLink = url;
-        var matchLink = html.match(/href="([^"]+\/tap-[^"]*)"/i);
-        if (matchLink) {
-            watchLink = matchLink[1];
-            if (watchLink.indexOf('http') !== 0) watchLink = BASEURL + (watchLink.startsWith('/') ? '' : '/') + watchLink;
-        }
-
-        return JSON.stringify({
-            id: url,
-            title: title,
-            posterUrl: poster,
-            backdropUrl: poster,
-            description: desc,
-            quality: "HD",
-            year: 2026,
-            rating: 8.5,
-            category: category.join(", "),
-            servers: [{
-                name: "Webview (Mượt, Tự chuyển tập)",
-                episodes: [{
-                    id: watchLink,
-                    name: "Bấm vào để Lướt Video",
-                    slug: "webview-player"
-                }]
+        var yearRaw = _$(html).find("span:content('Thời gian xuất bản:')").parent().text().trim().replace("Thời gian xuất bản:", "");
+        var year = Number(yearRaw) || 2026;
+        var lactor = _$(html).find("span:content('Diễn viên:')").parent().text().trim().replace("Diễn viên:", "");
+        var ldirec = _$(html).find("span:content('Đạo diễn:')").parent().text().trim().replace("Đạo diễn:", "");
+        var lduran = _$(html).find("span:content('Thời lượng:')").parent().text().trim().replace("Thời lượng:", "");
+        var status = _$(html).find("span:content('Trạng thái:')").parent().text().trim().replace("Trạng thái:", "");
+        
+        var servers = [];
+        servers.push({
+            name: "Lướt Tự Động (Webview)",
+            episodes: [{
+                id: url, // Link xem phim chính là url này
+                name: "Bấm vào đây để Xem & Vuốt",
+                slug: "webview-player"
             }]
         });
+        
+        return JSON.stringify({
+            id: id,
+            title: lname,
+            posterUrl: limg,
+            backdropUrl: limg,
+            description: ldes,
+            quality: "HD",
+            year: year,
+            rating: 8.5,
+            status: status,
+            category: category,
+            episode_current: episode_current,
+            servers: servers,
+            duration: lduran || "",
+            casts: lactor || "",
+            director: ldirec || "",
+            extra: ""
+        });
     } catch (e) {
-        return JSON.stringify({ id: url, title: "Lỗi chi tiết", servers: [] });
+        return JSON.stringify({ id: url || "error", title: "Lỗi chi tiết", servers: [] });
     }
 }
 
-// FIX: ÉP MỞ WEBVIEW VÀ TIÊM SCRIPT ẨN RÁC (ĐỂ GIAO DIỆN TRÔNG NHƯ APP NATIVE)
+// FIX: ÉP MỞ BẰNG WEBVIEW VÀ TIÊM SCRIPT ẨN RÁC/QUẢNG CÁO, BIẾN GIAO DIỆN THÀNH APP NATIVE
 function parseDetailResponse(html, url) {
     try {
-        var killAdsAndMakeNativeJs = `
-            setInterval(function() {
-                // Xóa Header, Footer, Quảng cáo, Bình luận để nhường toàn bộ màn hình cho Video
-                var garbage = document.querySelectorAll('header, footer, .swal2-container, .modal, .popup-overlay, #top-banner, .ads-banner, .mt-12');
-                for (var j = 0; j < garbage.length; j++) {
-                    if (garbage[j]) garbage[j].remove();
-                }
-                
-                // Tự động tắt viền margin body
-                document.body.style.margin = '0';
-                document.body.style.padding = '0';
-                
-                // Tự động bấm nút Đồng ý popup hoặc Play
-                var btns = document.querySelectorAll('button, a, .jw-icon-display');
-                for (var i = 0; i < btns.length; i++) {
-                    var t = btns[i].innerText || '';
-                    if (t.indexOf('Đồng ý') > -1 || t.indexOf('Tiếp tục') > -1) {
-                        try { btns[i].click(); } catch(e){}
+        // Tiêm JS/CSS để ẩn header, footer, thanh điều hướng và quảng cáo của trang Shortflix
+        var killAdsCssJs = `
+            (function() {
+                var style = document.createElement('style');
+                style.innerHTML = 'header, .header, footer, .footer, .download-app, .app-download, [class*="ad-"], [id*="ad-"], .popup, .modal, .google-auto-placed, iframe[src*="ads"], .bottom-nav, .navigation, .sidebar { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } body, html { margin: 0 !important; padding: 0 !important; overflow-x: hidden !important; background: #000 !important; }';
+                document.head.appendChild(style);
+
+                setInterval(function() {
+                    // Xóa các banner/box tải app hiển thị đè màn hình
+                    var appBanners = document.querySelectorAll('div[class*="download"], div[class*="banner"]');
+                    for (var i = 0; i < appBanners.length; i++) {
+                        if (appBanners[i]) appBanners[i].style.display = 'none';
                     }
-                }
-                document.body.classList.remove('swal2-shown', 'modal-open');
-                document.body.style.overflow = 'auto';
-            }, 500);
+                    
+                    // Tự động tắt nút Đóng popup nếu web tự mở ra quảng cáo
+                    var closeBtns = document.querySelectorAll('.close, .btn-close, [aria-label="Close"]');
+                    for (var j = 0; j < closeBtns.length; j++) {
+                        try { closeBtns[j].click(); } catch(e){}
+                    }
+                }, 500);
+            })();
         `;
 
         return JSON.stringify({
             "url": url,
-            "isEmbed": true, // BẮT BUỘC TRUE ĐỂ MỞ WEBVIEW
+            "isEmbed": true, // ÉP WEBVIEW CHẠY
             "headers": {
                 "Referer": BASEURL,
-                "Custom-Js": killAdsAndMakeNativeJs.trim()
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
+                "Custom-Js": killAdsCssJs.trim()
             }
         });
     } catch (e) {
-        return JSON.stringify({ url: url, isEmbed: true });
+        return JSON.stringify({ "url": url, "isEmbed": true, "headers": {} });
     }
 }
 
@@ -289,57 +369,31 @@ function parseCountriesResponse(html) { return "[]"; }
 function parseYearsResponse(html) { return "[]"; }
 
 function getLISTmenu() {
-    return `
-danh-sach/phim-le@@Phim Lẻ
-danh-sach/phim-bo@@Phim Bộ
-danh-sach/phim-chieu-rap@@Phim Chiếu Rạp
-danh-sach/phim-thuyet-minh@@Phim Thuyết Minh
-the-loai/hanh-dong@@Hành Động
-the-loai/tinh-cam@@Tình Cảm
-the-loai/hai-huoc@@Hài Hước
-the-loai/co-trang@@Cổ Trang
-the-loai/tam-ly@@Tâm Lý
-the-loai/hinh-su@@Hình Sự
-the-loai/chien-tranh@@Chiến Tranh
-the-loai/the-thao@@Thể Thao
-the-loai/vo-thuat@@Võ Thuật
-the-loai/vien-tuong@@Viễn Tưởng
-the-loai/phieu-luu@@Phiêu Lưu
-the-loai/khoa-hoc@@Khoa Học
-the-loai/kinh-di@@Kinh Dị
-the-loai/am-nhac@@Âm Nhạc
-the-loai/than-thoai@@Thần Thoại
-the-loai/tai-lieu@@Tài Liệu
-the-loai/gia-dinh@@Gia Đình
-the-loai/hoc-duong@@Học Đường
-the-loai/hoat-hinh@@Hoạt Hình
-the-loai/phim-18@@Phim 18+
-quoc-gia/han-quoc@@Hàn Quốc
-quoc-gia/trung-quoc@@Trung Quốc
-quoc-gia/nhat-ban@@Nhật Bản
-quoc-gia/thai-lan@@Thái Lan
-quoc-gia/au-my@@Âu Mỹ
-`;
+    return `[{\"link\":\"&q=l%E1%BB%93ng+ti%E1%BA%BFng\",\"name\":\"Lồng Tiếng\"},{\"link\":\"&genre=tong-tai\",\"name\":\"Tổng tài\"},{\"link\":\"&genre=co-dai\",\"name\":\"Cổ đại\"},{\"link\":\"&genre=tam-ly\",\"name\":\"Tâm lý\"},{\"link\":\"&genre=ngon-tinh\",\"name\":\"Ngôn tình\"},{\"link\":\"&genre=hai-huoc\",\"name\":\"Hài hước\"},{\"link\":\"&genre=nu-cuong\",\"name\":\"Nữ cường\"},{\"link\":\"&genre=huyen-huyen\",\"name\":\"Huyền huyễn\"},{\"link\":\"&genre=toi-pham\",\"name\":\"Tội phạm\"},{\"link\":\"&genre=xuyen-khong\",\"name\":\"Xuyên không\"},{\"link\":\"&genre=thanh-xuan\",\"name\":\"Thanh xuân\"},{\"link\":\"&genre=hanh-dong\",\"name\":\"Hành động\"},{\"link\":\"&genre=kinh-di\",\"name\":\"Kinh dị\"},{\"link\":\"&genre=gia-dinh\",\"name\":\"Gia Đình\"},{\"link\":\"&genre=bi-an\",\"name\":\"Bí ẩn\"},{\"link\":\"&genre=dan-quoc\",\"name\":\"Dân quốc\"},{\"link\":\"&genre=trong-sinh\",\"name\":\"Trọng sinh\"},{\"link\":\"&genre=cuoi-truoc-yeu-sau\",\"name\":\"Cưới trước yêu sau\"},{\"link\":\"&genre=khoa-hoc-vien-tuong\",\"name\":\"Khoa học viễn tưởng\"},{\"link\":\"&genre=hanh-dong-ly-ky\",\"name\":\"Hành động ly kỳ\"},{\"link\":\"&genre=hien-dai\",\"name\":\"Hiện đại\"},{\"link\":\"&genre=bao-thu\",\"name\":\"Báo thù\"},{\"link\":\"&genre=the-thao\",\"name\":\"Thể thao\"},{\"link\":\"&genre=em-be\",\"name\":\"Em bé\"},{\"link\":\"&genre=nguoc-luyen\",\"name\":\"Ngược luyến\"},{\"link\":\"&genre=sung-ngot\",\"name\":\"Sủng ngọt\"},{\"link\":\"&genre=hieu-lam\",\"name\":\"Hiểu lầm\"},{\"link\":\"&genre=khac\",\"name\":\"Khác\"},{\"link\":\"&genre=hao-mon\",\"name\":\"Hào môn\"},{\"link\":\"&genre=tim-nguoi-than\",\"name\":\"Tìm người thân\"},{\"link\":\"&genre=quan-phiet\",\"name\":\"Quân phiệt\"},{\"link\":\"&genre=vuon-len-tu-so-khong\",\"name\":\"Vươn lên từ số không\"},{\"link\":\"&genre=tai-hop\",\"name\":\"Tái hợp\"},{\"link\":\"&genre=su-tro-lai\",\"name\":\"Sự trở lại\"},{\"link\":\"&genre=tam-ly-tinh-cam\",\"name\":\"Tâm lý tình cảm\"},{\"link\":\"&genre=truong-thanh\",\"name\":\"Trưởng thành\"}]`;
 }
 
-function buildMenu(listurl) {
-    let menulist = [];
-    if (!listurl) return menulist;
-    let lines = listurl.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-        let line = lines[i].trim();
-        if (!line || line.indexOf('@@') === -1) continue;
-        let parts = line.split('@@');
-        let link = parts[0] ? parts[0].trim() : "";
-        let name = parts[1] ? parts[1].trim() : "";
-        if (!link || !name) continue;
-        menulist.push({ "slug": link, "name": name });
-    }
-    return menulist;
+function buildMenu(menuStr, type) { 
+    var menuArray = JSON.parse(menuStr); 
+    let menulist = []; 
+    if (!menuArray || !Array.isArray(menuArray)) return menulist; 
+    var typeStr = type !== undefined ? String(type).trim() : undefined; 
+    for (var i = 0; i < menuArray.length; i++) { 
+        var item = menuArray[i]; 
+        if (!item) continue; 
+        var link = item.link ? String(item.link).trim() : ""; 
+        var name = item.name ? String(item.name).trim() : ""; 
+        if (!link || !name) continue; 
+        var menuItem = {}; 
+        if (typeStr === "false") { 
+            menuItem = { "slug": link, "title": name, "type": "Horizontal" }; 
+        } else if (typeStr === "true") { 
+            menuItem = { "slug": link, "title": name, "type": "Grid" }; 
+        } else { 
+            menuItem = { "slug": link, "name": name }; 
+        } 
+        menulist.push(menuItem); 
+    } 
+    return menulist; 
 }
 
-// =============================================================================
-// BỘ DOM ẢO _$ (CHUẨN VAX)
-// =============================================================================
-function _$(htmlOrBlock){ 
-	if (htmlOrBlock && typeof htmlOrBlock === 'object' && htmlOrBlock.elements) { return htmlOrBlock; } var instance = { sourceHtml: typeof htmlOrBlock === 'string' ? htmlOrBlock : '', elements: Array.isArray(htmlOrBlock) ? htmlOrBlock : (htmlOrBlock ? [htmlOrBlock] : []), length: 0, find: function (selector) { if (selector.indexOf(',') !== -1) { var results = []; var selectors = selector.split(',').map(function (s) { return s.trim(); }); for (var s = 0; s < selectors.length; s++) { if (selectors[s] === "") continue; var subInstance = this.find(selectors[s]); for (var r = 0; r < subInstance.elements.length; r++) { var element = subInstance.elements[r]; if (results.indexOf(element) === -1) { results.push(element); } } } var multiInstance = _$(results); multiInstance.sourceHtml = this.sourceHtml; return multiInstance; } var results = []; var contentFilter = ""; if (selector.indexOf(":content(") !== -1) { var contentMatch = selector.match(/:content\((?:"([^"]*)"|'([^']*)'|([^)]*))\)/); if (contentMatch) { contentFilter = contentMatch[1] || contentMatch[2] || contentMatch[3] || ""; selector = selector.replace(/:content\((?:"[^"]*"|'[^']*'|[^)]*)\)/, ""); } } var attrNameFilter = ""; var attrValueFilter = ""; var attrOperator = "="; var hasAttrFilter = false; var attrMatch = selector.match(/\[([a-zA-Z0-9_-]+)\s*([*^$]?=)\s*(?:"([^"]*)"|'([^']*)'|([^\]"']*))\]/); if (attrMatch) { hasAttrFilter = true; attrNameFilter = attrMatch[1]; attrOperator = attrMatch[2]; attrValueFilter = attrMatch[3] || attrMatch[4] || attrMatch[5] || ""; selector = selector.replace(/\[.*?\]/, ""); } var notSelector = ""; if (selector.indexOf(":not(") !== -1) { var notMatch = selector.match(/:not\(([^)]+)\)/); if (notMatch) { notSelector = notMatch[1]; selector = selector.replace(/:not\([^)]+\)/, ""); } } var isFirstFilter = selector.indexOf(":first") !== -1; var isLastFilter = selector.indexOf(":last") !== -1; selector = selector.replace(/:first|:last/g, ""); var targetTagName = ""; var targetId = ""; var targetClasses = []; var selectorToParse = selector.trim(); if (selectorToParse !== "") { var idIndex = selectorToParse.indexOf('#'); if (idIndex !== -1) { var afterId = selectorToParse.substring(idIndex + 1); var nextDot = afterId.indexOf('.'); targetId = nextDot === -1 ? afterId : afterId.substring(0, nextDot); selectorToParse = selectorToParse.substring(0, idIndex) + (nextDot === -1 ? "" : "." + afterId.substring(nextDot + 1)); } var classParts = selectorToParse.split('.'); var possibleTag = classParts.shift(); if (possibleTag) { targetTagName = possibleTag.toLowerCase(); } targetClasses = classParts.filter(function (c) { return c.length > 0; }); } for (var i = 0; i < this.elements.length; i++) { var currentHtml = this.elements[i]; var pos = 0; var subResults = []; while ((pos = currentHtml.indexOf('<', pos)) !== -1) { if (currentHtml.charAt(pos + 1) === '/' || currentHtml.charAt(pos + 1) === '!') { pos++; continue; } var endOpenTag = -1; var insideQuote = false; var quoteChar = ''; for (var j = pos + 1; j < currentHtml.length; j++) { var char = currentHtml.charAt(j); if ((char === '"' || char === "'") && currentHtml.charAt(j - 1) !== '\\') { if (!insideQuote) { insideQuote = true; quoteChar = char; } else if (char === quoteChar) { insideQuote = false; } } if (char === '>' && !insideQuote) { endOpenTag = j; break; } } if (endOpenTag === -1) break; var fullOpenTag = currentHtml.substring(pos, endOpenTag + 1); var tagMatch = fullOpenTag.match(/^<([a-zA-Z0-9_-]+)/); var currentTagName = tagMatch ? tagMatch[1].toLowerCase() : ""; var isMatched = true; if (targetTagName && targetTagName !== currentTagName) { isMatched = false; } var getClassAttr = fullOpenTag.match(/class\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i); var classMatchStr = getClassAttr ? (getClassAttr[1] || getClassAttr[2] || getClassAttr[3] || "") : ""; var getIdAttr = fullOpenTag.match(/id\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i); var idMatchStr = getIdAttr ? (getIdAttr[1] || getIdAttr[2] || getIdAttr[3] || "") : ""; if (isMatched && targetId && idMatchStr !== targetId) { isMatched = false; } if (isMatched && targetClasses.length > 0) { if (classMatchStr) { var currentClasses = classMatchStr.trim().split(/\s+/); for (var c = 0; c < targetClasses.length; c++) { if (currentClasses.indexOf(targetClasses[c]) === -1) { isMatched = false; break; } } } else { isMatched = false; } } if (isMatched && hasAttrFilter) { var actualValue = ""; if (attrNameFilter === "class") { actualValue = classMatchStr; } else if (attrNameFilter === "id") { actualValue = idMatchStr; } else { var getAnyAttr = fullOpenTag.match(new RegExp(attrNameFilter + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s>]+))', 'i')); actualValue = getAnyAttr ? (getAnyAttr[1] || getAnyAttr[2] || getAnyAttr[3] || "") : ""; } var attrExists = fullOpenTag.search(new RegExp(attrNameFilter + '\\s*=', 'i')) !== -1; if (!attrExists) { isMatched = false; } else { if (attrOperator === "=") { if (attrNameFilter === "class") { var classes = actualValue.trim().split(/\s+/); if (classes.indexOf(attrValueFilter) === -1) isMatched = false; } else if (actualValue !== attrValueFilter) { isMatched = false; } } else if (attrOperator === "*=") { if (actualValue.indexOf(attrValueFilter) === -1) isMatched = false; } else if (attrOperator === "^=") { if (actualValue.indexOf(attrValueFilter) !== 0) isMatched = false; } else if (attrOperator === "$=") { if (actualValue.slice(-attrValueFilter.length) !== attrValueFilter) isMatched = false; } } } if (isMatched) { var startTagPos = pos; var endTagPos = endOpenTag + 1; var selfClosingTags = ['img', 'source', 'input', 'br', 'hr', 'link', 'meta']; if (selfClosingTags.indexOf(currentTagName) === -1 && fullOpenTag.indexOf('/>') === -1) { var depth = 1; var tagRegex = new RegExp('<(/?)' + currentTagName + '(?:\\s+[^>]*|\\s*>)', 'gi'); tagRegex.lastIndex = endOpenTag + 1; var match; while ((match = tagRegex.exec(currentHtml)) !== null) { var isClose = match[1] === '/'; var fullMatched = match[0]; if (isClose) { depth--; } else if (fullMatched.indexOf('/>') === -1) { depth++; } if (depth === 0) { endTagPos = tagRegex.lastIndex; break; } } if (depth > 0) { endTagPos = currentHtml.length; } } var foundBlock = currentHtml.substring(startTagPos, endTagPos); if (contentFilter) { var pureText = ""; if (currentTagName === "script" || currentTagName === "style") { var innerStart = foundBlock.indexOf('>') + 1; var innerEnd = foundBlock.search(/<\/(?:script|style)/i); pureText = innerEnd !== -1 ? foundBlock.substring(innerStart, innerEnd) : foundBlock.substring(innerStart); } else { pureText = foundBlock.replace(/<[^>]+>/g, "").trim(); } var keywords = contentFilter.split('|'); var isContentMatched = false; for (var k = 0; k < keywords.length; k++) { if (pureText.indexOf(keywords[k].trim()) !== -1) { isContentMatched = true; break; } } if (!isContentMatched) { pos = endTagPos; continue; } } if (notSelector) { var isNotClass = notSelector.indexOf('.') === 0; var isNotId = notSelector.indexOf('#') === 0; var notValue = notSelector.substring(1); var hasNot = false; if (isNotClass && classMatchStr.indexOf(notValue) !== -1) hasNot = true; if (isNotId && idMatchStr.indexOf(notValue) !== -1) hasNot = true; if (!hasNot) subResults.push(foundBlock); } else { subResults.push(foundBlock); } pos = endTagPos; } else { pos++; } } if (isFirstFilter && subResults.length > 0) subResults = [subResults[0]]; if (isLastFilter && subResults.length > 0) subResults = [subResults[subResults.length - 1]]; results = results.concat(subResults); } var newInstance = _$(results); newInstance.sourceHtml = this.sourceHtml || currentHtml; return newInstance; }, each: function (callback) { for (var i = 0; i < this.elements.length; i++) { var childInstance = _$(this.elements[i]); childInstance.sourceHtml = this.sourceHtml; callback.call(childInstance, i, this.elements[i]); } return this; }, eq: function (index) { if (index < 0) index = this.elements.length + index; var matchedElement = this.elements[index]; this.elements = matchedElement ? [matchedElement] : []; this.length = this.elements.length; return this; }, attr: function (attrName) { if (this.elements.length === 0) return ""; var elem = this.elements[0]; var getAttr = elem.match(new RegExp(attrName + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s>]+))', 'i')); return getAttr ? (getAttr[1] || getAttr[2] || getAttr[3] || "") : ""; }, html: function () { if (this.elements.length === 0) return ""; var elem = this.elements[0]; var start = elem.indexOf('>') + 1; var matchClose = elem.match(/<\/([a-zA-Z0-9_-]+)\s*>\s*$/i); if (matchClose) { var end = elem.lastIndexOf(matchClose[0]); if (start > 0 && end >= start) return elem.substring(start, end); } return start > 0 ? elem.substring(start) : ""; }, text: function (separator) { if (this.elements.length === 0) return ""; var elem = this.elements[0]; var start = elem.indexOf('>') + 1; var end = elem.lastIndexOf('</'); if (start > 0 && end > start) { var content = elem.substring(start, end); var pureText = content.replace(/<\/?[^>]+(>|$)/g, "\n"); if (typeof separator === 'string') { return pureText .split('\n') .map(function (item) { return item.trim(); }) .filter(function (item) { return item !== ''; }) .join(separator); } return pureText .split('\n') .map(function (item) { return item.trim(); }) .filter(function (item) { return item !== ''; }) .join(' '); } return ""; }, textAll: function (separator) { if (this.elements.length === 0) return ""; var sep = typeof separator === 'string' ? separator : " "; var allTexts = []; for (var i = 0; i < this.elements.length; i++) { var elem = this.elements[i]; var start = elem.indexOf('>') + 1; var end = elem.lastIndexOf('</'); if (start > 0 && end > start) { var content = elem.substring(start, end); var pureText = content.replace(/<\/?[^>]+(>|$)/g, "\n"); var cleanText = pureText .split('\n') .map(function (item) { return item.trim(); }) .filter(function (item) { return item !== ''; }) .join(' '); if (cleanText !== '') { allTexts.push(cleanText); } } } return allTexts.join(sep); }, next: function () { var results = []; if (!this.sourceHtml) return this; for (var i = 0; i < this.elements.length; i++) { var elem = this.elements[i]; var idx = this.sourceHtml.indexOf(elem); if (idx === -1) continue; var scanPos = idx + elem.length; var nextOpen = this.sourceHtml.indexOf('<', scanPos); if (nextOpen !== -1) { if (this.sourceHtml.charAt(nextOpen + 1) === '/') continue; var endOpenTag = this.sourceHtml.indexOf('>', nextOpen); if (endOpenTag === -1) continue; var fullOpenTag = this.sourceHtml.substring(nextOpen, endOpenTag + 1); var spacePos = fullOpenTag.indexOf(' '); var currentTagName = (spacePos === -1) ? fullOpenTag.substring(1, fullOpenTag.length - 1).toLowerCase() : fullOpenTag.substring(1, spacePos).toLowerCase(); var startTagPos = nextOpen; var endTagPos = endOpenTag + 1; var selfClosingTags = ['img', 'source', 'input', 'br', 'hr', 'link', 'meta']; if (selfClosingTags.indexOf(currentTagName) === -1 && fullOpenTag.indexOf('/>') === -1) { var depth = 1; var tagRegex = new RegExp('<(/?)' + currentTagName + '(?:\\s+[^>]*|\\s*>)', 'gi'); tagRegex.lastIndex = endOpenTag + 1; var match; while ((match = tagRegex.exec(this.sourceHtml)) !== null) { if (match[1] === '/') depth--; else if (match[0].indexOf('/>') === -1) depth++; if (depth === 0) { endTagPos = tagRegex.lastIndex; break; } } } results.push(this.sourceHtml.substring(startTagPos, endTagPos)); } } var nextInstance = _$(results); nextInstance.sourceHtml = this.sourceHtml; this.elements = results; this.length = results.length; return this; }, parent: function () { var results = []; if (!this.sourceHtml) return this; for (var i = 0; i < this.elements.length; i++) { var elem = this.elements[i]; var idx = this.sourceHtml.indexOf(elem); if (idx <= 0) continue; var scanPos = idx - 1; while (scanPos >= 0) { var openTagPos = this.sourceHtml.lastIndexOf('<', scanPos); if (openTagPos === -1) break; if (this.sourceHtml.charAt(openTagPos + 1) !== '/' && this.sourceHtml.charAt(openTagPos + 1) !== '!') { var endOpenTag = this.sourceHtml.indexOf('>', openTagPos); if (endOpenTag !== -1 && endOpenTag > openTagPos) { var fullOpenTag = this.sourceHtml.substring(openTagPos, endOpenTag + 1); var spacePos = fullOpenTag.indexOf(' '); var currentTagName = (spacePos === -1) ? fullOpenTag.substring(1, fullOpenTag.length - 1).toLowerCase() : fullOpenTag.substring(1, spacePos).toLowerCase(); var endTagPos = endOpenTag + 1; var selfClosingTags = ['img', 'source', 'input', 'br', 'hr', 'link', 'meta']; if (selfClosingTags.indexOf(currentTagName) === -1 && fullOpenTag.indexOf('/>') === -1) { var depth = 1; var tagRegex = new RegExp('<(/?)' + currentTagName + '(?:\\s+[^>]*|\\s*>)', 'gi'); tagRegex.lastIndex = endOpenTag + 1; var match; while ((match = tagRegex.exec(this.sourceHtml)) !== null) { if (match[1] === '/') depth--; else if (match[0].indexOf('/>') === -1) depth++; if (depth === 0) { endTagPos = tagRegex.lastIndex; break; } } } if (endTagPos >= idx + elem.length) { var parentBlock = this.sourceHtml.substring(openTagPos, endTagPos); if (results.indexOf(parentBlock) === -1) results.push(parentBlock); break; } } } scanPos = openTagPos - 1; } } var parentInstance = _$(results); parentInstance.sourceHtml = this.sourceHtml; this.elements = results; this.length = results.length; return this; }, closest: function (selector) { var results = []; if (!this.sourceHtml || this.elements.length === 0) return _$([]); for (var i = 0; i < this.elements.length; i++) { var currentElem = this.elements[i]; var currentObj = _$(currentElem); currentObj.sourceHtml = this.sourceHtml; var selfCheck = _$(this.sourceHtml).find(selector); var isSelfMatched = false; for (var s = 0; s < selfCheck.elements.length; s++) { if (selfCheck.elements[s] === currentElem) { isSelfMatched = true; break; } } if (isSelfMatched) { if (results.indexOf(currentElem) === -1) results.push(currentElem); continue; } var parentObj = currentObj.parent(); while (parentObj.elements.length > 0) { var parentElem = parentObj.elements[0]; var checkMatch = _$(this.sourceHtml).find(selector); var isMatched = false; for (var j = 0; j < checkMatch.elements.length; j++) { if (checkMatch.elements[j] === parentElem) { isMatched = true; break; } } if (isMatched) { if (results.indexOf(parentElem) === -1) results.push(parentElem); break; } parentObj = parentObj.parent(); } } var closestInstance = _$(results); closestInstance.sourceHtml = this.sourceHtml; return closestInstance; } }; instance.length = instance.elements.length; return instance; }
+function _$(htmlOrBlock){ if (htmlOrBlock && typeof htmlOrBlock === 'object' && htmlOrBlock.elements) { return htmlOrBlock; } var instance = { sourceHtml: typeof htmlOrBlock === 'string' ? htmlOrBlock : '', elements: Array.isArray(htmlOrBlock) ? htmlOrBlock : (htmlOrBlock ? [htmlOrBlock] : []), length: 0, find: function (selector) { if (selector.indexOf(',') !== -1) { var results = []; var selectors = selector.split(',').map(function (s) { return s.trim(); }); for (var s = 0; s < selectors.length; s++) { if (selectors[s] === "") continue; var subInstance = this.find(selectors[s]); for (var r = 0; r < subInstance.elements.length; r++) { var element = subInstance.elements[r]; if (results.indexOf(element) === -1) { results.push(element); } } } var multiInstance = _$(results); multiInstance.sourceHtml = this.sourceHtml; return multiInstance; } var results = []; var contentFilter = ""; if (selector.indexOf(":content(") !== -1) { var contentMatch = selector.match(/:content\((?:"([^"]*)"|'([^']*)'|([^)]*))\)/); if (contentMatch) { contentFilter = contentMatch[1] || contentMatch[2] || contentMatch[3] || ""; selector = selector.replace(/:content\((?:"[^"]*"|'[^']*'|[^)]*)\)/, ""); } } var attrNameFilter = ""; var attrValueFilter = ""; var attrOperator = "="; var hasAttrFilter = false; var attrMatch = selector.match(/\[([a-zA-Z0-9_-]+)\s*([*^$]?=)\s*(?:"([^"]*)"|'([^']*)'|([^\]"']*))\]/); if (attrMatch) { hasAttrFilter = true; attrNameFilter = attrMatch[1]; attrOperator = attrMatch[2]; attrValueFilter = attrMatch[3] || attrMatch[4] || attrMatch[5] || ""; selector = selector.replace(/\[.*?\]/, ""); } var notSelector = ""; if (selector.indexOf(":not(") !== -1) { var notMatch = selector.match(/:not\(([^)]+)\)/); if (notMatch) { notSelector = notMatch[1]; selector = selector.replace(/:not\([^)]+\)/, ""); } } var isFirstFilter = selector.indexOf(":first") !== -1; var isLastFilter = selector.indexOf(":last") !== -1; selector = selector.replace(/:first|:last/g, ""); var targetTagName = ""; var targetId = ""; var targetClasses = []; var selectorToParse = selector.trim(); if (selectorToParse !== "") { var idIndex = selectorToParse.indexOf('#'); if (idIndex !== -1) { var afterId = selectorToParse.substring(idIndex + 1); var nextDot = afterId.indexOf('.'); targetId = nextDot === -1 ? afterId : afterId.substring(0, nextDot); selectorToParse = selectorToParse.substring(0, idIndex) + (nextDot === -1 ? "" : "." + afterId.substring(nextDot + 1)); } var classParts = selectorToParse.split('.'); var possibleTag = classParts.shift(); if (possibleTag) { targetTagName = possibleTag.toLowerCase(); } targetClasses = classParts.filter(function (c) { return c.length > 0; }); } for (var i = 0; i < this.elements.length; i++) { var currentHtml = this.elements[i]; var pos = 0; var subResults = []; while ((pos = currentHtml.indexOf('<', pos)) !== -1) { if (currentHtml.charAt(pos + 1) === '/' || currentHtml.charAt(pos + 1) === '!') { pos++; continue; } var endOpenTag = -1; var insideQuote = false; var quoteChar = ''; for (var j = pos + 1; j < currentHtml.length; j++) { var char = currentHtml.charAt(j); if ((char === '"' || char === "'") && currentHtml.charAt(j - 1) !== '\\') { if (!insideQuote) { insideQuote = true; quoteChar = char; } else if (char === quoteChar) { insideQuote = false; } } if (char === '>' && !insideQuote) { endOpenTag = j; break; } } if (endOpenTag === -1) break; var fullOpenTag = currentHtml.substring(pos, endOpenTag + 1); var tagMatch = fullOpenTag.match(/^<([a-zA-Z0-9_-]+)/); var currentTagName = tagMatch ? tagMatch[1].toLowerCase() : ""; var isMatched = true; if (targetTagName && targetTagName !== currentTagName) { isMatched = false; } var getClassAttr = fullOpenTag.match(/class\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i); var classMatchStr = getClassAttr ? (getClassAttr[1] || getClassAttr[2] || getClassAttr[3] || "") : ""; var getIdAttr = fullOpenTag.match(/id\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i); var idMatchStr = getIdAttr ? (getIdAttr[1] || getIdAttr[2] || getIdAttr[3] || "") : ""; if (isMatched && targetId && idMatchStr !== targetId) { isMatched = false; } if (isMatched && targetClasses.length > 0) { if (classMatchStr) { var currentClasses = classMatchStr.trim().split(/\s+/); for (var c = 0; c < targetClasses.length; c++) { if (currentClasses.indexOf(targetClasses[c]) === -1) { isMatched = false; break; } } } else { isMatched = false; } } if (isMatched && hasAttrFilter) { var actualValue = ""; if (attrNameFilter === "class") { actualValue = classMatchStr; } else if (attrNameFilter === "id") { actualValue = idMatchStr; } else { var getAnyAttr = fullOpenTag.match(new RegExp(attrNameFilter + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s>]+))', 'i')); actualValue = getAnyAttr ? (getAnyAttr[1] || getAnyAttr[2] || getAnyAttr[3] || "") : ""; } var attrExists = fullOpenTag.search(new RegExp(attrNameFilter + '\\s*=', 'i')) !== -1; if (!attrExists) { isMatched = false; } else { if (attrOperator === "=") { if (attrNameFilter === "class") { var classes = actualValue.trim().split(/\s+/); if (classes.indexOf(attrValueFilter) === -1) isMatched = false; } else if (actualValue !== attrValueFilter) { isMatched = false; } } else if (attrOperator === "*=") { if (actualValue.indexOf(attrValueFilter) === -1) isMatched = false; } else if (attrOperator === "^=") { if (actualValue.indexOf(attrValueFilter) !== 0) isMatched = false; } else if (attrOperator === "$=") { if (actualValue.slice(-attrValueFilter.length) !== attrValueFilter) isMatched = false; } } } if (isMatched) { var startTagPos = pos; var endTagPos = endOpenTag + 1; var selfClosingTags = ['img', 'source', 'input', 'br', 'hr', 'link', 'meta']; if (selfClosingTags.indexOf(currentTagName) === -1 && fullOpenTag.indexOf('/>') === -1) { var depth = 1; var tagRegex = new RegExp('<(/?)' + currentTagName + '(?:\\s+[^>]*|\\s*>)', 'gi'); tagRegex.lastIndex = endOpenTag + 1; var match; while ((match = tagRegex.exec(currentHtml)) !== null) { if (match[1] === '/') depth--; else if (match[0].indexOf('/>') === -1) depth++; if (depth === 0) { endTagPos = tagRegex.lastIndex; break; } } } results.push(currentHtml.substring(startTagPos, endTagPos)); } } var nextInstance = _$(results); nextInstance.sourceHtml = this.sourceHtml; this.elements = results; this.length = results.length; return this; }, parent: function () { var results = []; if (!this.sourceHtml) return this; for (var i = 0; i < this.elements.length; i++) { var elem = this.elements[i]; var idx = this.sourceHtml.indexOf(elem); if (idx <= 0) continue; var scanPos = idx - 1; while (scanPos >= 0) { var openTagPos = this.sourceHtml.lastIndexOf('<', scanPos); if (openTagPos === -1) break; if (this.sourceHtml.charAt(openTagPos + 1) !== '/' && this.sourceHtml.charAt(openTagPos + 1) !== '!') { var endOpenTag = this.sourceHtml.indexOf('>', openTagPos); if (endOpenTag !== -1 && endOpenTag > openTagPos) { var fullOpenTag = this.sourceHtml.substring(openTagPos, endOpenTag + 1); var spacePos = fullOpenTag.indexOf(' '); var currentTagName = (spacePos === -1) ? fullOpenTag.substring(1, fullOpenTag.length - 1).toLowerCase() : fullOpenTag.substring(1, spacePos).toLowerCase(); var endTagPos = endOpenTag + 1; var selfClosingTags = ['img', 'source', 'input', 'br', 'hr', 'link', 'meta']; if (selfClosingTags.indexOf(currentTagName) === -1 && fullOpenTag.indexOf('/>') === -1) { var depth = 1; var tagRegex = new RegExp('<(/?)' + currentTagName + '(?:\\s+[^>]*|\\s*>)', 'gi'); tagRegex.lastIndex = endOpenTag + 1; var match; while ((match = tagRegex.exec(this.sourceHtml)) !== null) { if (match[1] === '/') depth--; else if (match[0].indexOf('/>') === -1) depth++; if (depth === 0) { endTagPos = tagRegex.lastIndex; break; } } } if (endTagPos >= idx + elem.length) { var parentBlock = this.sourceHtml.substring(openTagPos, endTagPos); if (results.indexOf(parentBlock) === -1) results.push(parentBlock); break; } } } scanPos = openTagPos - 1; } } var parentInstance = _$(results); parentInstance.sourceHtml = this.sourceHtml; this.elements = results; this.length = results.length; return this; }, closest: function (selector) { var results = []; if (!this.sourceHtml || this.elements.length === 0) return _$([]); for (var i = 0; i < this.elements.length; i++) { var currentElem = this.elements[i]; var currentObj = _$(currentElem); currentObj.sourceHtml = this.sourceHtml; var selfCheck = _$(this.sourceHtml).find(selector); var isSelfMatched = false; for (var s = 0; s < selfCheck.elements.length; s++) { if (selfCheck.elements[s] === currentElem) { isSelfMatched = true; break; } } if (isSelfMatched) { if (results.indexOf(currentElem) === -1) results.push(currentElem); continue; } var parentObj = currentObj.parent(); while (parentObj.elements.length > 0) { var parentElem = parentObj.elements[0]; var checkMatch = _$(this.sourceHtml).find(selector); var isMatched = false; for (var j = 0; j < checkMatch.elements.length; j++) { if (checkMatch.elements[j] === parentElem) { isMatched = true; break; } } if (isMatched) { if (results.indexOf(parentElem) === -1) results.push(parentElem); break; } parentObj = parentObj.parent(); } } var closestInstance = _$(results); closestInstance.sourceHtml = this.sourceHtml; return closestInstance; } }; instance.length = instance.elements.length; return instance; }
