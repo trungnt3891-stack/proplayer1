@@ -1,9 +1,10 @@
 // =============================================================================
-// CẤU HÌNH DOMAIN 
+// CẤU HÌNH DOMAIN (GIỮ NGUYÊN BẢN GỐC HOẠT ĐỘNG TỐT)
 // =============================================================================
 var MAIN_DOMAIN = "www.shortflix.net"; 
 var BASEURL = "https://" + MAIN_DOMAIN; 
 var BASEAPI = "https://" + MAIN_DOMAIN + "/api/search?limit=100&language=vi_VN&lang=vi_VN";
+
 
 // =============================================================================
 // GLOBAL CURSOR CACHE (BỘ NHỚ LƯU CURSOR ĐỘNG TRONG BỘ NHỚ RAM)
@@ -11,113 +12,118 @@ var BASEAPI = "https://" + MAIN_DOMAIN + "/api/search?limit=100&language=vi_VN&l
 var CURSOR_CACHE = {};
 var URL_TO_PAGE_MAP = {};
 var URL_TO_PATH_MAP = {};
-var DEV = false;
 
 function getManifest() {
     return JSON.stringify({
         "id": "shortflix",
         "name": "Phim Ngắn Shortflix",
-        "description": "Bản Webview Tối Giản: 1 Nút bấm để xem trên giao diện gốc",
-        "version": "2.2.0",
-        "info": "Nhấn vào xem để mở trình duyệt webview bên trong app. Giao diện đã được tự động tối ưu ẩn bớt quảng cáo.",
+        "description": "Bản Webview Mặc Định: 1 nút bấm mở giao diện web gốc",
+        "version": "2.5.0", 
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/shortflix.png",
         "isEnabled": true,
         "hasLogin": true,                     
         "loginUrl": BASEURL + "/vi/login",    
-        "type": "shortfilm",         
-        "layoutType": "VERTICAL",    
-        "playerType": "webview"      // [CHỈNH SỬA]: ÉP DÙNG WEBVIEW THEO YÊU CẦU
+        "type": "shortfilm",                  
+        "layoutType": "VERTICAL",             
+        "playerType": "webview" // BẮT BUỘC WEBVIEW ĐỂ TỰ CHỌN TẬP
     });
 }
 
 function log(msg) {
-    if (DEV) {
-        if (typeof nativeLog !== 'undefined') {
-            nativeLog("[" + BASEURL.replace(/^(https?:\/\/)?(www\.)?/, "") + "]: " + msg);
-        } else if (typeof console !== 'undefined' && console.log) {
-            console.log("[" + BASEURL.replace(/^(https?:\/\/)?(www\.)?/, "") + "]: " + msg);
-        }
+    if (typeof nativeLog !== 'undefined') {
+        nativeLog("[shortflix] " + msg);
+    } else if (typeof console !== 'undefined' && console.log) {
+        console.log("[shortflix] " + msg);
     }
 }
 
 function getHomeSections() {
-    try {
-        var listurl = '[{\"link\":\"&sortBy=last_episode_at\",\"name\":\"Phim Mới\"}]';
-        var menulist = buildMenu(listurl, true);
-        return JSON.stringify(menulist);
-    } catch (e) {
-        return JSON.stringify([]);
-    }
+    return JSON.stringify([
+        { "slug": "&sortBy=last_episode_at", "title": "Phim Mới Cập Nhật", "type": "Grid" },
+        { "slug": "&genre=tong-tai", "title": "Phim Tổng Tài", "type": "Horizontal" },
+        { "slug": "&genre=co-dai", "title": "Phim Cổ Đại", "type": "Horizontal" },
+        { "slug": "&genre=ngon-tinh", "title": "Phim Ngôn Tình", "type": "Horizontal" },
+        { "slug": "&q=l%E1%BB%93ng+ti%E1%BA%BFng", "title": "Phim Lồng Tiếng", "type": "Horizontal" }
+    ]);
 }
 
 function getPrimaryCategories() {
-    try {
-        var listurl = getLISTmenu();
-        var menulist = buildMenu(listurl);
-        return JSON.stringify(menulist);
-    } catch (e) {
-        return JSON.stringify([]);
-    }
+    var listurl = getLISTmenu();
+    var menulist = buildMenu(listurl);
+    return JSON.stringify(menulist);
 }
 
 function getFilterConfig() {
-    try {
-        var listurl = getLISTmenu();
-        var menulist = buildMenu(listurl);
-        return JSON.stringify({ category: menulist });
-    } catch (e) {
-        return JSON.stringify({ category: [] });
-    }
+    return JSON.stringify({});
 }
 
 // =============================================================================
-// HELPER: CURSOR BASE64 ENCODE / DECODE 
+// HELPER: CURSOR BASE64 ENCODE / DECODE (GIỮ NGUYÊN TỪ CODE ANDROID GỐC)
 // =============================================================================
 
 function encodeBase64(str) {
-    try {
-        if (typeof btoa !== 'undefined') { try { return btoa(str); } catch (e) {} }
-        var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-        var output = '';
-        for (var block, charCode, idx = 0, map = chars;
-            str.charAt(idx | 0) || (map = '=', idx % 1);
-            output += map.charAt(63 & block >> 8 - idx % 1 * 8)) {
-            charCode = str.charCodeAt(idx += 3/4);
-            block = block << 8 | charCode;
-        }
-        return output;
-    } catch (e) { return ""; }
+    if (typeof btoa !== 'undefined') {
+        try { return btoa(str); } catch (e) {}
+    }
+    var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    var output = '';
+    for (var block, charCode, idx = 0, map = chars;
+        str.charAt(idx | 0) || (map = '=', idx % 1);
+        output += map.charAt(63 & block >> 8 - idx % 1 * 8)) {
+        charCode = str.charCodeAt(idx += 3/4);
+        block = block << 8 | charCode;
+    }
+    return output;
 }
 
 function decodeBase64(str) {
+    if (typeof atob !== 'undefined') {
+        try { return atob(str); } catch (e) {}
+    }
+    var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    var output = '';
+    str = String(str).replace(/=+$/, '');
+    for (var bc = 0, bs, buffer, idx = 0;
+        buffer = str.charAt(idx++);
+        ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer, bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0
+    ) {
+        buffer = chars.indexOf(buffer);
+    }
+    return output;
+}
+
+function parseCursor(cursorBase64) {
+    if (!cursorBase64) return null;
     try {
-        if (typeof atob !== 'undefined') { try { return atob(str); } catch (e) {} }
-        var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-        var output = '';
-        str = String(str).replace(/=+$/, '');
-        for (var bc = 0, bs, buffer, idx = 0;
-            buffer = str.charAt(idx++);
-            ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer, bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0
-        ) {
-            buffer = chars.indexOf(buffer);
-        }
-        return output;
-    } catch (e) { return ""; }
+        var jsonStr = decodeBase64(cursorBase64);
+        return JSON.parse(jsonStr);
+    } catch (e) {
+        return null;
+    }
 }
 
 function createCursor(lastItem) {
+    if (!lastItem) return "";
     try {
-        if (!lastItem) return "";
         var rawOrder = lastItem.orderValue || lastItem.updatedAt || lastItem.publishedAt || lastItem.last_episode_at || 0;
         var orderVal = Number(rawOrder);
+        
         if (isNaN(orderVal) && typeof rawOrder === 'string') {
             var dateParsed = Date.parse(rawOrder);
             orderVal = !isNaN(dateParsed) ? dateParsed : 0;
         }
-        var cursorObj = { id: String(lastItem.id || ""), timestamp: 0, orderValue: orderVal || 0 };
+
+        var cursorObj = {
+            id: String(lastItem.id || ""),
+            timestamp: 0,
+            orderValue: orderVal || 0
+        };
+        
         return encodeBase64(JSON.stringify(cursorObj));
-    } catch (e) { return ""; }
+    } catch (e) {
+        return "";
+    }
 }
 
 // =============================================================================
@@ -165,6 +171,7 @@ function getUrlList(slug, filtersJson) {
         }
 
         resultUrl = resultUrl.replace(/([^:]\/)\/+/g, "$1");
+
         URL_TO_PAGE_MAP[resultUrl] = page;
         URL_TO_PATH_MAP[resultUrl] = path;
 
@@ -175,7 +182,7 @@ function getUrlList(slug, filtersJson) {
 }
 
 function getUrlSearch(keyword, filtersJson) {
-    return BASEAPI + "&q=" + encodeURIComponent(keyword || "");
+    return BASEAPI + "&q=" + encodeURIComponent(keyword);
 }
 
 function getUrlDetail(slug) {
@@ -189,7 +196,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSERS
+// PARSERS (GIỮ NGUYÊN 100% LOGIC CỦA CODE GỐC ĐỂ KHÔNG BỊ LỖI LOAD TRANG CHỦ)
 // =============================================================================
 
 function parseListResponse(html, $url) {
@@ -201,10 +208,14 @@ function parseListResponse(html, $url) {
         if ($data && $data.items && $data.items.length > 0) {
             for (var $j = 0; $j < $data.items.length; $j++) {
                 var $item = $data.items[$j];
+                var year = "";
+                var lang = "";
                 var current = $item.status ? $item.status.replace("PUBLISHED", "Hoàn Thành") : "";
                 
                 var itemSlug = $item.slug || $item.id || "";
                 var href = BASEURL + "/vi/videos/" + itemSlug;
+                
+                var quality = "HD";
                 var title = $item.title || "";
                 var src = $item.thumbnailUrl || "";
 
@@ -215,8 +226,8 @@ function parseListResponse(html, $url) {
                         "title": title.trim(),
                         "posterUrl": cleanThumb,
                         "backdropUrl": cleanThumb,
-                        "quality": "HD",
-                        "lang": "",
+                        "quality": quality,
+                        "lang": lang,
                         "episode_current": current
                     });
                 }
@@ -250,7 +261,11 @@ function parseListResponse(html, $url) {
         });
 
     } catch (e) {
-        return JSON.stringify({ "items": [], "nextCursor": "", "pagination": { "currentPage": 1, "totalPages": 1 } });
+        return JSON.stringify({
+            "items": [],
+            "nextCursor": "",
+            "pagination": { "currentPage": 1, "totalPages": 1 }
+        });
     }
 }
 
@@ -258,32 +273,45 @@ function parseSearchResponse(html, url) {
     return parseListResponse(html, url);
 }
 
-// [CHỈNH SỬA]: TRẢ VỀ DUY NHẤT 1 NÚT ĐỂ MỞ WEBVIEW
+// CHỈNH SỬA: CHỈ TRẢ VỀ DUY NHẤT 1 NÚT ĐỂ XEM
 function parseMovieDetail(html, url) {
     try {
         var id = url;
-        var lname = _$(html).find("h1").text() || "Đang cập nhật...";
-        var limg = _$(html).find('meta[property="og:image"]').attr("content");
-        var ldes = _$(html).find(".order-6:content('Giới thiệu')").text();
-        var category = _$(html).find(".text-sm:content('Thể loại:')").parent().text(" - ").replace("Thể loại - : - ", "");
-        var episode_current = _$(html).find("span:content('Tập mới nhất:')").parent().text().trim().replace("Tập mới nhất:", "");
+        var lname = "Đang cập nhật...";
+        var limg = "";
+        var ldes = "Không có mô tả.";
+        var category = "";
+        var episode_current = "";
+        var quality = "HD";
+        var year = 2026;
+        var rating = 0;
+        var extra = "";
+        var lactor = "";
+        var ldirec = "";
+        var lduran = "";
+        var status = "";
+        
+        lname = _$(html).find("h1").text();
+        limg = _$(html).find('meta[property="og:image"]').attr("content");
+        ldes = _$(html).find(".order-6:content('Giới thiệu')").text();
+        category = _$(html).find(".text-sm:content('Thể loại:')").parent().text(" - ").replace("Thể loại - : - ", "");
+        episode_current = _$(html).find("span:content('Tập mới nhất:')").parent().text().trim().replace("Tập mới nhất:", "");
         
         var yearRaw = _$(html).find("span:content('Thời gian xuất bản:')").parent().text().trim().replace("Thời gian xuất bản:", "");
-        var year = Number(yearRaw) || 2026;
-        var lactor = _$(html).find("span:content('Diễn viên:')").parent().text().trim().replace("Diễn viên:", "");
-        var ldirec = _$(html).find("span:content('Đạo diễn:')").parent().text().trim().replace("Đạo diễn:", "");
-        var lduran = _$(html).find("span:content('Thời lượng:')").parent().text().trim().replace("Thời lượng:", "");
-        var status = _$(html).find("span:content('Trạng thái:')").parent().text().trim().replace("Trạng thái:", "");
+        year = Number(yearRaw) || 2026;
+        lactor = _$(html).find("span:content('Diễn viên:')").parent().text().trim().replace("Diễn viên:", "");
+        ldirec = _$(html).find("span:content('Đạo diễn:')").parent().text().trim().replace("Đạo diễn:", "");
+        lduran = _$(html).find("span:content('Thời lượng:')").parent().text().trim().replace("Thời lượng:", "");
+        status = _$(html).find("span:content('Trạng thái:')").parent().text().trim().replace("Trạng thái:", "");
         
+        // CHỈ TẠO 1 SERVER, VỚI 1 TẬP ẢO CHỨA LINK TRANG WEB
         var servers = [];
-        
-        // CHỈ TẠO 1 TẬP ẢO: "Nhấn vào để Xem"
         servers.push({
             name: "Giao Diện Web Gốc",
             episodes: [{
-                id: url, // Gửi link trang hiện tại
+                id: url, // Dùng chính URL của trang chi tiết
                 name: "Nhấn vào để Xem",
-                slug: "webview-play"
+                slug: "full"
             }]
         });
         
@@ -293,9 +321,9 @@ function parseMovieDetail(html, url) {
             posterUrl: limg,
             backdropUrl: limg,
             description: ldes,
-            quality: "HD",
+            quality: quality,
             year: year,
-            rating: 8.5,
+            rating: rating,
             status: status,
             category: category,
             episode_current: episode_current,
@@ -303,53 +331,35 @@ function parseMovieDetail(html, url) {
             duration: lduran || "",
             casts: lactor || "",
             director: ldirec || "",
-            extra: "",
-            type: "shortfilm",
-            layoutType: "VERTICAL"
+            extra: extra
         });
     } catch (e) {
-        return JSON.stringify({ id: url || "error", title: "Lỗi tải chi tiết", servers: [] });
+        return JSON.stringify({ id: url || "error", title: "Lỗi chi tiết", servers: [] });
     }
 }
 
-// [CHỈNH SỬA]: TRẢ VỀ ĐÚNG URL GỐC ĐỂ APP MỞ TRONG WEBVIEW
+// CHỈNH SỬA: APP SẼ NHẬN ĐƯỢC LINK VÀ MỞ WEBVIEW
 function parseDetailResponse(html, url) {
     try {
-        // Đoạn Custom-JS CỰC KỲ SIÊU NHẸ chỉ dùng CSS để giấu Quảng Cáo, Header, Footer
-        // Sẽ không gây lỗi hay crash App
-        var cleanUI_JS = "var s=document.createElement('style');s.innerHTML='header,.header,footer,.footer,.download-app,.app-download,[class*=\"ad-\"],[id*=\"ad-\"]{display:none!important}';document.head.appendChild(s);";
-        
+        // KHÔNG dùng JS rác tiêm vào Webview nữa để tránh lỗi.
+        // App sẽ mở trình duyệt với url gốc.
         return JSON.stringify({
-            "url": url, 
-            "isEmbed": true, // BẮT BUỘC TRUE ĐỂ APP HIỂU ĐÂY LÀ WEBVIEW MÀ KHÔNG GỌI EXOPLAYER
+            "url": url,
+            "isEmbed": true, // Báo cho App biết phải mở trình duyệt webview
             "mimeType": "",
             "headers": {
                 "Referer": BASEURL,
                 "Origin": BASEURL,
-                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
-                "Custom-Js": cleanUI_JS
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
             },
             "subtitles": []
         });
     } catch (e) {
-        return JSON.stringify({ 
-            "url": url, 
-            "isEmbed": true, 
-            "headers": {} 
-        });
+        return JSON.stringify({ "url": url, "isEmbed": true, "headers": {} });
     }
 }
 
-function parseCategoriesResponse(apiResponseJson) {
-    try {
-        var listurl = getLISTmenu();
-        var menulist = buildMenu(listurl);
-        return JSON.stringify(menulist);
-    } catch (e) {
-        return JSON.stringify([]);
-    }
-}
-
+function parseCategoriesResponse(apiResponseJson) { return "[]"; }
 function parseCountriesResponse(html) { return "[]"; }
 function parseYearsResponse(html) { return "[]"; }
 
@@ -381,5 +391,5 @@ function buildMenu(menuStr, type) {
     return menulist; 
 }
 
-function _$(htmlOrBlock){ 
-	if (htmlOrBlock && typeof htmlOrBlock === 'object' && htmlOrBlock.elements) { return htmlOrBlock; } var instance = { sourceHtml: typeof htmlOrBlock === 'string' ? htmlOrBlock : '', elements: Array.isArray(htmlOrBlock) ? htmlOrBlock : (htmlOrBlock ? [htmlOrBlock] : []), length: 0, find: function (selector) { if (selector.indexOf(',') !== -1) { var results = []; var selectors = selector.split(',').map(function (s) { return s.trim(); }); for (var s = 0; s < selectors.length; s++) { if (selectors[s] === "") continue; var subInstance = this.find(selectors[s]); for (var r = 0; r < subInstance.elements.length; r++) { var element = subInstance.elements[r]; if (results.indexOf(element) === -1) { results.push(element); } } } var multiInstance = _$(results); multiInstance.sourceHtml = this.sourceHtml; return multiInstance; } var results = []; var contentFilter = ""; if (selector.indexOf(":content(") !== -1) { var contentMatch = selector.match(/:content\((?:"([^"]*)"|'([^']*)'|([^)]*))\)/); if (contentMatch) { contentFilter = contentMatch[1] || contentMatch[2] || contentMatch[3] || ""; selector = selector.replace(/:content\((?:"[^"]*"|'[^']*'|[^)]*)\)/, ""); } } var attrNameFilter = ""; var attrValueFilter = ""; var attrOperator = "="; var hasAttrFilter = false; var attrMatch = selector.match(/\[([a-zA-Z0-9_-]+)\s*([*^$]?=)\s*(?:"([^"]*)"|'([^']*)'|([^\]"']*))\]/); if (attrMatch) { hasAttrFilter = true; attrNameFilter = attrMatch[1]; attrOperator = attrMatch[2]; attrValueFilter = attrMatch[3] || attrMatch[4] || attrMatch[5] || ""; selector = selector.replace(/\[.*?\]/, ""); } var notSelector = ""; if (selector.indexOf(":not(") !== -1) { var notMatch = selector.match(/:not\(([^)]+)\)/); if (notMatch) { notSelector = notMatch[1]; selector = selector.replace(/:not\([^)]+\)/, ""); } } var isFirstFilter = selector.indexOf(":first") !== -1; var isLastFilter = selector.indexOf(":last") !== -1; selector = selector.replace(/:first|:last/g, ""); var targetTagName = ""; var targetId = ""; var targetClasses = []; var selectorToParse = selector.trim(); if (selectorToParse !== "") { var idIndex = selectorToParse.indexOf('#'); if (idIndex !== -1) { var afterId = selectorToParse.substring(idIndex + 1); var nextDot = afterId.indexOf('.'); targetId = nextDot === -1 ? afterId : afterId.substring(0, nextDot); selectorToParse = selectorToParse.substring(0, idIndex) + (nextDot === -1 ? "" : "." + afterId.substring(nextDot + 1)); } var classParts = selectorToParse.split('.'); var possibleTag = classParts.shift(); if (possibleTag) { targetTagName = possibleTag.toLowerCase(); } targetClasses = classParts.filter(function (c) { return c.length > 0; }); } for (var i = 0; i < this.elements.length; i++) { var currentHtml = this.elements[i]; var pos = 0; var subResults = []; while ((pos = currentHtml.indexOf('<', pos)) !== -1) { if (currentHtml.charAt(pos + 1) === '/' || currentHtml.charAt(pos + 1) === '!') { pos++; continue; } var endOpenTag = -1; var insideQuote = false; var quoteChar = ''; for (var j = pos + 1; j < currentHtml.length; j++) { var char = currentHtml.charAt(j); if ((char === '"' || char === "'") && currentHtml.charAt(j - 1) !== '\\') { if (!insideQuote) { insideQuote = true; quoteChar = char; } else if (char === quoteChar) { insideQuote = false; } } if (char === '>' && !insideQuote) { endOpenTag = j; break; } } if (endOpenTag === -1) break; var fullOpenTag = currentHtml.substring(pos, endOpenTag + 1); var tagMatch = fullOpenTag.match(/^<([a-zA-Z0-9_-]+)/); var currentTagName = tagMatch ? tagMatch[1].toLowerCase() : ""; var isMatched = true; if (targetTagName && targetTagName !== currentTagName) { isMatched = false; } var getClassAttr = fullOpenTag.match(/class\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i); var classMatchStr = getClassAttr ? (getClassAttr[1] || getClassAttr[2] || getClassAttr[3] || "") : ""; var getIdAttr = fullOpenTag.match(/id\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i); var idMatchStr = getIdAttr ? (getIdAttr[1] || getIdAttr[2] || getIdAttr[3] || "") : ""; if (isMatched && targetId && idMatchStr !== targetId) { isMatched = false; } if (isMatched && targetClasses.length > 0) { if (classMatchStr) { var currentClasses = classMatchStr.trim().split(/\s+/); for (var c = 0; c < targetClasses.length; c++) { if (currentClasses.indexOf(targetClasses[c]) === -1) { isMatched = false; break; } } } else { isMatched = false; } } if (isMatched && hasAttrFilter) { var actualValue = ""; if (attrNameFilter === "class") { actualValue = classMatchStr; } else if (attrNameFilter === "id") { actualValue = idMatchStr; } else { var getAnyAttr = fullOpenTag.match(new RegExp(attrNameFilter + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s>]+))', 'i')); actualValue = getAnyAttr ? (getAnyAttr[1] || getAnyAttr[2] || getAnyAttr[3] || "") : ""; } var attrExists = fullOpenTag.search(new RegExp(attrNameFilter + '\\s*=', 'i')) !== -1; if (!attrExists) { isMatched = false; } else { if (attrOperator === "=") { if (attrNameFilter === "class") { var classes = actualValue.trim().split(/\s+/); if (classes.indexOf(attrValueFilter) === -1) isMatched = false; } else if (actualValue !== attrValueFilter) { isMatched = false; } } else if (attrOperator === "*=") { if (actualValue.indexOf(attrValueFilter) === -1) isMatched = false; } else if (attrOperator === "^=") { if (actualValue.indexOf(attrValueFilter) !== 0) isMatched = false; } else if (attrOperator === "$=") { if (actualValue.slice(-attrValueFilter.length) !== attrValueFilter) isMatched = false; } } } if (isMatched) { var startTagPos = pos; var endTagPos = endOpenTag + 1; var selfClosingTags = ['img', 'source', 'input', 'br', 'hr', 'link', 'meta']; if (selfClosingTags.indexOf(currentTagName) === -1 && fullOpenTag.indexOf('/>') === -1) { var depth = 1; var tagRegex = new RegExp('<(/?)' + currentTagName + '(?:\\s+[^>]*|\\s*>)', 'gi'); tagRegex.lastIndex = endOpenTag + 1; var match; while ((match = tagRegex.exec(currentHtml)) !== null) { if (match[1] === '/') depth--; else if (match[0].indexOf('/>') === -1) depth++; if (depth === 0) { endTagPos = tagRegex.lastIndex; break; } } } results.push(currentHtml.substring(startTagPos, endTagPos)); } } var nextInstance = _$(results); nextInstance.sourceHtml = this.sourceHtml; this.elements = results; this.length = results.length; return this; }, parent: function () { var results = []; if (!this.sourceHtml) return this; for (var i = 0; i < this.elements.length; i++) { var elem = this.elements[i]; var idx = this.sourceHtml.indexOf(elem); if (idx <= 0) continue; var scanPos = idx - 1; while (scanPos >= 0) { var openTagPos = this.sourceHtml.lastIndexOf('<', scanPos); if (openTagPos === -1) break; if (this.sourceHtml.charAt(openTagPos + 1) !== '/' && this.sourceHtml.charAt(openTagPos + 1) !== '!') { var endOpenTag = this.sourceHtml.indexOf('>', openTagPos); if (endOpenTag !== -1 && endOpenTag > openTagPos) { var fullOpenTag = this.sourceHtml.substring(openTagPos, endOpenTag + 1); var spacePos = fullOpenTag.indexOf(' '); var currentTagName = (spacePos === -1) ? fullOpenTag.substring(1, fullOpenTag.length - 1).toLowerCase() : fullOpenTag.substring(1, spacePos).toLowerCase(); var endTagPos = endOpenTag + 1; var selfClosingTags = ['img', 'source', 'input', 'br', 'hr', 'link', 'meta']; if (selfClosingTags.indexOf(currentTagName) === -1 && fullOpenTag.indexOf('/>') === -1) { var depth = 1; var tagRegex = new RegExp('<(/?)' + currentTagName + '(?:\\s+[^>]*|\\s*>)', 'gi'); tagRegex.lastIndex = endOpenTag + 1; var match; while ((match = tagRegex.exec(this.sourceHtml)) !== null) { if (match[1] === '/') depth--; else if (match[0].indexOf('/>') === -1) depth++; if (depth === 0) { endTagPos = tagRegex.lastIndex; break; } } } if (endTagPos >= idx + elem.length) { var parentBlock = this.sourceHtml.substring(openTagPos, endTagPos); if (results.indexOf(parentBlock) === -1) results.push(parentBlock); break; } } } scanPos = openTagPos - 1; } } var parentInstance = _$(results); parentInstance.sourceHtml = this.sourceHtml; this.elements = results; this.length = results.length; return this; }, closest: function (selector) { var results = []; if (!this.sourceHtml || this.elements.length === 0) return _$([]); for (var i = 0; i < this.elements.length; i++) { var currentElem = this.elements[i]; var currentObj = _$(currentElem); currentObj.sourceHtml = this.sourceHtml; var selfCheck = _$(this.sourceHtml).find(selector); var isSelfMatched = false; for (var s = 0; s < selfCheck.elements.length; s++) { if (selfCheck.elements[s] === currentElem) { isSelfMatched = true; break; } } if (isSelfMatched) { if (results.indexOf(currentElem) === -1) results.push(currentElem); continue; } var parentObj = currentObj.parent(); while (parentObj.elements.length > 0) { var parentElem = parentObj.elements[0]; var checkMatch = _$(this.sourceHtml).find(selector); var isMatched = false; for (var j = 0; j < checkMatch.elements.length; j++) { if (checkMatch.elements[j] === parentElem) { isMatched = true; break; } } if (isMatched) { if (results.indexOf(parentElem) === -1) results.push(parentElem); break; } parentObj = parentObj.parent(); } } var closestInstance = _$(results); closestInstance.sourceHtml = this.sourceHtml; return closestInstance; } }; instance.length = instance.elements.length; return instance; }
+// BỘ DOM ẢO _$ (GIỮ NGUYÊN)
+function _$(htmlOrBlock){ if (htmlOrBlock && typeof htmlOrBlock === 'object' && htmlOrBlock.elements) { return htmlOrBlock; } var instance = { sourceHtml: typeof htmlOrBlock === 'string' ? htmlOrBlock : '', elements: Array.isArray(htmlOrBlock) ? htmlOrBlock : (htmlOrBlock ? [htmlOrBlock] : []), length: 0, find: function (selector) { if (selector.indexOf(',') !== -1) { var results = []; var selectors = selector.split(',').map(function (s) { return s.trim(); }); for (var s = 0; s < selectors.length; s++) { if (selectors[s] === "") continue; var subInstance = this.find(selectors[s]); for (var r = 0; r < subInstance.elements.length; r++) { var element = subInstance.elements[r]; if (results.indexOf(element) === -1) { results.push(element); } } } var multiInstance = _$(results); multiInstance.sourceHtml = this.sourceHtml; return multiInstance; } var results = []; var contentFilter = ""; if (selector.indexOf(":content(") !== -1) { var contentMatch = selector.match(/:content\((?:"([^"]*)"|'([^']*)'|([^)]*))\)/); if (contentMatch) { contentFilter = contentMatch[1] || contentMatch[2] || contentMatch[3] || ""; selector = selector.replace(/:content\((?:"[^"]*"|'[^']*'|[^)]*)\)/, ""); } } var attrNameFilter = ""; var attrValueFilter = ""; var attrOperator = "="; var hasAttrFilter = false; var attrMatch = selector.match(/\[([a-zA-Z0-9_-]+)\s*([*^$]?=)\s*(?:"([^"]*)"|'([^']*)'|([^\]"']*))\]/); if (attrMatch) { hasAttrFilter = true; attrNameFilter = attrMatch[1]; attrOperator = attrMatch[2]; attrValueFilter = attrMatch[3] || attrMatch[4] || attrMatch[5] || ""; selector = selector.replace(/\[.*?\]/, ""); } var notSelector = ""; if (selector.indexOf(":not(") !== -1) { var notMatch = selector.match(/:not\(([^)]+)\)/); if (notMatch) { notSelector = notMatch[1]; selector = selector.replace(/:not\([^)]+\)/, ""); } } var isFirstFilter = selector.indexOf(":first") !== -1; var isLastFilter = selector.indexOf(":last") !== -1; selector = selector.replace(/:first|:last/g, ""); var targetTagName = ""; var targetId = ""; var targetClasses = []; var selectorToParse = selector.trim(); if (selectorToParse !== "") { var idIndex = selectorToParse.indexOf('#'); if (idIndex !== -1) { var afterId = selectorToParse.substring(idIndex + 1); var nextDot = afterId.indexOf('.'); targetId = nextDot === -1 ? afterId : afterId.substring(0, nextDot); selectorToParse = selectorToParse.substring(0, idIndex) + (nextDot === -1 ? "" : "." + afterId.substring(nextDot + 1)); } var classParts = selectorToParse.split('.'); var possibleTag = classParts.shift(); if (possibleTag) { targetTagName = possibleTag.toLowerCase(); } targetClasses = classParts.filter(function (c) { return c.length > 0; }); } for (var i = 0; i < this.elements.length; i++) { var currentHtml = this.elements[i]; var pos = 0; var subResults = []; while ((pos = currentHtml.indexOf('<', pos)) !== -1) { if (currentHtml.charAt(pos + 1) === '/' || currentHtml.charAt(pos + 1) === '!') { pos++; continue; } var endOpenTag = -1; var insideQuote = false; var quoteChar = ''; for (var j = pos + 1; j < currentHtml.length; j++) { var char = currentHtml.charAt(j); if ((char === '"' || char === "'") && currentHtml.charAt(j - 1) !== '\\') { if (!insideQuote) { insideQuote = true; quoteChar = char; } else if (char === quoteChar) { insideQuote = false; } } if (char === '>' && !insideQuote) { endOpenTag = j; break; } } if (endOpenTag === -1) break; var fullOpenTag = currentHtml.substring(pos, endOpenTag + 1); var tagMatch = fullOpenTag.match(/^<([a-zA-Z0-9_-]+)/); var currentTagName = tagMatch ? tagMatch[1].toLowerCase() : ""; var isMatched = true; if (targetTagName && targetTagName !== currentTagName) { isMatched = false; } var getClassAttr = fullOpenTag.match(/class\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i); var classMatchStr = getClassAttr ? (getClassAttr[1] || getClassAttr[2] || getClassAttr[3] || "") : ""; var getIdAttr = fullOpenTag.match(/id\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i); var idMatchStr = getIdAttr ? (getIdAttr[1] || getIdAttr[2] || getIdAttr[3] || "") : ""; if (isMatched && targetId && idMatchStr !== targetId) { isMatched = false; } if (isMatched && targetClasses.length > 0) { if (classMatchStr) { var currentClasses = classMatchStr.trim().split(/\s+/); for (var c = 0; c < targetClasses.length; c++) { if (currentClasses.indexOf(targetClasses[c]) === -1) { isMatched = false; break; } } } else { isMatched = false; } } if (isMatched && hasAttrFilter) { var actualValue = ""; if (attrNameFilter === "class") { actualValue = classMatchStr; } else if (attrNameFilter === "id") { actualValue = idMatchStr; } else { var getAnyAttr = fullOpenTag.match(new RegExp(attrNameFilter + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s>]+))', 'i')); actualValue = getAnyAttr ? (getAnyAttr[1] || getAnyAttr[2] || getAnyAttr[3] || "") : ""; } var attrExists = fullOpenTag.search(new RegExp(attrNameFilter + '\\s*=', 'i')) !== -1; if (!attrExists) { isMatched = false; } else { if (attrOperator === "=") { if (attrNameFilter === "class") { var classes = actualValue.trim().split(/\s+/); if (classes.indexOf(attrValueFilter) === -1) isMatched = false; } else if (actualValue !== attrValueFilter) { isMatched = false; } } else if (attrOperator === "*=") { if (actualValue.indexOf(attrValueFilter) === -1) isMatched = false; } else if (attrOperator === "^=") { if (actualValue.indexOf(attrValueFilter) !== 0) isMatched = false; } else if (attrOperator === "$=") { if (actualValue.slice(-attrValueFilter.length) !== attrValueFilter) isMatched = false; } } } if (isMatched) { var startTagPos = pos; var endTagPos = endOpenTag + 1; var selfClosingTags = ['img', 'source', 'input', 'br', 'hr', 'link', 'meta']; if (selfClosingTags.indexOf(currentTagName) === -1 && fullOpenTag.indexOf('/>') === -1) { var depth = 1; var tagRegex = new RegExp('<(/?)' + currentTagName + '(?:\\s+[^>]*|\\s*>)', 'gi'); tagRegex.lastIndex = endOpenTag + 1; var match; while ((match = tagRegex.exec(currentHtml)) !== null) { if (match[1] === '/') depth--; else if (match[0].indexOf('/>') === -1) depth++; if (depth === 0) { endTagPos = tagRegex.lastIndex; break; } } } results.push(currentHtml.substring(startTagPos, endTagPos)); } } var nextInstance = _$(results); nextInstance.sourceHtml = this.sourceHtml; this.elements = results; this.length = results.length; return this; }, parent: function () { var results = []; if (!this.sourceHtml) return this; for (var i = 0; i < this.elements.length; i++) { var elem = this.elements[i]; var idx = this.sourceHtml.indexOf(elem); if (idx <= 0) continue; var scanPos = idx - 1; while (scanPos >= 0) { var openTagPos = this.sourceHtml.lastIndexOf('<', scanPos); if (openTagPos === -1) break; if (this.sourceHtml.charAt(openTagPos + 1) !== '/' && this.sourceHtml.charAt(openTagPos + 1) !== '!') { var endOpenTag = this.sourceHtml.indexOf('>', openTagPos); if (endOpenTag !== -1 && endOpenTag > openTagPos) { var fullOpenTag = this.sourceHtml.substring(openTagPos, endOpenTag + 1); var spacePos = fullOpenTag.indexOf(' '); var currentTagName = (spacePos === -1) ? fullOpenTag.substring(1, fullOpenTag.length - 1).toLowerCase() : fullOpenTag.substring(1, spacePos).toLowerCase(); var endTagPos = endOpenTag + 1; var selfClosingTags = ['img', 'source', 'input', 'br', 'hr', 'link', 'meta']; if (selfClosingTags.indexOf(currentTagName) === -1 && fullOpenTag.indexOf('/>') === -1) { var depth = 1; var tagRegex = new RegExp('<(/?)' + currentTagName + '(?:\\s+[^>]*|\\s*>)', 'gi'); tagRegex.lastIndex = endOpenTag + 1; var match; while ((match = tagRegex.exec(this.sourceHtml)) !== null) { if (match[1] === '/') depth--; else if (match[0].indexOf('/>') === -1) depth++; if (depth === 0) { endTagPos = tagRegex.lastIndex; break; } } } if (endTagPos >= idx + elem.length) { var parentBlock = this.sourceHtml.substring(openTagPos, endTagPos); if (results.indexOf(parentBlock) === -1) results.push(parentBlock); break; } } } scanPos = openTagPos - 1; } } var parentInstance = _$(results); parentInstance.sourceHtml = this.sourceHtml; this.elements = results; this.length = results.length; return this; }, closest: function (selector) { var results = []; if (!this.sourceHtml || this.elements.length === 0) return _$([]); for (var i = 0; i < this.elements.length; i++) { var currentElem = this.elements[i]; var currentObj = _$(currentElem); currentObj.sourceHtml = this.sourceHtml; var selfCheck = _$(this.sourceHtml).find(selector); var isSelfMatched = false; for (var s = 0; s < selfCheck.elements.length; s++) { if (selfCheck.elements[s] === currentElem) { isSelfMatched = true; break; } } if (isSelfMatched) { if (results.indexOf(currentElem) === -1) results.push(currentElem); continue; } var parentObj = currentObj.parent(); while (parentObj.elements.length > 0) { var parentElem = parentObj.elements[0]; var checkMatch = _$(this.sourceHtml).find(selector); var isMatched = false; for (var j = 0; j < checkMatch.elements.length; j++) { if (checkMatch.elements[j] === parentElem) { isMatched = true; break; } } if (isMatched) { if (results.indexOf(parentElem) === -1) results.push(parentElem); break; } parentObj = parentObj.parent(); } } var closestInstance = _$(results); closestInstance.sourceHtml = this.sourceHtml; return closestInstance; } }; instance.length = instance.elements.length; return instance; }
