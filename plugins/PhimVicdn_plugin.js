@@ -3,26 +3,34 @@
 // =============================================================================
 var BASEURL = "https://vicdn.cc"; 
 var BASEAPI = BASEURL + "/api";
-var DEV = true;
+var DEV = false;
 
 function getManifest() {
-  return JSON.stringify({
-    id: "vicdn",
-    name: "Nguồn Vicdn",
-    description: "Nguồn phim Vicdn (Bản tối ưu iOS: Fix Load, Webview, Code Safe).",
-    "version": "1.0.1",
-    info: "Nguồn phim vietsub và thuyết minh mới.\n\n Hỗ trợ lồng tiếng và có tốc độ phát rất nhanh.",
-    baseUrl: "https://vicdn.cc",
-    iconUrl: "https://vicdn.cc/vicdn.png",
-    isEnabled: true,
-    "adblock": false,
-    type: "MOVIE",
-    playerType: "embed",
-  });
+    return JSON.stringify({
+        "id": "vicdn",
+        "name": "Nguồn Vicdn",
+        "description": "Bản Webview: Fix triệt để TypeError iOS, Khắc phục lỗi Load Phim",
+        "version": "1.0.2",
+        "info": "Nguồn phim vietsub và thuyết minh mới. Hỗ trợ lồng tiếng và có tốc độ phát cực nhanh.",
+        "baseUrl": "https://vicdn.cc",
+        "iconUrl": "https://vicdn.cc/vicdn.png",
+        "isEnabled": true,
+        "adblock": false,
+        "type": "shortfilm",         // Hỗ trợ lướt dạng Tiktok
+        "layoutType": "VERTICAL",    // Ép xoay dọc màn hình
+        "playerType": "webview",     // BẮT BUỘC để chạy script iframe tùy chỉnh
+        "subtitleCat": true
+    });
 }
 
 function log(msg) {
-    if(DEV) console.log(msg);
+    if(DEV){
+        if (typeof nativeLog !== 'undefined') {
+            nativeLog("[" + BASEURL.replace(/^(https?:\/\/)?(www\.)?/, "") + "]: " + msg);
+        } else if (typeof console !== 'undefined' && console.log) {
+            console.log("[" + BASEURL.replace(/^(https?:\/\/)?(www\.)?/, "") + "]: " + msg);
+        }
+    }
 }
 
 function getHomeSections() {
@@ -61,13 +69,10 @@ function getFilterConfig() {
 }
 
 // =============================================================================
-// HELPER: CURSOR BASE64 ENCODE / DECODE
+// URL GENERATION
 // =============================================================================
 function getUrlList(slug, filtersJson) {
     try {
-        log("getUrlList[url]: \n" + slug);
-
-        // 1. Kiểm tra nếu slug là link tuyệt đối (chứa http)
         if (slug && slug.indexOf("http") > -1) {
             if (slug.indexOf("search") > -1 && filtersJson) {
                 var fixedJson1 = filtersJson
@@ -79,20 +84,16 @@ function getUrlList(slug, filtersJson) {
 
                     if (pageSearch > 1 && slug.indexOf("page=") === -1) {
                         var sepSearch = slug.indexOf("?") > -1 ? "&" : "?";
-                        var resSearch = slug + sepSearch + "page=" + pageSearch;
-                        log("getUrlList[url]: \n" + resSearch);
-                        return resSearch;
+                        return slug + sepSearch + "page=" + pageSearch;
                     }
                 } catch (jsonErr) {}
             }
-            log("getUrlList[url]: \n" + slug);
             return slug;
         }
 
         var page = 1;
         var path = slug || "";
 
-        // 2. Xử lý an toàn filtersJson cho link tương đối
         if (filtersJson) {
             var fixedJson2 = filtersJson
                 .replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":')
@@ -112,32 +113,23 @@ function getUrlList(slug, filtersJson) {
             } catch (jsonErr) {}
         }
 
-        // 3. Ghép URL an toàn với BASEURL
         var resultUrl = BASEAPI;
         if (path) {
             resultUrl += (path.indexOf("/") === 0 ? "" : "/") + path;
         }
 
-        // 4. Ghép tham số phân trang page (tự động nhận biết ? hay &)
         if (page > 0 && resultUrl.indexOf("page=") === -1) {
             resultUrl += page;
         }
 
-        // 5. Làm sạch dấu // thừa ở path (giữ nguyên https://)
-        var finalUrl = resultUrl.replace(/([^:]\/)\/+/g, "$1");
-        log("getUrlList[url]: \n" + finalUrl);
-        return finalUrl;
+        return resultUrl.replace(/([^:]\/)\/+/g, "$1");
 
     } catch (e) {
-        log("getUrlList[err]:\n " + e);
         if (slug && slug.indexOf("http") > -1) {
-            log("getUrlList[url]: \n" + slug);
             return slug;
         }
         var fallback = BASEAPI + (slug ? (slug.indexOf("/") === 0 ? slug : "/" + slug) : "");
-        var finalFallback = fallback.replace(/([^:]\/)\/+/g, "$1");
-        log("getUrlList[url]: \n" + finalFallback);
-        return finalFallback;
+        return fallback.replace(/([^:]\/)\/+/g, "$1");
     }
 }
 
@@ -163,59 +155,33 @@ function getUrlSearch(keyword, filtersJson) {
             resultUrl += "&page=" + page;
         }
 
-        var finalUrl = resultUrl.replace(/([^:]\/)\/+/g, "$1");
-        log("getUrlSearch[url]: \n" + finalUrl);
-        return finalUrl;
+        return resultUrl.replace(/([^:]\/)\/+/g, "$1");
 
     } catch (e) {
-        log("getUrlSearch[err]:\n " + e);
         var fallback = BASEURL + "/?q=" + encodeURIComponent(keyword || "");
-        var finalFallback = fallback.replace(/([^:]\/)\/+/g, "$1");
-        log("getUrlSearch[url]: \n" + finalFallback);
-        return finalFallback;
+        return fallback.replace(/([^:]\/)\/+/g, "$1");
     }
 }
 
 function getUrlDetail(slug) {
     try {
-        log("getUrlDetail[url]: \n" + slug);
         if (!slug) return "";
         if (slug.indexOf('http') === 0) return slug;
         var detailUrl = BASEURL + "/" + slug;
-        log("getUrlDetail[url]: \n" + detailUrl);
         return detailUrl;
     } catch (e) {
-        log("getUrlDetail[err]:\n " + e);
         return "";
     }
 }
 
 function getUrlCategories() { 
-    try {
-        log("getUrlCategories[url]: \n" + BASEURL);
-        return BASEURL; 
-    } catch (e) {
-        log("getUrlCategories[err]:\n " + e);
-        return "";
-    }
+    return BASEURL; 
 }
-
 function getUrlCountries() { 
-    try {
-        return ""; 
-    } catch (e) {
-        log("getUrlCountries[err]:\n " + e);
-        return "";
-    }
+    return ""; 
 }
-
 function getUrlYears() { 
-    try {
-        return ""; 
-    } catch (e) {
-        log("getUrlYears[err]:\n " + e);
-        return "";
-    }
+    return ""; 
 }
 
 // =============================================================================
@@ -226,15 +192,17 @@ function parseListResponse(html, $url) {
     try {
         log("parseListResponse[url]: \n" + $url);
         if ($url.indexOf("/?q=") > -1) {
-            var script = _$(html).find("script:content('const allData')").html();
+            // Đã bọc an toàn tránh lỗi TypeError nếu find không ra script
+            var script = _$(html).find("script:content('const allData')").html() || "";
             var $obj = script.match(/\[\s*\{[\s\S]*?\}\s*\]/i);
             if ($obj) {
                 var $data = JSON.parse($obj[0]);
                 return domfetch($data, $url);
             }
+            return JSON.stringify({ "items": [], "pagination": { "currentPage": 1, "totalPages": 1 } });
         } else {
-            var $allData = JSON.parse(html);
-            return domfetch($allData.data, $url);
+            var $jsdata = JSON.parse(html);
+            return domfetch($jsdata.data || [], $url);
         }
     } catch (e) {
         log("parseListResponse[err]:\n " + e);
@@ -254,38 +222,39 @@ function parseListResponse(html, $url) {
 }
 
 function parseJSDataIsolated(str) {
-    const code = str.replace(/^(const|let|var)\s+\w+\s*=\s*/, '');
-    return new Function(`"use strict"; return (${code});`)();
+    var code = str.replace(/^(const|let|var)\s+\w+\s*=\s*/, '');
+    return new Function('"use strict"; return (' + code + ');')();
 }
 
 function domfetch($data, $url) {
     var items = [];
+    if (!Array.isArray($data)) return JSON.stringify({ "items": [], "pagination": { "currentPage": 1, "totalPages": 1 } });
+    
     for (var $j = 0; $j < $data.length; $j++) {
         var item = $data[$j];
+        if(!item) continue;
         items.push({
             "id": BASEAPI + "/info/" + item.slug, 
-            "title": item.vname,
+            "title": item.vname || "Không có tên",
             "posterUrl": "https://image.tmdb.org/t/p/w130_and_h195_face/" + item.poster + ".jpg", 
             "backdropUrl": "https://image.tmdb.org/t/p/w533_and_h300_face/" + item.banner + ".jpg", 
             "quality": item.type ? String(item.type).toUpperCase() : "HD",
-            "episode_current": "Tập " + (item.stt || "") + "/" + (item.total || "")
+            "episode_current": "Tập " + (item.stt || "1") + "/" + (item.total || "?")
         });
     }
     return JSON.stringify({
         "items": items,
         "pagination": {
             "currentPage": 1,
-            "totalPages": 999
+            "totalPages": items.length > 0 ? 999 : 1
         }
     });
 }
 
 function parseSearchResponse(html, url) {
     try {
-        log("parseSearchResponse[url]: \n" + url);
         return parseListResponse(html, url);
     } catch (e) {
-        log("parseSearchResponse[err]:\n " + e);
         return JSON.stringify({
             "items": [],
             "pagination": {
@@ -299,7 +268,6 @@ function parseSearchResponse(html, url) {
 function decodeHTMLEntities(str) {
     try {
         if (!str) return "";
-        // Đã convert arrow function thành function thường để an toàn trên mọi iOS WebKit
         return str.replace(/&#(\d+);|&#x([0-9a-fA-F]+);/g, function(match, dec, hex) {
             if (dec) {
                 return String.fromCharCode(parseInt(dec, 10));
@@ -310,35 +278,32 @@ function decodeHTMLEntities(str) {
             return match;
         });
     } catch (e) {
-        log("decodeHTMLEntities[err]:\n " + e);
+        return str;
     }
 }
 
+// -----------------------------------------------------------------------------
+// BỌC AN TOÀN TRÁNH TYPEERROR NẾU MẢNG CAST/GENRE TRỐNG
+// -----------------------------------------------------------------------------
 function parseMovieDetail(html, url) {
     try {
-        log("parseMovieDetail[url]: \n" + url);
         var $jsdata = JSON.parse(html);
         var $data = $jsdata.data || {};
         
-        var lurl = "";
         var limg = $data.banner || "";
         var lname = $data.vname || "Đang cập nhật...";
         var ldes = $data.content || "Không có mô tả.";
         var ldirec = "";
-        var lactor = "";
-        var lduran = "";
-        var status = "";
-        var category = "";
-        var episode_current = "";
+        
+        // FIX CRASH IOS: Bọc kiểm tra Array trước khi gọi .join()
+        var lactor = ($data.cast && Array.isArray($data.cast)) ? $data.cast.join(" - ") : "";
+        var category = ($data.genre && Array.isArray($data.genre)) ? $data.genre.join(" - ") : "";
+        
+        var lduran = $data.duration ? ($data.duration + " phút") : "";
+        var status = "Tập " + ($data.stt || "1") + "/" + ($data.total || "?");
+        var episode_current = "Tập " + ($data.stt || "1");
         var year = $data.year || 2026;
         var extra = "";
-        
-        // Fix Crash mảng trên iOS nếu phim thiếu data
-        lactor = ($data.cast && Array.isArray($data.cast)) ? $data.cast.join(" - ") : "";
-        category = ($data.genre && Array.isArray($data.genre)) ? $data.genre.join(" - ") : "";
-        lduran = $data.duration ? ($data.duration + " phút") : "";
-        status = "Tập " + ($data.stt || "") + "/" + ($data.total || "");
-        episode_current = "Tập " + ($data.stt || "");
         
         var servers = [];
         var episodes = [];
@@ -378,9 +343,9 @@ function parseMovieDetail(html, url) {
             category: category,
             episode_current: episode_current,
             servers: servers,
-            duration: lduran || "",
-            casts: lactor || "",
-            director: ldirec || "",
+            duration: lduran,
+            casts: lactor,
+            director: ldirec,
             extra: extra
         });
 
@@ -388,7 +353,7 @@ function parseMovieDetail(html, url) {
         log("parseMovieDetail[err]:\n " + e);
         return JSON.stringify({
             id: url || "error",
-            title: "error",
+            title: "Lỗi chi tiết",
             servers: []
         });
     }
@@ -396,10 +361,7 @@ function parseMovieDetail(html, url) {
 
 function checkRaw(scriptStr, returnFixed) {
   try {
-    if (!scriptStr || typeof scriptStr !== 'string') {
-      console.log("[Lỗi escape runJS]\r\n\t Dữ liệu đầu vào không phải là chuỗi hợp lệ!");
-      return scriptStr || "";
-    }
+    if (!scriptStr || typeof scriptStr !== 'string') return scriptStr || "";
 
     var lines = scriptStr.split('\n');
     var fixedLines = [];
@@ -407,22 +369,13 @@ function checkRaw(scriptStr, returnFixed) {
 
     for (var i = 0; i < lines.length; i++) {
       var currentLine = lines[i];
-      var lineNum = i + 1;
       var lineErrorFound = false;
 
-      if (/([^\\]|^)(\r\n|\r|\n)/.test(currentLine)) {
-        lineErrorFound = true;
-      }
-      if (/\t/.test(currentLine) && !/\\t/.test(currentLine)) {
-        lineErrorFound = true;
-      }
-      if (/([^\\])\\$/.test(currentLine)) {
-        lineErrorFound = true;
-      }
+      if (/([^\\]|^)(\r\n|\r|\n)/.test(currentLine)) lineErrorFound = true;
+      if (/\t/.test(currentLine) && !/\\t/.test(currentLine)) lineErrorFound = true;
+      if (/([^\\])\\$/.test(currentLine)) lineErrorFound = true;
 
-      if (lineErrorFound) {
-        hasError = true;
-      }
+      if (lineErrorFound) hasError = true;
 
       var fixedLine = currentLine;
       if (returnFixed) {
@@ -431,12 +384,7 @@ function checkRaw(scriptStr, returnFixed) {
       fixedLines.push(fixedLine);
     }
 
-    try {
-      new Function(scriptStr);
-    } catch (syntaxErr) {
-      hasError = true;
-    }
-
+    try { new Function(scriptStr); } catch (syntaxErr) { hasError = true; }
     return returnFixed ? fixedLines.join('\n') : scriptStr;
 
   } catch (e) {
@@ -444,12 +392,15 @@ function checkRaw(scriptStr, returnFixed) {
   }
 }
 
+// -----------------------------------------------------------------------------
+// ĐÃ FIX LỖI TYPEERROR MATCH() VÀ ÉP IOS DÙNG WEBVIEW (isEmbed: true)
+// -----------------------------------------------------------------------------
 function parseDetailResponse(html, url) {
   try {
     var $jsdata = JSON.parse(html);
     var $data = $jsdata.data || {};
     
-    // Fix Regex Null Crash cho iOS
+    // BỌC AN TOÀN TRÁNH TYPEERROR NẾU URL KHÔNG CÓ current=
     var matchCurrent = url.match(/current=(\d+)/i);
     var current = matchCurrent ? Number(matchCurrent[1]) : 1;
     var stream = url;
@@ -459,8 +410,7 @@ function parseDetailResponse(html, url) {
             var item = $data.list_episodes[$j];
             if (typeof item === 'string') {
                 var split = item.split("|");
-                if(Number(split[0]) == current){
-                  // Encode an toàn cho URL iframe
+                if (Number(split[0]) === current) {
                   stream = split[1] + "?episodes=" + encodeURIComponent(url);
                 }
             }
@@ -468,12 +418,10 @@ function parseDetailResponse(html, url) {
     }
     
     var customJS = checkRaw(rawJS(stream), true);
-    log("Embed: " + stream);
     
     return JSON.stringify({
       url: stream,
-      // BẮT BUỘC ĐỂ TRUE ĐỂ IOS KHÔNG SỤP AVPLAYER NATIVE KHI NHẬN LINK IFRAME
-      isEmbed: true, 
+      isEmbed: true, // <--- CỰC KỲ QUAN TRỌNG: BẮT BUỘC ĐỂ TRUE ĐỂ IOS KHÔNG SỤP AVPLAYER NATIVE
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         Referer: BASEURL,
@@ -492,6 +440,9 @@ function parseDetailResponse(html, url) {
   }
 }
 
+// -----------------------------------------------------------------------------
+// ĐÃ FIX SẠCH TỪ KHÓA ES6 (CONST, LET, ()=> ) THÀNH ES5 ĐỂ IOS KHÔNG ĐỨNG HÌNH
+// -----------------------------------------------------------------------------
 function rawJS(stream) {
   return `
 (function () {
@@ -503,8 +454,6 @@ function rawJS(stream) {
         try {
             var time = new Date().toISOString().split('T')[1].slice(0, 8);
             var logText = '[CustomJS][' + time + '][' + step + '] ' + String(msg);
-            if (err) logText += ' | ❌ ERROR: ' + (err.stack || err.message || String(err));
-            
             if (window.SnifferBridge && typeof window.SnifferBridge.log === 'function') {
                 window.SnifferBridge.log(logText);
             } else if (typeof console !== 'undefined') {
@@ -513,8 +462,6 @@ function rawJS(stream) {
             }
         } catch (e) {}
     }
-
-    log('INIT', 'Bắt đầu khởi tạo CustomJS với EMBED_STREAM_URL = ' + EMBED_STREAM_URL);
 
     function ensureDOMReady(callback) {
         if (document && document.body) {
@@ -697,14 +644,14 @@ function rawJS(stream) {
             if (!currentFound) {
                 var pathParts = urlObj.pathname.split('/').filter(Boolean);
                 if (pathParts.length > 0) {
-                    var match = pathParts[0].match(/-(\\d+)$/); 
+                    var match = pathParts[0].match(/-(?:\\d+)$/); 
                     if (match && match[1]) currentFound = match[1];
                 }
             }
             if (currentFound) result.current = parseInt(currentFound, 10);
 
             var pathName = urlObj.pathname.split('/').filter(Boolean)[0] || 'default_series';
-            seriesKey = pathName.replace(/-\\d+$/, ''); 
+            seriesKey = pathName.replace(/-(?:\\d+)$/, ''); 
         } catch(e) {}
         return result;
     }
