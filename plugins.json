@@ -97,7 +97,7 @@
             "id": "vicdn",
             "name": "https://vicdn.cc",
             "version": "1.0",
-            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/Phim%20Vicdn",
+            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/PhimVicdn_plugin.js",
             "iconUrl": "https://vicdn.cc/vicdn.png",
     },
     {
