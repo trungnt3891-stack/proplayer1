@@ -97,7 +97,7 @@
             "id": "vicdn",
             "name": "https://vicdn.cc",
             "version": "1.0",
-            "scriptUrl": "https://rawcdn.githack.com/alokillgtv-gif/VAXAPPSCRIPT/16e131a2d0ce832fb8e5a603626a6a21d08aafa5/Plugins/movie/vicdn_plugin.js",
+            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/PhimVicdn_plugin.js",
             "iconUrl": "https://vicdn.cc/vicdn.png",
     },
     {
