@@ -17,17 +17,17 @@ function getManifest() {
     return JSON.stringify({
         "id": "shortflix",
         "name": "Phim Ngắn Shortflix",
-        "description": "Bản Webview Tối Ưu: Tiêm giao diện Player, Vuốt dọc chuyển tập (TikTok style)",
-        "version": "2.0.0",
-        "info": "Sử dụng công nghệ Custom JS Injection để xoá rác web, biến Webview thành Player Native.",
+        "description": "Bản Native Tối Giản: Tự xoay dọc, Vuốt chuyển tập 100% mượt mà",
+        "version": "2.1.0",
+        "info": "Áp dụng cấu trúc sạch của PhimFun. Sử dụng Native Player (auto) kết hợp khai báo phim ngắn để bật tính năng vuốt dọc Tiktok.",
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/shortflix.png",
         "isEnabled": true,
-        "hasLogin": true,
-        "loginUrl": BASEURL + "/vi/login",
-        "type": "shortfilm",
-        "layoutType": "VERTICAL",
-        "playerType": "webview" // Chuyển sang webview như yêu cầu
+        "hasLogin": true,                     
+        "loginUrl": BASEURL + "/vi/login",    
+        "type": "shortfilm",         // BẬT CHẾ ĐỘ PHIM NGẮN
+        "layoutType": "VERTICAL",    // GIAO DIỆN DỌC
+        "playerType": "auto"         // TỰ ĐỘNG CHỌN NATIVE PLAYER
     });
 }
 
@@ -47,6 +47,7 @@ function getHomeSections() {
         var menulist = buildMenu(listurl, true);
         return JSON.stringify(menulist);
     } catch (e) {
+        log("getHomeSections[err]:\n " + e);
         return JSON.stringify([]);
     }
 }
@@ -57,6 +58,7 @@ function getPrimaryCategories() {
         var menulist = buildMenu(listurl);
         return JSON.stringify(menulist);
     } catch (e) {
+        log("getPrimaryCategories[err]:\n " + e);
         return JSON.stringify([]);
     }
 }
@@ -67,19 +69,18 @@ function getFilterConfig() {
         var menulist = buildMenu(listurl);
         return JSON.stringify({ category: menulist });
     } catch (e) {
+        log("getFilterConfig[err]:\n " + e);
         return JSON.stringify({ category: [] });
     }
 }
 
 // =============================================================================
-// HELPER: CURSOR BASE64 ENCODE / DECODE
+// HELPER: CURSOR BASE64 ENCODE / DECODE 
 // =============================================================================
 
 function encodeBase64(str) {
     try {
-        if (typeof btoa !== 'undefined') {
-            try { return btoa(str); } catch (e) {}
-        }
+        if (typeof btoa !== 'undefined') { try { return btoa(str); } catch (e) {} }
         var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
         var output = '';
         for (var block, charCode, idx = 0, map = chars;
@@ -94,9 +95,7 @@ function encodeBase64(str) {
 
 function decodeBase64(str) {
     try {
-        if (typeof atob !== 'undefined') {
-            try { return atob(str); } catch (e) {}
-        }
+        if (typeof atob !== 'undefined') { try { return atob(str); } catch (e) {} }
         var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
         var output = '';
         str = String(str).replace(/=+$/, '');
@@ -115,12 +114,10 @@ function createCursor(lastItem) {
         if (!lastItem) return "";
         var rawOrder = lastItem.orderValue || lastItem.updatedAt || lastItem.publishedAt || lastItem.last_episode_at || 0;
         var orderVal = Number(rawOrder);
-        
         if (isNaN(orderVal) && typeof rawOrder === 'string') {
             var dateParsed = Date.parse(rawOrder);
             orderVal = !isNaN(dateParsed) ? dateParsed : 0;
         }
-
         var cursorObj = { id: String(lastItem.id || ""), timestamp: 0, orderValue: orderVal || 0 };
         return encodeBase64(JSON.stringify(cursorObj));
     } catch (e) { return ""; }
@@ -153,7 +150,12 @@ function getUrlList(slug, filtersJson) {
             } catch (jsonErr) {}
         }
 
-        var resultUrl = (path && path.indexOf("http") === 0) ? path : BASEAPI + (path ? path : "");
+        var resultUrl = "";
+        if (path && path.indexOf("http") === 0) {
+            resultUrl = path;
+        } else {
+            resultUrl = BASEAPI + (path ? path : "");
+        }
 
         if (page > 1 && !cursor) {
             var cacheKey = path + "_page_" + page;
@@ -166,12 +168,13 @@ function getUrlList(slug, filtersJson) {
         }
 
         resultUrl = resultUrl.replace(/([^:]\/)\/+/g, "$1");
-
         URL_TO_PAGE_MAP[resultUrl] = page;
         URL_TO_PATH_MAP[resultUrl] = path;
 
         return resultUrl;
-    } catch (e) { return slug || BASEAPI; }
+    } catch (e) {
+        return slug || BASEAPI;
+    }
 }
 
 function getUrlSearch(keyword, filtersJson) {
@@ -202,16 +205,19 @@ function parseListResponse(html, $url) {
             for (var $j = 0; $j < $data.items.length; $j++) {
                 var $item = $data.items[$j];
                 var current = $item.status ? $item.status.replace("PUBLISHED", "Hoàn Thành") : "";
+                
                 var itemSlug = $item.slug || $item.id || "";
                 var href = BASEURL + "/vi/videos/" + itemSlug;
+                var title = $item.title || "";
                 var src = $item.thumbnailUrl || "";
 
                 if (href) {
+                    var cleanThumb = src.replace(/&amp;/g, '&');
                     items.push({
                         "id": href,
-                        "title": ($item.title || "").trim(),
-                        "posterUrl": src.replace(/&amp;/g, '&'),
-                        "backdropUrl": src.replace(/&amp;/g, '&'),
+                        "title": title.trim(),
+                        "posterUrl": cleanThumb,
+                        "backdropUrl": cleanThumb,
                         "quality": "HD",
                         "lang": "",
                         "episode_current": current
@@ -222,13 +228,17 @@ function parseListResponse(html, $url) {
             if ($data.nextCursor) {
                 nextCursor = $data.nextCursor;
             } else {
-                nextCursor = createCursor($data.items[$data.items.length - 1]);
+                var lastRawItem = $data.items[$data.items.length - 1];
+                nextCursor = createCursor(lastRawItem);
             }
 
             var currentPage = URL_TO_PAGE_MAP[$url] || 1;
             var currentPath = URL_TO_PATH_MAP[$url] || "";
+            var nextPage = currentPage + 1;
+
             if (nextCursor) {
-                CURSOR_CACHE[currentPath + "_page_" + (currentPage + 1)] = nextCursor;
+                var cacheKey = currentPath + "_page_" + nextPage;
+                CURSOR_CACHE[cacheKey] = nextCursor;
             }
         }
 
@@ -243,7 +253,7 @@ function parseListResponse(html, $url) {
         });
 
     } catch (e) {
-        return JSON.stringify({ "items": [], "pagination": { "currentPage": 1, "totalPages": 1 } });
+        return JSON.stringify({ "items": [], "nextCursor": "", "pagination": { "currentPage": 1, "totalPages": 1 } });
     }
 }
 
@@ -252,10 +262,13 @@ function parseSearchResponse(html, url) {
 }
 
 function parseScript(rawScript) {
-    var result = { success: false, data: {} };
+    var result = { success: false, data: {}, embedHtml: '' };
     if (!rawScript || typeof rawScript !== 'string') return result;
+    
     try {
-        var cleaned = rawScript.replace(/\\"/g, '"').replace(/\\\\/g, '\\').replace(/[\r\n]+/g, ' ');
+        var cleaned = rawScript.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+        cleaned = cleaned.replace(/[\r\n]+/g, ' ');
+        
         var videoKey = '"video":{';
         var videoIndex = cleaned.indexOf(videoKey);
         
@@ -268,11 +281,16 @@ function parseScript(rawScript) {
                 if (cleaned[i] === '{') braceCount++;
                 else if (cleaned[i] === '}') {
                     braceCount--;
-                    if (braceCount === 0) { endIndex = i + 1; break; }
+                    if (braceCount === 0) {
+                        endIndex = i + 1;
+                        break;
+                    }
                 }
             }
+            
             if (endIndex !== -1) {
-                result.data = JSON.parse(cleaned.substring(startIndex, endIndex));
+                var videoJsonStr = cleaned.substring(startIndex, endIndex);
+                result.data = JSON.parse(videoJsonStr);
                 result.success = true;
                 return result;
             }
@@ -284,359 +302,130 @@ function parseScript(rawScript) {
             result.success = true;
         }
     } catch (error) {}
+    
     return result;
 }
 
 function parseMovieDetail(html, url) {
     try {
-        var lname = _$(html).find("h1").text();
+        var id = url;
+        var lname = _$(html).find("h1").text() || "Đang cập nhật...";
         var limg = _$(html).find('meta[property="og:image"]').attr("content");
         var ldes = _$(html).find(".order-6:content('Giới thiệu')").text();
+        var category = _$(html).find(".text-sm:content('Thể loại:')").parent().text(" - ").replace("Thể loại - : - ", "");
         var episode_current = _$(html).find("span:content('Tập mới nhất:')").parent().text().trim().replace("Tập mới nhất:", "");
         
-        var script = _$(html).find("script:content('.m3u8')").html() || _$(html).find("script:content('episodes')").html();
+        var yearRaw = _$(html).find("span:content('Thời gian xuất bản:')").parent().text().trim().replace("Thời gian xuất bản:", "");
+        var year = Number(yearRaw) || 2026;
+        var lactor = _$(html).find("span:content('Diễn viên:')").parent().text().trim().replace("Diễn viên:", "");
+        var ldirec = _$(html).find("span:content('Đạo diễn:')").parent().text().trim().replace("Đạo diễn:", "");
+        var lduran = _$(html).find("span:content('Thời lượng:')").parent().text().trim().replace("Thời lượng:", "");
+        var status = _$(html).find("span:content('Trạng thái:')").parent().text().trim().replace("Trạng thái:", "");
+        
+        var script = _$(html).find("script:content('.m3u8')").html();
+        if (!script) {
+            script = _$(html).find("script:content('episodes')").html();
+        }
         var $dataVD = parseScript(script);
+        var servers = [];
         var $listepi = $dataVD.data.episodes || [];
         var $items = [];
         
         for (var $j = 0; $j < $listepi.length; $j++) {
             var $epinumber = $listepi[$j].episodeNumber;
+            var $nameepi = $epinumber === 0 ? "Trailer" : "Tập " + $epinumber;
             $items.push({
-                id: url + "?tap=" + $epinumber, // Lưu id để App biết vị trí người dùng bấm vào
-                name: $epinumber === 0 ? "Trailer" : "Tập " + $epinumber,
+                id: url + "?tap=" + $epinumber,
+                name: $nameepi,
                 slug: "tap-" + $epinumber
             });
         }
         
+        if ($items.length > 0) {
+            servers.push({
+                name: "ShortFlix VIP",
+                episodes: $items
+            });
+        }
+        
         return JSON.stringify({
-            id: url,
-            title: lname || "Đang cập nhật",
+            id: id,
+            title: lname,
             posterUrl: limg,
             backdropUrl: limg,
             description: ldes,
             quality: "HD",
+            year: year,
+            rating: 8.5,
+            status: status,
+            category: category,
             episode_current: episode_current,
-            servers: $items.length > 0 ? [{ name: "Webview Player", episodes: $items }] : []
+            servers: servers,
+            duration: lduran || "",
+            casts: lactor || "",
+            director: ldirec || "",
+            extra: "",
+            
+            // [QUAN TRỌNG NHẤT] ÉP KHAI BÁO TYPE Ở ĐÂY ĐỂ APP KÍCH HOẠT VUỐT DỌC
+            type: "shortfilm",
+            layoutType: "VERTICAL"
         });
     } catch (e) {
-        return JSON.stringify({ id: url || "error", title: "Lỗi chi tiết", servers: [] });
+        return JSON.stringify({ id: url || "error", title: "Lỗi tải chi tiết", servers: [] });
     }
 }
 
-// BƯỚC QUAN TRỌNG: Lấy TOÀN BỘ dữ liệu của tất cả các tập, truyền vào file JS
 function parseDetailResponse(html, url) {
     try {
         var tap = url.match(/tap=(\d+)/i);
         var tapVal = tap && tap[1] !== undefined ? tap[1] : "1";
         
-        var script = _$(html).find("script:content('.m3u8')").html() || _$(html).find("script:content('episodes')").html();
+        var script = _$(html).find("script:content('.m3u8')").html();
+        if (!script) {
+            script = _$(html).find("script:content('episodes')").html();
+        }
+        
+        var $subtitle = "";
         var $dataVD = parseScript(script);
         var $episodes = $dataVD.data.episodes || [];
         
-        var jsEpisodes = [];
-        var currentIndex = 0;
-        
-        for (var i = 0; i < $episodes.length; i++) {
-            var ep = $episodes[i];
-            var epNum = ep.episodeNumber;
-            var vidUrl = ep.versions && ep.versions[0] ? ep.versions[0].videoUrl : "";
-            var subUrl = (ep.versions && ep.versions[0] && ep.versions[0].subtitles && ep.versions[0].subtitles.length > 0) ? ep.versions[0].subtitles[0].fileUrl : "";
-            
-            jsEpisodes.push({
-                name: epNum === 0 ? "Trailer" : "Tập " + epNum,
-                url: vidUrl,
-                subUrl: subUrl
-            });
-            
-            if (epNum == tapVal) currentIndex = i;
+        var tapcurrent = $episodes.findIndex(function(ep) {
+            return ep.episodeNumber == tapVal || ep.name == tapVal || ep.slug == tapVal;
+        });
+
+        if (tapcurrent === -1) {
+            var tapNum = Number(tapVal);
+            tapcurrent = tapNum > 0 ? tapNum - 1 : 0;
         }
 
-        var dataSV = {
-            episodes: jsEpisodes,
-            currentIndex: currentIndex
-        };
+        if (tapcurrent < 0) tapcurrent = 0;
+        if (tapcurrent >= $episodes.length) tapcurrent = $episodes.length - 1;
 
-        // Gắn script UI Player vào header
-        var customJS = rawJS(dataSV);
+        var $epicurrent = $episodes[tapcurrent];
+        if (!$epicurrent) throw new Error("Episode not found");
 
+        var $video = $epicurrent.versions[0];
+        var $linkstream = $video.videoUrl;
+        var $hardsub = $video.hardSub;
+        
+        if ($hardsub === false && $video.subtitles && $video.subtitles.length > 0) {
+            $subtitle = $video.subtitles[0].fileUrl;
+        }
+        
         return JSON.stringify({
-            "url": url, // Trỏ thẳng vào url gốc để khởi chạy webview
-            "isEmbed": true, // Báo App đây là webview
-            "mimeType": "",
+            "url": $linkstream,
+            "isEmbed": false, // Trả về Native Player (Exoplayer) để có thể vuốt
+            "mimeType": "application/x-mpegURL",
             "headers": {
                 "Referer": BASEURL,
-                "Custom-Js": customJS // Tiêm bộ Player Ảo vào
+                "Origin": BASEURL,
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
             },
-            "subtitles": []
+            "subtitles": $subtitle ? [{ "lang": "vi", "url": $subtitle }] : []
         });
     } catch (e) {
-        return JSON.stringify({ "url": "", "headers": {} });
+        return JSON.stringify({ "url": "", "isEmbed": false, "headers": {} });
     }
-}
-
-function rawJS(config) {
-    return `
-    (function() {
-        // 1. DIỆT SẠCH HEAD VÀ BODY GỐC CỦA TRANG
-        if (document.head) {
-            document.head.innerHTML = '<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">';
-        }
-        document.documentElement.style.cssText = 'margin:0 !important; padding:0 !important; width:100vw !important; height:100vh !important; overflow:hidden !important; background:#000 !important;';
-        document.body.innerHTML = '';
-        document.body.style.cssText = 'margin:0 !important; padding:0 !important; width:100vw !important; height:100vh !important; overflow:hidden !important; background:#000 !important; position:fixed !important; top:0 !important; left:0 !important; z-index:0 !important;';
-
-        // 2. KHỞI TẠO DATA BÊN TRONG JS
-        const DATA = ` + JSON.stringify(config) + `;
-        const EPISODES = DATA.episodes || [];
-        let currentIndex = DATA.currentIndex || 0;
-        let hideTimer = null;
-
-        // 3. INJECT CSS TẠO UI PLAYER
-        let styleTag = document.createElement('style');
-        styleTag.textContent = \`
-            * { box-sizing: border-box !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important; user-select: none; -webkit-user-select: none; }
-            #video-container { position: relative; width: 100vw; height: 100vh; background: #000; display: flex; align-items: center; justify-content: center; }
-            video { width: 100%; height: 100%; object-fit: contain; outline: none; }
-            
-            .floating-ui {
-                position: absolute; z-index: 9999;
-                transition: opacity 0.3s ease; opacity: 0; pointer-events: none;
-            }
-            .floating-ui.active { opacity: 1; pointer-events: auto; }
-            
-            #top-bar { top: 20px; right: 20px; display: flex; gap: 10px; }
-            .ui-btn {
-                background: rgba(20,20,22,0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-                color: white; border: 1px solid rgba(255,255,255,0.15);
-                padding: 8px 16px; border-radius: 8px; font-weight: bold; font-size: 14px;
-                box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer; display: flex; align-items: center; justify-content: center;
-            }
-            
-            #ep-grid {
-                position: absolute; top: 65px; right: 20px; width: 300px; max-height: 60vh; overflow-y: auto;
-                background: rgba(20,20,22,0.95); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-                border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; 
-                display: none; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 12px;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-            }
-            .ep-item {
-                background: rgba(255,255,255,0.1); color: white; padding: 10px 5px; text-align: center;
-                border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer;
-            }
-            .ep-item.active { background: #e50914; }
-            
-            #toast {
-                position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-                background: rgba(0,0,0,0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-                color: white; padding: 16px 30px; border-radius: 30px; font-size: 16px; font-weight: bold;
-                pointer-events: none; opacity: 0; transition: opacity 0.3s, transform 0.3s;
-                box-shadow: 0 5px 20px rgba(0,0,0,0.5); text-align: center; white-space: nowrap;
-            }
-            
-            .nav-btn {
-                position: absolute; top: 50%; transform: translateY(-50%);
-                width: 44px; height: 44px; border-radius: 22px;
-                background: rgba(20,20,22,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-                color: white; font-size: 20px; display: flex; justify-content: center; align-items: center; 
-                border: 1px solid rgba(255,255,255,0.2); cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            }
-            #prev-btn { left: 20px; }
-            #next-btn { right: 20px; }
-
-            /* Hướng dẫn vuốt ở dưới đáy màn hình */
-            #swipe-hint {
-                position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
-                color: rgba(255,255,255,0.7); font-size: 13px; font-weight: 600;
-                display: flex; flex-direction: column; align-items: center; gap: 5px;
-                pointer-events: none; opacity: 1; transition: opacity 1s ease;
-            }
-            .swipe-icon { animation: swipeAnim 1.5s infinite; font-size: 22px; }
-            @keyframes swipeAnim { 0% { transform: translateY(10px); opacity: 0; } 50% { opacity: 1; } 100% { transform: translateY(-10px); opacity: 0; } }
-        \`;
-        document.head.appendChild(styleTag);
-
-        // 4. KHUNG VIDEO GỐC
-        let container = document.createElement('div');
-        container.id = 'video-container';
-        document.body.appendChild(container);
-
-        let video = document.createElement('video');
-        video.controls = true;
-        video.autoplay = true;
-        video.playsInline = true;
-        container.appendChild(video);
-
-        let toast = document.createElement('div');
-        toast.id = 'toast';
-        container.appendChild(toast);
-
-        let swipeHint = document.createElement('div');
-        swipeHint.id = 'swipe-hint';
-        swipeHint.innerHTML = '<div class="swipe-icon">👆</div><div>Vuốt Lên / Xuống để chuyển tập</div>';
-        container.appendChild(swipeHint);
-        
-        // Ẩn hint sau 5s
-        setTimeout(() => { swipeHint.style.opacity = '0'; }, 5000);
-
-        let toastTimeout;
-        function showToast(msg) {
-            toast.textContent = msg;
-            toast.style.opacity = '1';
-            toast.style.transform = 'translate(-50%, -50%) scale(1.1)';
-            setTimeout(() => toast.style.transform = 'translate(-50%, -50%) scale(1)', 50);
-            if (toastTimeout) clearTimeout(toastTimeout);
-            toastTimeout = setTimeout(() => { toast.style.opacity = '0'; }, 2000);
-        }
-
-        let hls = null;
-        function loadEpisode(index) {
-            if (index < 0 || index >= EPISODES.length) {
-                showToast(index < 0 ? "Đây là tập đầu tiên!" : "Bạn đã xem hết tập!");
-                return;
-            }
-            currentIndex = index;
-            let ep = EPISODES[currentIndex];
-            
-            showToast("▶ " + ep.name);
-            
-            let streamUrl = ep.url;
-            if (!streamUrl) {
-                showToast("Lỗi: Tập này bị lỗi link!");
-                return;
-            }
-
-            // Ưu tiên Native của iOS, nếu không có sẽ nạp hls.js
-            if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                video.src = streamUrl;
-                video.play().catch(e => console.log(e));
-            } else {
-                if (!window.Hls) {
-                    let script = document.createElement('script');
-                    script.src = "https://cdn.jsdelivr.net/npm/hls.js@latest";
-                    script.onload = () => initHls(streamUrl);
-                    document.head.appendChild(script);
-                } else {
-                    initHls(streamUrl);
-                }
-            }
-            
-            updateUI();
-        }
-
-        function initHls(url) {
-            if (hls) hls.destroy();
-            hls = new window.Hls();
-            hls.loadSource(url);
-            hls.attachMedia(video);
-            hls.on(window.Hls.Events.MANIFEST_PARSED, function() {
-                video.play().catch(e => console.log(e));
-            });
-        }
-
-        // 5. GIAO DIỆN NÚT VÀ LƯỚI TẬP
-        let topBar = document.createElement('div');
-        topBar.id = 'top-bar';
-        topBar.className = 'floating-ui active';
-        container.appendChild(topBar);
-
-        let epSelectBtn = document.createElement('div');
-        epSelectBtn.className = 'ui-btn';
-        topBar.appendChild(epSelectBtn);
-
-        let epGrid = document.createElement('div');
-        epGrid.id = 'ep-grid';
-        epGrid.className = 'floating-ui active';
-        container.appendChild(epGrid);
-
-        epSelectBtn.onclick = (e) => {
-            e.stopPropagation();
-            epGrid.style.display = epGrid.style.display === 'grid' ? 'none' : 'grid';
-        };
-
-        let prevBtn = document.createElement('div');
-        prevBtn.id = 'prev-btn';
-        prevBtn.className = 'nav-btn floating-ui active';
-        prevBtn.innerHTML = '&#10094;';
-        prevBtn.onclick = (e) => { e.stopPropagation(); loadEpisode(currentIndex - 1); };
-        container.appendChild(prevBtn);
-
-        let nextBtn = document.createElement('div');
-        nextBtn.id = 'next-btn';
-        nextBtn.className = 'nav-btn floating-ui active';
-        nextBtn.innerHTML = '&#10095;';
-        nextBtn.onclick = (e) => { e.stopPropagation(); loadEpisode(currentIndex + 1); };
-        container.appendChild(nextBtn);
-
-        function updateUI() {
-            epSelectBtn.textContent = EPISODES[currentIndex].name + " ▼";
-            epGrid.innerHTML = '';
-            EPISODES.forEach((ep, idx) => {
-                let item = document.createElement('div');
-                item.className = 'ep-item' + (idx === currentIndex ? ' active' : '');
-                item.textContent = ep.name.replace('Tập ', '');
-                item.onclick = (e) => {
-                    e.stopPropagation();
-                    epGrid.style.display = 'none';
-                    loadEpisode(idx);
-                };
-                epGrid.appendChild(item);
-            });
-            
-            prevBtn.style.opacity = currentIndex > 0 ? '1' : '0.3';
-            nextBtn.style.opacity = currentIndex < EPISODES.length - 1 ? '1' : '0.3';
-            resetHideTimer();
-        }
-
-        // 6. XỬ LÝ SỰ KIỆN VUỐT & ẨN UI
-        function resetHideTimer() {
-            document.querySelectorAll('.floating-ui').forEach(el => el.classList.add('active'));
-            if (hideTimer) clearTimeout(hideTimer);
-            hideTimer = setTimeout(() => {
-                document.querySelectorAll('.floating-ui').forEach(el => el.classList.remove('active'));
-                epGrid.style.display = 'none';
-            }, 4000);
-        }
-
-        container.addEventListener('click', (e) => {
-            if (e.target !== epSelectBtn && !epGrid.contains(e.target)) {
-                epGrid.style.display = 'none';
-            }
-            resetHideTimer();
-        });
-        
-        container.addEventListener('mousemove', resetHideTimer);
-        video.addEventListener('play', resetHideTimer);
-        video.addEventListener('pause', () => {
-            document.querySelectorAll('.floating-ui').forEach(el => el.classList.add('active'));
-        });
-
-        // Event vuốt chuyển tập
-        let touchStartY = 0;
-        container.addEventListener('touchstart', e => {
-            touchStartY = e.changedTouches[0].screenY;
-            resetHideTimer();
-        }, {passive: true});
-
-        container.addEventListener('touchend', e => {
-            let touchEndY = e.changedTouches[0].screenY;
-            let diffY = touchStartY - touchEndY;
-            
-            if (Math.abs(diffY) > 80) { // Vuốt đủ mạnh
-                if (diffY > 0) loadEpisode(currentIndex + 1); // Vuốt lên
-                else loadEpisode(currentIndex - 1);           // Vuốt xuống
-            }
-        }, {passive: true});
-
-        // Tự động phát tập tiếp theo khi kết thúc
-        video.addEventListener('ended', () => {
-            loadEpisode(currentIndex + 1);
-        });
-
-        // Bắt đầu phát
-        loadEpisode(currentIndex);
-
-    })();
-    `;
 }
 
 function parseCategoriesResponse(apiResponseJson) {
@@ -644,7 +433,9 @@ function parseCategoriesResponse(apiResponseJson) {
         var listurl = getLISTmenu();
         var menulist = buildMenu(listurl);
         return JSON.stringify(menulist);
-    } catch (e) { return JSON.stringify([]); }
+    } catch (e) {
+        return JSON.stringify([]);
+    }
 }
 
 function parseCountriesResponse(html) { return "[]"; }
