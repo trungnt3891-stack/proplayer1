@@ -17,17 +17,17 @@ function getManifest() {
     return JSON.stringify({
         "id": "shortflix",
         "name": "Phim Ngắn Shortflix",
-        "description": "Bản Native Tối Giản: Tự xoay dọc, Vuốt chuyển tập 100% mượt mà",
-        "version": "2.1.0",
-        "info": "Áp dụng cấu trúc sạch của PhimFun. Sử dụng Native Player (auto) kết hợp khai báo phim ngắn để bật tính năng vuốt dọc Tiktok.",
+        "description": "Bản Webview Tối Giản: 1 Nút bấm để xem trên giao diện gốc",
+        "version": "2.2.0",
+        "info": "Nhấn vào xem để mở trình duyệt webview bên trong app. Giao diện đã được tự động tối ưu ẩn bớt quảng cáo.",
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/shortflix.png",
         "isEnabled": true,
         "hasLogin": true,                     
         "loginUrl": BASEURL + "/vi/login",    
-        "type": "shortfilm",         // BẬT CHẾ ĐỘ PHIM NGẮN
-        "layoutType": "VERTICAL",    // GIAO DIỆN DỌC
-        "playerType": "auto"         // TỰ ĐỘNG CHỌN NATIVE PLAYER
+        "type": "shortfilm",         
+        "layoutType": "VERTICAL",    
+        "playerType": "webview"      // [CHỈNH SỬA]: ÉP DÙNG WEBVIEW THEO YÊU CẦU
     });
 }
 
@@ -47,7 +47,6 @@ function getHomeSections() {
         var menulist = buildMenu(listurl, true);
         return JSON.stringify(menulist);
     } catch (e) {
-        log("getHomeSections[err]:\n " + e);
         return JSON.stringify([]);
     }
 }
@@ -58,7 +57,6 @@ function getPrimaryCategories() {
         var menulist = buildMenu(listurl);
         return JSON.stringify(menulist);
     } catch (e) {
-        log("getPrimaryCategories[err]:\n " + e);
         return JSON.stringify([]);
     }
 }
@@ -69,7 +67,6 @@ function getFilterConfig() {
         var menulist = buildMenu(listurl);
         return JSON.stringify({ category: menulist });
     } catch (e) {
-        log("getFilterConfig[err]:\n " + e);
         return JSON.stringify({ category: [] });
     }
 }
@@ -261,51 +258,7 @@ function parseSearchResponse(html, url) {
     return parseListResponse(html, url);
 }
 
-function parseScript(rawScript) {
-    var result = { success: false, data: {}, embedHtml: '' };
-    if (!rawScript || typeof rawScript !== 'string') return result;
-    
-    try {
-        var cleaned = rawScript.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-        cleaned = cleaned.replace(/[\r\n]+/g, ' ');
-        
-        var videoKey = '"video":{';
-        var videoIndex = cleaned.indexOf(videoKey);
-        
-        if (videoIndex !== -1) {
-            var startIndex = videoIndex + videoKey.length - 1;
-            var braceCount = 0;
-            var endIndex = -1;
-            
-            for (var i = startIndex; i < cleaned.length; i++) {
-                if (cleaned[i] === '{') braceCount++;
-                else if (cleaned[i] === '}') {
-                    braceCount--;
-                    if (braceCount === 0) {
-                        endIndex = i + 1;
-                        break;
-                    }
-                }
-            }
-            
-            if (endIndex !== -1) {
-                var videoJsonStr = cleaned.substring(startIndex, endIndex);
-                result.data = JSON.parse(videoJsonStr);
-                result.success = true;
-                return result;
-            }
-        }
-        
-        var regexMatch = cleaned.match(/"video"\s*:\s*(\{[\s\S]*?\})\s*,\s*"tags"/);
-        if (regexMatch && regexMatch[1]) {
-            result.data = JSON.parse(regexMatch[1]);
-            result.success = true;
-        }
-    } catch (error) {}
-    
-    return result;
-}
-
+// [CHỈNH SỬA]: TRẢ VỀ DUY NHẤT 1 NÚT ĐỂ MỞ WEBVIEW
 function parseMovieDetail(html, url) {
     try {
         var id = url;
@@ -322,31 +275,17 @@ function parseMovieDetail(html, url) {
         var lduran = _$(html).find("span:content('Thời lượng:')").parent().text().trim().replace("Thời lượng:", "");
         var status = _$(html).find("span:content('Trạng thái:')").parent().text().trim().replace("Trạng thái:", "");
         
-        var script = _$(html).find("script:content('.m3u8')").html();
-        if (!script) {
-            script = _$(html).find("script:content('episodes')").html();
-        }
-        var $dataVD = parseScript(script);
         var servers = [];
-        var $listepi = $dataVD.data.episodes || [];
-        var $items = [];
         
-        for (var $j = 0; $j < $listepi.length; $j++) {
-            var $epinumber = $listepi[$j].episodeNumber;
-            var $nameepi = $epinumber === 0 ? "Trailer" : "Tập " + $epinumber;
-            $items.push({
-                id: url + "?tap=" + $epinumber,
-                name: $nameepi,
-                slug: "tap-" + $epinumber
-            });
-        }
-        
-        if ($items.length > 0) {
-            servers.push({
-                name: "ShortFlix VIP",
-                episodes: $items
-            });
-        }
+        // CHỈ TẠO 1 TẬP ẢO: "Nhấn vào để Xem"
+        servers.push({
+            name: "Giao Diện Web Gốc",
+            episodes: [{
+                id: url, // Gửi link trang hiện tại
+                name: "Nhấn vào để Xem",
+                slug: "webview-play"
+            }]
+        });
         
         return JSON.stringify({
             id: id,
@@ -365,8 +304,6 @@ function parseMovieDetail(html, url) {
             casts: lactor || "",
             director: ldirec || "",
             extra: "",
-            
-            // [QUAN TRỌNG NHẤT] ÉP KHAI BÁO TYPE Ở ĐÂY ĐỂ APP KÍCH HOẠT VUỐT DỌC
             type: "shortfilm",
             layoutType: "VERTICAL"
         });
@@ -375,56 +312,31 @@ function parseMovieDetail(html, url) {
     }
 }
 
+// [CHỈNH SỬA]: TRẢ VỀ ĐÚNG URL GỐC ĐỂ APP MỞ TRONG WEBVIEW
 function parseDetailResponse(html, url) {
     try {
-        var tap = url.match(/tap=(\d+)/i);
-        var tapVal = tap && tap[1] !== undefined ? tap[1] : "1";
-        
-        var script = _$(html).find("script:content('.m3u8')").html();
-        if (!script) {
-            script = _$(html).find("script:content('episodes')").html();
-        }
-        
-        var $subtitle = "";
-        var $dataVD = parseScript(script);
-        var $episodes = $dataVD.data.episodes || [];
-        
-        var tapcurrent = $episodes.findIndex(function(ep) {
-            return ep.episodeNumber == tapVal || ep.name == tapVal || ep.slug == tapVal;
-        });
-
-        if (tapcurrent === -1) {
-            var tapNum = Number(tapVal);
-            tapcurrent = tapNum > 0 ? tapNum - 1 : 0;
-        }
-
-        if (tapcurrent < 0) tapcurrent = 0;
-        if (tapcurrent >= $episodes.length) tapcurrent = $episodes.length - 1;
-
-        var $epicurrent = $episodes[tapcurrent];
-        if (!$epicurrent) throw new Error("Episode not found");
-
-        var $video = $epicurrent.versions[0];
-        var $linkstream = $video.videoUrl;
-        var $hardsub = $video.hardSub;
-        
-        if ($hardsub === false && $video.subtitles && $video.subtitles.length > 0) {
-            $subtitle = $video.subtitles[0].fileUrl;
-        }
+        // Đoạn Custom-JS CỰC KỲ SIÊU NHẸ chỉ dùng CSS để giấu Quảng Cáo, Header, Footer
+        // Sẽ không gây lỗi hay crash App
+        var cleanUI_JS = "var s=document.createElement('style');s.innerHTML='header,.header,footer,.footer,.download-app,.app-download,[class*=\"ad-\"],[id*=\"ad-\"]{display:none!important}';document.head.appendChild(s);";
         
         return JSON.stringify({
-            "url": $linkstream,
-            "isEmbed": false, // Trả về Native Player (Exoplayer) để có thể vuốt
-            "mimeType": "application/x-mpegURL",
+            "url": url, 
+            "isEmbed": true, // BẮT BUỘC TRUE ĐỂ APP HIỂU ĐÂY LÀ WEBVIEW MÀ KHÔNG GỌI EXOPLAYER
+            "mimeType": "",
             "headers": {
                 "Referer": BASEURL,
                 "Origin": BASEURL,
-                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
+                "Custom-Js": cleanUI_JS
             },
-            "subtitles": $subtitle ? [{ "lang": "vi", "url": $subtitle }] : []
+            "subtitles": []
         });
     } catch (e) {
-        return JSON.stringify({ "url": "", "isEmbed": false, "headers": {} });
+        return JSON.stringify({ 
+            "url": url, 
+            "isEmbed": true, 
+            "headers": {} 
+        });
     }
 }
 
