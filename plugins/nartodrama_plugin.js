@@ -8,16 +8,15 @@ function getManifest() {
     return JSON.stringify({
         "id": "nartodrama",
         "name": "Phim Ngắn Narto",
-        "description": "Bản Tối Ưu Tốc Độ: Load cực nhanh, Fix lỗi Popup, Giao diện vuốt Tiktok",
-        "version": "1.3.6",
-        "info": "Nguồn phim ngắn siêu hay. Đã tối ưu thuật toán bóc tách dữ liệu để load ngay lập tức.",
+        "description": "Bản Kép Tối Ưu: Load siêu nhanh, Auto-Click bỏ qua Popup, Giao diện vuốt Tiktok",
+        "version": "1.3.8",
+        "info": "Tích hợp động cơ kép Dual-Engine. Ưu tiên Regex siêu tốc, dự phòng DOM ảo gốc đảm bảo không bao giờ lỗi load.",
         "baseUrl": "https://edge.narto-drama.com",
         "iconUrl": "https://narto-drama.com/narto-drama-logo-compressed.png",
         "isEnabled": true,
-        // CẤU HÌNH AUTO XOAY DỌC MÀN HÌNH TIKTOK DƯỚI ĐÂY:
         "type": "shortfilm",         // [ÉP GIAO DIỆN PHIM NGẮN TIKTOK]
         "layoutType": "VERTICAL",    // [ÉP AUTO XOAY DỌC MÀN HÌNH]
-        "playerType": "webview",     // [ĐÃ SỬA TỪ embedtoexoplay SANG webview ĐỂ VUỐT]
+        "playerType": "webview",     // [MỞ TRÌNH DUYỆT ĐỂ VUỐT & CHỌN TẬP GỐC]
         "subtitleCat": true
     })
 };
@@ -33,7 +32,7 @@ function log(msg) {
 }
 
 // -----------------------------------------------------------------------------
-// GIỮ NGUYÊN 100% CÁC HÀM TẢI DANH SÁCH TỪ MÃ GỐC
+// GET URLS & MENUS (GIỮ NGUYÊN BẢN GỐC CHẠY ỔN ĐỊNH CỦA BẠN)
 // -----------------------------------------------------------------------------
 function getHomeSections() {
     try {
@@ -69,13 +68,10 @@ function getUrlList(slug, filtersJson) {
     try {
         if (slug && slug.indexOf("http") > -1) {
             if (slug.indexOf("search") > -1 && filtersJson) {
-                var fixedJson1 = filtersJson
-                    .replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":')
-                    .replace(/:,/g, ':');
+                var fixedJson1 = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
                 try {
                     var filtersSearch = JSON.parse(fixedJson1);
                     var pageSearch = parseInt(filtersSearch.page) || 1;
-
                     if (pageSearch > 1 && slug.indexOf("page=") === -1) {
                         var sepSearch = slug.indexOf("?") > -1 ? "&" : "?";
                         return slug + sepSearch + "page=" + pageSearch;
@@ -89,14 +85,10 @@ function getUrlList(slug, filtersJson) {
         var path = slug || "";
 
         if (filtersJson) {
-            var fixedJson2 = filtersJson
-                .replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":')
-                .replace(/:,/g, ':');
-
+            var fixedJson2 = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
             try {
                 var filters = JSON.parse(fixedJson2);
                 page = parseInt(filters.page) || 1;
-
                 if (filters.category) {
                     if (Array.isArray(filters.category) && filters.category.length > 0) {
                         path = filters.category[0].slug;
@@ -131,12 +123,8 @@ function getUrlList(slug, filtersJson) {
 function getUrlSearch(keyword, filtersJson) {
     try {
         var page = 1;
-
         if (filtersJson) {
-            var fixedJson = filtersJson
-                .replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":')
-                .replace(/:,/g, ':');
-
+            var fixedJson = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
             try {
                 var filters = JSON.parse(fixedJson);
                 page = parseInt(filters.page) || 1;
@@ -151,7 +139,6 @@ function getUrlSearch(keyword, filtersJson) {
         }
 
         return resultUrl.replace(/([^:]\/)\/+/g, "$1");
-
     } catch (e) {
         var fallback = BASEURL + "/search?lang=vi-VN&q=" + encodeURIComponent(keyword || "");
         return fallback.replace(/([^:]\/)\/+/g, "$1");
@@ -170,40 +157,69 @@ function getUrlYears() { return ""; }
 
 
 // -----------------------------------------------------------------------------
-// [ĐÃ TỐI ƯU SIÊU TỐC]: DÙNG STRING.SPLIT VÀ REGEX THAY VÌ DOM ẢO _$
+// [DUAL-ENGINE] BÓC TÁCH DANH SÁCH: ƯU TIÊN REGEX SIÊU TỐC, DỰ PHÒNG DOM GỐC
 // -----------------------------------------------------------------------------
 function parseListResponse(html, $url) {
     try {
         var items = [];
         
-        // Chặt HTML thành từng khối phim để xử lý cực nhanh, bỏ qua DOM Parser nặng nề
-        var articles = html.split('<article');
-        for (var i = 1; i < articles.length; i++) {
-            var block = articles[i];
-            if (block.indexOf('card') === -1) continue; // Lọc nhanh chỉ lấy thẻ có class card
+        // CÁCH 1: Dùng Regex nhẹ & nhanh (Không đệ quy DOM)
+        var regex = /<article([^>]+)>([\s\S]*?)<\/article>/gi;
+        var match;
+        while ((match = regex.exec(html)) !== null) {
+            var attrs = match[1];
+            var inner = match[2];
+            
+            if (attrs.indexOf('card') === -1) continue;
 
-            // Bóc tách bằng Regex nhẹ nhàng
-            var hrefMatch = block.match(/data-watch-url=["']([^"']+)["']/i);
-            var titleMatch = block.match(/data-movie-title=["']([^"']+)["']/i);
-            var imgMatch = block.match(/<img[^>]+src=["']([^"']+)["']/i);
-            var epMatch = block.match(/class=["'][^"']*episode-badge[^"']*["'][^>]*>([^<]+)/i);
+            var hrefMatch = attrs.match(/data-watch-url\s*=\s*["']([^"']+)["']/i);
+            var titleMatch = attrs.match(/data-movie-title\s*=\s*["']([^"']+)["']/i);
+            var imgMatch = inner.match(/<img[^>]+src\s*=\s*["']([^"']+)["']/i);
+            var epMatch = inner.match(/class\s*=\s*["'][^"']*episode-badge[^"']*["'][^>]*>\s*([^<]+)/i);
 
             if (hrefMatch && titleMatch && imgMatch) {
                 var href = hrefMatch[1];
-                if (href.indexOf("http") == -1) href = BASEURL + href;
-                href = href.replace(/(^[\s\S]*?)\?[\s\S]*$/i,"$1/1?lang=vi-VN");
+                if (href.indexOf("http") == -1) href = BASEURL + (href.indexOf("/") === 0 ? href : "/" + href);
+                href = href.replace(/(^[\s\S]*?)\?[\s\S]*$/i, "$1/1?lang=vi-VN");
 
                 var src = imgMatch[1];
-                if (src.indexOf("http") == -1) src = BASEURL + src;
+                if (src.indexOf("http") == -1) src = BASEURL + (src.indexOf("/") === 0 ? src : "/" + src);
                 var cleanThumb = src.replace(/&amp;/g, '&');
-
-                var title = titleMatch[1].trim();
-                var episode_current = epMatch ? epMatch[1].trim() : "";
 
                 if (href.indexOf("watch/") > -1) {
                     items.push({
                         "id": href,
-                        "title": title,
+                        "title": titleMatch[1].trim(),
+                        "posterUrl": cleanThumb,
+                        "backdropUrl": cleanThumb,
+                        "quality": "",
+                        "lang": "",
+                        "episode_current": epMatch ? epMatch[1].trim() : ""
+                    });
+                }
+            }
+        }
+
+        // CÁCH 2: KÍCH HOẠT FALLBACK BẰNG MÃ GỐC CỦA BẠN NẾU REGEX THẤT BẠI
+        if (items.length === 0) {
+            _$(html).find("article[class*='card']").each(function() {
+                var href = this.attr("data-watch-url");
+                if (!href) return;
+                
+                if (href.indexOf("http") == -1) href = BASEURL + href;
+                href = href.replace(/(^[\s\S]*?)\?[\s\S]*$/i,"$1/1?lang=vi-VN");
+                
+                var title = this.attr("data-movie-title") || "Đang cập nhật";
+                var src = this.find("img").attr("src") || "";
+                if (src.indexOf("http") == -1) src = BASEURL + src;
+                
+                var episode_current = this.find(".episode-badge").text() || "";
+                
+                if (href && href.indexOf("http") > -1 && href.indexOf("watch/") > -1 ) {
+                    var cleanThumb = src.replace(/&amp;/g, '&');
+                    items.push({
+                        "id": href,
+                        "title": title.trim(),
                         "posterUrl": cleanThumb,
                         "backdropUrl": cleanThumb,
                         "quality": "",
@@ -211,24 +227,17 @@ function parseListResponse(html, $url) {
                         "episode_current": episode_current
                     });
                 }
-            }
+            });
         }
         
         return JSON.stringify({
             "items": items,
-            "pagination": {
-                "currentPage": 1,
-                "totalPages": 999
-            }
+            "pagination": { "currentPage": 1, "totalPages": 999 }
         });
     } catch (e) {
-        log("parseListResponse: " + e);
         return JSON.stringify({
-            "items": [],
-            "pagination": {
-                "currentPage": 1,
-                "totalPages": 1
-            }
+            "items": [{ "id": $url || "error_url", "title": "Lỗi: " + e, "posterUrl": "", "backdropUrl": "" }],
+            "pagination": { "currentPage": 1, "totalPages": 1 }
         });
     }
 }
@@ -238,12 +247,11 @@ function parseSearchResponse(html, url) {
 }
 
 // -----------------------------------------------------------------------------
-// [ĐÃ TỐI ƯU SIÊU TỐC]: KHÔNG SỬ DỤNG _$ ĐỂ TÌM KIẾM CHI TIẾT
+// [DUAL-ENGINE] BÓC TÁCH CHI TIẾT: 1 NÚT XEM CHUẨN WEBVIEW
 // -----------------------------------------------------------------------------
 function parseMovieDetail(html, url) {
     try {
-        var idMatch = /<link\s+rel="canonical"\s+href="([^"]+)"/i.exec(html) ||
-            /<meta\s+property="og:url"\s+content="([^"]+)"/i.exec(html);
+        var idMatch = /<link\s+rel="canonical"\s+href="([^"]+)"/i.exec(html) || /<meta\s+property="og:url"\s+content="([^"]+)"/i.exec(html);
         var id = idMatch ? idMatch[1] : (url || "");
 
         var limg = "";
@@ -252,6 +260,7 @@ function parseMovieDetail(html, url) {
         var category = "";
         var episode_current = "";
 
+        // Bóc tách siêu nhẹ bằng .match string
         var rmatch = html.match(/meta\s+property="og:image"\s+content="([^"]+)"/i);
         if (rmatch && rmatch[1]) limg = rmatch[1];
 
@@ -261,22 +270,28 @@ function parseMovieDetail(html, url) {
         rmatch = html.match(/meta\s+property="og:description"\s+content="([^"]+)"/i);
         if (rmatch && rmatch[1]) ldes = rmatch[1];
         
-        // Quét lấy mảng thể loại phim
-        var catRegex = /class=["'][^"']*movie-tag-pill[^"']*["'][^>]*>([^<]+)/gi;
+        // Ưu tiên chạy Regex để bóc tách thể loại và số tập
+        var catRegex = /class\s*=\s*["'][^"']*movie-tag-pill[^"']*["'][^>]*>\s*([^<]+)/gi;
         var cats = [];
         var cM;
         while ((cM = catRegex.exec(html)) !== null) {
-            cats.push(cM[1].trim());
+            var txt = cM[1].replace(/&amp;/g, '&').trim();
+            if (txt) cats.push(txt);
         }
         category = cats.join(" - ");
 
-        // Quét lấy số tập
-        var epMatch = html.match(/class=["'][^"']*movie-sub[^"']*["'][^>]*>([^<]+)/i);
-        if (epMatch) {
-            episode_current = epMatch[1].trim();
+        var epMatch = html.match(/class\s*=\s*["'][^"']*movie-sub[^"']*["'][^>]*>\s*([^<]+)/i);
+        if (epMatch) episode_current = epMatch[1].trim();
+
+        // KÍCH HOẠT FALLBACK VÉT LẠI NẾU REGEX THẤT BẠI
+        if (!category) {
+            category = _$(html).find(".movie-tag-pill").textAll(" - ");
+        }
+        if (!episode_current) {
+            episode_current = _$(html).find(".movie-sub").text();
         }
         
-        // Trả về 1 tập duy nhất gọi là "Lướt Tự Động" chứa URL xem trực tiếp
+        // Ép duy nhất 1 tập để đẩy nguyên URL sang Webview
         var servers = [];
         servers.push({
             name: "Lướt Tự Động (Webview)",
@@ -308,11 +323,7 @@ function parseMovieDetail(html, url) {
 
     } catch (e) {
         log("parseMovieDetail:" + e);
-        return JSON.stringify({
-            id: url || "error",
-            title: "Lỗi chi tiết",
-            servers: []
-        });
+        return JSON.stringify({ id: url || "error", title: "Lỗi chi tiết", servers: [] });
     }
 }
 
@@ -382,9 +393,7 @@ function parseCategoriesResponse(apiResponseJson) {
         var listurl = getLISTmenu();
         var menulist = buildMenu(listurl);
         return JSON.stringify(menulist);
-    } catch (e) {
-        return JSON.stringify([]);
-    }
+    } catch (e) { return JSON.stringify([]); }
 }
 
 function parseCountriesResponse(html) { return "[]"; }
@@ -396,7 +405,7 @@ function getLISTmenu() {
 
 function buildMenu(menuStr, type) { 
     var menuArray = JSON.parse(menuStr); 
-    let menulist = []; 
+    var menulist = []; 
     if (!menuArray || !Array.isArray(menuArray)) return menulist; 
     var typeStr = type !== undefined ? String(type).trim() : undefined; 
     for (var i = 0; i < menuArray.length; i++) { 
@@ -419,5 +428,7 @@ function buildMenu(menuStr, type) {
 }
 
 
-// BỘ DOM ẢO _$ THEO CHUẨN (Cứ giữ ở cuối File, để phòng hờ cho tương lai nếu dùng tới)
+// -----------------------------------------------------------------------------
+// BỘ DOM ẢO _$ THEO CHUẨN CỦA VAX APP (GIỮ LẠI LÀM BỘ DỰ PHÒNG FALLBACK)
+// -----------------------------------------------------------------------------
 function _$(htmlOrBlock){ if (htmlOrBlock && typeof htmlOrBlock === 'object' && htmlOrBlock.elements) { return htmlOrBlock; } var instance = { sourceHtml: typeof htmlOrBlock === 'string' ? htmlOrBlock : '', elements: Array.isArray(htmlOrBlock) ? htmlOrBlock : (htmlOrBlock ? [htmlOrBlock] : []), length: 0, find: function (selector) { if (selector.indexOf(',') !== -1) { var results = []; var selectors = selector.split(',').map(function (s) { return s.trim(); }); for (var s = 0; s < selectors.length; s++) { if (selectors[s] === "") continue; var subInstance = this.find(selectors[s]); for (var r = 0; r < subInstance.elements.length; r++) { var element = subInstance.elements[r]; if (results.indexOf(element) === -1) { results.push(element); } } } var multiInstance = _$(results); multiInstance.sourceHtml = this.sourceHtml; return multiInstance; } var results = []; var contentFilter = ""; if (selector.indexOf(":content(") !== -1) { var contentMatch = selector.match(/:content\((?:"([^"]*)"|'([^']*)'|([^)]*))\)/); if (contentMatch) { contentFilter = contentMatch[1] || contentMatch[2] || contentMatch[3] || ""; selector = selector.replace(/:content\((?:"[^"]*"|'[^']*'|[^)]*)\)/, ""); } } var attrNameFilter = ""; var attrValueFilter = ""; var attrOperator = "="; var hasAttrFilter = false; var attrMatch = selector.match(/\[([a-zA-Z0-9_-]+)\s*([*^$]?=)\s*(?:"([^"]*)"|'([^']*)'|([^\]"']*))\]/); if (attrMatch) { hasAttrFilter = true; attrNameFilter = attrMatch[1]; attrOperator = attrMatch[2]; attrValueFilter = attrMatch[3] || attrMatch[4] || attrMatch[5] || ""; selector = selector.replace(/\[.*?\]/, ""); } var notSelector = ""; if (selector.indexOf(":not(") !== -1) { var notMatch = selector.match(/:not\(([^)]+)\)/); if (notMatch) { notSelector = notMatch[1]; selector = selector.replace(/:not\([^)]+\)/, ""); } } var isFirstFilter = selector.indexOf(":first") !== -1; var isLastFilter = selector.indexOf(":last") !== -1; selector = selector.replace(/:first|:last/g, ""); var targetTagName = ""; var targetId = ""; var targetClasses = []; var selectorToParse = selector.trim(); if (selectorToParse !== "") { var idIndex = selectorToParse.indexOf('#'); if (idIndex !== -1) { var afterId = selectorToParse.substring(idIndex + 1); var nextDot = afterId.indexOf('.'); targetId = nextDot === -1 ? afterId : afterId.substring(0, nextDot); selectorToParse = selectorToParse.substring(0, idIndex) + (nextDot === -1 ? "" : "." + afterId.substring(nextDot + 1)); } var classParts = selectorToParse.split('.'); var possibleTag = classParts.shift(); if (possibleTag) { targetTagName = possibleTag.toLowerCase(); } targetClasses = classParts.filter(function (c) { return c.length > 0; }); } for (var i = 0; i < this.elements.length; i++) { var currentHtml = this.elements[i]; var pos = 0; var subResults = []; while ((pos = currentHtml.indexOf('<', pos)) !== -1) { if (currentHtml.charAt(pos + 1) === '/' || currentHtml.charAt(pos + 1) === '!') { pos++; continue; } var endOpenTag = -1; var insideQuote = false; var quoteChar = ''; for (var j = pos + 1; j < currentHtml.length; j++) { var char = currentHtml.charAt(j); if ((char === '"' || char === "'") && currentHtml.charAt(j - 1) !== '\\') { if (!insideQuote) { insideQuote = true; quoteChar = char; } else if (char === quoteChar) { insideQuote = false; } } if (char === '>' && !insideQuote) { endOpenTag = j; break; } } if (endOpenTag === -1) break; var fullOpenTag = currentHtml.substring(pos, endOpenTag + 1); var tagMatch = fullOpenTag.match(/^<([a-zA-Z0-9_-]+)/); var currentTagName = tagMatch ? tagMatch[1].toLowerCase() : ""; var isMatched = true; if (targetTagName && targetTagName !== currentTagName) { isMatched = false; } var getClassAttr = fullOpenTag.match(/class\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i); var classMatchStr = getClassAttr ? (getClassAttr[1] || getClassAttr[2] || getClassAttr[3] || "") : ""; var getIdAttr = fullOpenTag.match(/id\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i); var idMatchStr = getIdAttr ? (getIdAttr[1] || getIdAttr[2] || getIdAttr[3] || "") : ""; if (isMatched && targetId && idMatchStr !== targetId) { isMatched = false; } if (isMatched && targetClasses.length > 0) { if (classMatchStr) { var currentClasses = classMatchStr.trim().split(/\s+/); for (var c = 0; c < targetClasses.length; c++) { if (currentClasses.indexOf(targetClasses[c]) === -1) { isMatched = false; break; } } } else { isMatched = false; } } if (isMatched && hasAttrFilter) { var actualValue = ""; if (attrNameFilter === "class") { actualValue = classMatchStr; } else if (attrNameFilter === "id") { actualValue = idMatchStr; } else { var getAnyAttr = fullOpenTag.match(new RegExp(attrNameFilter + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s>]+))', 'i')); actualValue = getAnyAttr ? (getAnyAttr[1] || getAnyAttr[2] || getAnyAttr[3] || "") : ""; } var attrExists = fullOpenTag.search(new RegExp(attrNameFilter + '\\s*=', 'i')) !== -1; if (!attrExists) { isMatched = false; } else { if (attrOperator === "=") { if (attrNameFilter === "class") { var classes = actualValue.trim().split(/\s+/); if (classes.indexOf(attrValueFilter) === -1) isMatched = false; } else if (actualValue !== attrValueFilter) { isMatched = false; } } else if (attrOperator === "*=") { if (actualValue.indexOf(attrValueFilter) === -1) isMatched = false; } else if (attrOperator === "^=") { if (actualValue.indexOf(attrValueFilter) !== 0) isMatched = false; } else if (attrOperator === "$=") { if (actualValue.slice(-attrValueFilter.length) !== attrValueFilter) isMatched = false; } } } if (isMatched) { var startTagPos = pos; var endTagPos = endOpenTag + 1; var selfClosingTags = ['img', 'source', 'input', 'br', 'hr', 'link', 'meta']; if (selfClosingTags.indexOf(currentTagName) === -1 && fullOpenTag.indexOf('/>') === -1) { var depth = 1; var tagRegex = new RegExp('<(/?)' + currentTagName + '(?:\\s+[^>]*|\\s*>)', 'gi'); tagRegex.lastIndex = endOpenTag + 1; var match; while ((match = tagRegex.exec(currentHtml)) !== null) { if (match[1] === '/') depth--; else if (match[0].indexOf('/>') === -1) depth++; if (depth === 0) { endTagPos = tagRegex.lastIndex; break; } } } results.push(currentHtml.substring(startTagPos, endTagPos)); } } var nextInstance = _$(results); nextInstance.sourceHtml = this.sourceHtml; this.elements = results; this.length = results.length; return this; }, parent: function () { var results = []; if (!this.sourceHtml) return this; for (var i = 0; i < this.elements.length; i++) { var elem = this.elements[i]; var idx = this.sourceHtml.indexOf(elem); if (idx <= 0) continue; var scanPos = idx - 1; while (scanPos >= 0) { var openTagPos = this.sourceHtml.lastIndexOf('<', scanPos); if (openTagPos === -1) break; if (this.sourceHtml.charAt(openTagPos + 1) !== '/' && this.sourceHtml.charAt(openTagPos + 1) !== '!') { var endOpenTag = this.sourceHtml.indexOf('>', openTagPos); if (endOpenTag !== -1 && endOpenTag > openTagPos) { var fullOpenTag = this.sourceHtml.substring(openTagPos, endOpenTag + 1); var spacePos = fullOpenTag.indexOf(' '); var currentTagName = (spacePos === -1) ? fullOpenTag.substring(1, fullOpenTag.length - 1).toLowerCase() : fullOpenTag.substring(1, spacePos).toLowerCase(); var endTagPos = endOpenTag + 1; var selfClosingTags = ['img', 'source', 'input', 'br', 'hr', 'link', 'meta']; if (selfClosingTags.indexOf(currentTagName) === -1 && fullOpenTag.indexOf('/>') === -1) { var depth = 1; var tagRegex = new RegExp('<(/?)' + currentTagName + '(?:\\s+[^>]*|\\s*>)', 'gi'); tagRegex.lastIndex = endOpenTag + 1; var match; while ((match = tagRegex.exec(this.sourceHtml)) !== null) { if (match[1] === '/') depth--; else if (match[0].indexOf('/>') === -1) depth++; if (depth === 0) { endTagPos = tagRegex.lastIndex; break; } } } if (endTagPos >= idx + elem.length) { var parentBlock = this.sourceHtml.substring(openTagPos, endTagPos); if (results.indexOf(parentBlock) === -1) results.push(parentBlock); break; } } } scanPos = openTagPos - 1; } } var parentInstance = _$(results); parentInstance.sourceHtml = this.sourceHtml; this.elements = results; this.length = results.length; return this; }, closest: function (selector) { var results = []; if (!this.sourceHtml || this.elements.length === 0) return _$([]); for (var i = 0; i < this.elements.length; i++) { var currentElem = this.elements[i]; var currentObj = _$(currentElem); currentObj.sourceHtml = this.sourceHtml; var selfCheck = _$(this.sourceHtml).find(selector); var isSelfMatched = false; for (var s = 0; s < selfCheck.elements.length; s++) { if (selfCheck.elements[s] === currentElem) { isSelfMatched = true; break; } } if (isSelfMatched) { if (results.indexOf(currentElem) === -1) results.push(currentElem); continue; } var parentObj = currentObj.parent(); while (parentObj.elements.length > 0) { var parentElem = parentObj.elements[0]; var checkMatch = _$(this.sourceHtml).find(selector); var isMatched = false; for (var j = 0; j < checkMatch.elements.length; j++) { if (checkMatch.elements[j] === parentElem) { isMatched = true; break; } } if (isMatched) { if (results.indexOf(parentElem) === -1) results.push(parentElem); break; } parentObj = parentObj.parent(); } } var closestInstance = _$(results); closestInstance.sourceHtml = this.sourceHtml; return closestInstance; } }; instance.length = instance.elements.length; return instance; }
