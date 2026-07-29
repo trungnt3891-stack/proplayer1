@@ -80,7 +80,7 @@
     },
     {
             "id": "shortflix",
-            "name": "Phim Ngắn Hay",
+            "name": "PhimNgắn-LoginAcc",
             "version": "1.2.2",
             "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/shortflix_plugin.js",
             "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/shortflix.png",
