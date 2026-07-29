@@ -97,6 +97,105 @@ Khi đăng ký plugin trên file JSON hoặc thêm nguồn tùy chỉnh, đườ
 | `getFilterConfig()` | Bộ lọc | Tùy chọn |
 
 ### Nhóm 2: URL (Sinh đường dẫn)
+# 🛠️ VAAPP Plugin Developer Kit
+
+## App Hoạt Động Như Nào?
+
+VAAPP là một **trình vỏ (Shell)** — nó chỉ lo UI và Player. Toàn bộ nội dung phim/truyện được cung cấp qua **Plugin JS** do bạn viết.
+
+### Luồng Dữ Liệu Chi Tiết
+
+```
+NGƯỜI DÙNG bấm vào mục "Hành Động" trên Trang chủ
+        │
+        ▼
+┌─ APP gọi: getUrlList("hanh-dong", '{"page":1}') ─────────────────┐
+│  Plugin trả: "https://phim.com/the-loai/hanh-dong?page=1"        │
+└───────────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌─ APP tự fetch HTTP GET url đó ────────────────────────────────────┐
+│  Nhận toàn bộ HTML/JSON thô từ server                             │
+└───────────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌─ APP gọi: parseListResponse(html) ────────────────────────────────┐
+│  Plugin parse HTML → trả JSON: { items: [{id, title, poster}...]} │
+└───────────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌─ APP render danh sách phim lên UI ────────────────────────────────┐
+│  Người dùng bấm vào 1 phim → Lặp lại chu trình với Detail/Play   │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+### Luồng Xem Phim (Chi Tiết → Player)
+
+```
+Bước 1: parseMovieDetail(html)
+   → Trả servers + episodes (mỗi episode có id = URL hoặc slug)
+
+Bước 2: Người dùng chọn tập
+   → App gọi getUrlDetail(episode.id) để lấy URL fetch
+   → App fetch URL → gọi parseDetailResponse(html)
+
+Bước 3: parseDetailResponse(html)
+   → Trả { url, headers, mimeType, subtitles }
+
+Bước 4:
+   ├─ Nếu isEmbed = false → ExoPlayer phát url trực tiếp
+   ├─ Nếu isEmbed = true  → App fetch tiếp → gọi parseEmbedResponse()
+   │                        (lặp tối đa 3 lần cho đến khi isEmbed = false)
+   └─ Nếu playerType = "embed" → WebView load url
+```
+
+---
+
+## 🚀 Bắt Đầu Nhanh (3 Bước)
+
+### Bước 1: Tạo Plugin
+Copy file `plugin_template.js` → đổi tên `ten_web_plugin.js`, bắt đầu viết code.
+
+### Bước 2: Test Trên Máy Tính
+Mở file **`tester.html`** bằng Chrome:
+1. **Nạp JS**: Bấm "Nạp file JS" → chọn file plugin của bạn
+2. **Dán HTML**: Mở trang phim → Ctrl+U (View Source) → copy dán vào ô input
+3. **Chạy thử**: Bấm các nút `parseListResponse()`, `parseMovieDetail()`...
+4. **Xem kết quả**: Xanh = JSON chuẩn ✅ | Đỏ = lỗi cần sửa ❌
+
+### Bước 3: Đăng Ký
+Upload file `.js` lên GitHub Raw → thêm vào `plugins.json` → App tự cập nhật.
+
+### ⚠️ Lưu Ý Quan Trọng Khi Phát Hành Plugin (Mới)
+
+#### 1. Bắt Buộc Sử Dụng Link RAW
+Khi đăng ký plugin trên file JSON hoặc thêm nguồn tùy chỉnh, đường dẫn file JS **bắt buộc phải là đường dẫn RAW** trả về code JavaScript thô.
+*   **Sai:** `https://github.com/user/repo/blob/main/plugin.js` (Trả về giao diện web HTML của GitHub).
+*   **Từ phiên bản App 1.7.5+**: Hỗ trợ thêm link gist/custom domain nhưng nên dùng link RAW.
+
+#### 2. Dung Thứ Dấu Phẩy Thừa & Cấu Trúc Bỏ Ngỏ (Trailing Comma & Loose Schema)
+*   Từ phiên bản ứng dụng **1.7.5+**, bộ phân tích cú pháp JSON của App đã hỗ trợ `allowTrailingComma = true`.
+*   **`FilterOption`**: Trường `value` giờ đây có giá trị mặc định. Nếu plugin khai báo `{ "slug": "/cat-1", "name": "Tên" }` thay vì `value`, App vẫn tự chuyển đổi slug thành `value` mà không crash `MissingFieldException`.
+
+#### 3. Tối Ưu `getUrlDetail` & Tránh OOM (Out Of Memory)
+*   Nếu `getUrlDetail(slug)` nhận được link stream trực tiếp (`.mp4`, `.m3u8`, `.mpd`,...):
+    *   **Khuyến nghị**: Hãy `return JSON.stringify({ "url": directUrl, "isEmbed": false, "mimeType": "..." })` ngay lập tức!
+    *   **Cơ chế bảo vệ từ App**: Nếu `getUrlDetail` trả về URL video trực tiếp (plain string), App sẽ tự động phát hiện và bỏ qua bước fetch HTML (tránh sập bộ nhớ OOM) đồng thời tự động nhận diện `mimeType`.
+
+---
+
+## 📋 Danh Sách Tất Cả Các Hàm
+
+### Nhóm 1: Config (Khai báo)
+
+| Hàm | Trả về | Bắt buộc |
+|-----|--------|----------|
+| `getManifest()` | Thông tin plugin | ✅ |
+| `getHomeSections()` | Các mục trang chủ | ✅ |
+| `getPrimaryCategories()` | Menu thể loại | Tùy chọn |
+| `getFilterConfig()` | Bộ lọc | Tùy chọn |
+
+### Nhóm 2: URL (Sinh đường dẫn)
 
 | Hàm | Tham số | Trả về | Tùy chọn / Ghi chú |
 |-----|---------|--------|-------------------|
@@ -146,12 +245,10 @@ Khi đăng ký plugin trên file JSON hoặc thêm nguồn tùy chỉnh, đườ
 
 **`debug` — Console Toast dành cho phát triển plugin:**
 - Không khai báo `debug`, hoặc đặt `"debug": false`: Console Toast **không hiển thị**.
-- Đặt `"debug": true`: bật Console Toast cho plugin đó.
+- Đặt `"debug": true`: Bật hiển thị cửa sổ overlay **Console Toast** cho plugin đó trong App.
 - App cũng tương thích với dạng string `"debug": "true"` và `"debug": "false"`, nhưng nên dùng Boolean chuẩn `true`/`false`.
-- Vị trí cài plugin, tên file, ID có prefix hay không **không ảnh hưởng**. Console chỉ dựa vào `debug` trong `getManifest()`.
-- Khi `debug=true`, app tự ghi `CALL`, `RESULT` và `ERROR` cho mọi hàm plugin chạy qua QuickJS. Arguments/kết quả dài được rút gọn để tránh làm đầy màn hình.
-- Vì đã có auto-log, không cần tự thêm `log()` hoặc `console.log()` chỉ để biết hàm nào được gọi và trả gì.
-- Chỉ dùng `console.log()` khi cần xem biến/trạng thái nội bộ cụ thể bên trong parser.
+- **Cách ghi log trong plugin**: App đã tắt chế độ tự động ngắt/in log mọi hàm chạy qua QuickJS. Để hiển thị log lên Console Toast (và logcat), dev plugin cần **chủ động gọi `console.log(...)`** hoặc `print(...)`, `console.error(...)`, `console.warn(...)` bên trong các hàm JS của plugin.
+- Cửa sổ Console Toast tự động điều chỉnh xuống dòng sát mép trái, hỗ trợ cuộn, phóng to/thu nhỏ và nút Sao chép để copy toàn bộ log.
 
 Ví dụ:
 
@@ -166,15 +263,11 @@ function getManifest() {
         debug: true
     });
 }
-```
 
-Console tự động có dạng:
-
-```text
-[CALL] getUrlList(/latest-updates/, {"page":1})
-[RESULT] getUrlList -> https://example.com/latest-updates/
-[CALL] parseMovieDetail(<html...>, https://example.com/video/123)
-[RESULT] parseMovieDetail -> {"id":"...","title":"...","servers":[...]}...
+function parseListResponse(html) {
+    console.log("Parsing HTML list response length: " + html.length);
+    // ...
+}
 ```
 
 > Biến riêng như `DEV = "true"` không bật Console Toast. Cờ phải nằm trong object do `getManifest()` trả về và có tên chính xác là `debug`.
@@ -187,7 +280,7 @@ Console tự động có dạng:
 | Giá trị | Loại nội dung & Trình phát |
 |---------|----------------------------|
 | `"MOVIE"` | Phim điện ảnh / Phim bộ truyền thống (Trình phát màn hình ngang) |
-| `"VIDEO"` | Video clip / Youtube |
+| `"VIDEO"` | Video clip / Youtube (Bỏ qua màn hình Chi tiết, mở trình phát xem trực tiếp tương tự IPTV) |
 | `"shortfilm"` | Phim ngắn / Drama ngắn / Reels / Shortflix (Trình phát xoay đứng Portrait Zoom, hỗ trợ vuốt LÊN/XUỐNG chuyển tập kiểu TikTok trên Mobile) |
 | `"MANGA"` | Truyện tranh (Trình đọc manga) |
 | `"NOVEL"` | Truyện chữ |
