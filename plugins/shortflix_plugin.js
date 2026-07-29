@@ -16,12 +16,12 @@ function getManifest() {
     return JSON.stringify({
         "id": "shortflix",
         "name": "Phim Ngắn Shortflix",
-        "description": "Bản Webview: Vuốt dọc tự chuyển tập, Tự động xoay dọc, Chặn Quảng Cáo, Bỏ Qua Đăng Nhập",
-        "version": "1.3.3", 
+        "description": "Bản Webview: Vuốt dọc tự chuyển tập, Tự động xoay dọc, Chặn Quảng Cáo",
+        "version": "1.3.2", 
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/shortflix.png",
         "isEnabled": true,
-        "hasLogin": false,                    // Đã tắt yêu cầu đăng nhập trên App
+        "hasLogin": true,                     
         "loginUrl": BASEURL + "/vi/login",    
         "type": "shortfilm",                  // [KÍCH HOẠT CHẾ ĐỘ PHIM NGẮN TIKTOK]
         "layoutType": "VERTICAL",             // [ÉP AUTO XOAY DỌC MÀN HÌNH]
@@ -60,7 +60,7 @@ function getFilterConfig() {
 }
 
 // =============================================================================
-// HELPER: CURSOR BASE64 ENCODE / DECODE 
+// HELPER: CURSOR BASE64 ENCODE / DECODE (GIỮ NGUYÊN)
 // =============================================================================
 
 function encodeBase64(str) {
@@ -275,7 +275,8 @@ function parseSearchResponse(html, url) {
 }
 
 // -----------------------------------------------------------------------------
-// PARSE MOVIE DETAIL DÀNH RIÊNG CHO WEBVIEW
+// [ĐÃ SỬA] PARSE MOVIE DETAIL DÀNH RIÊNG CHO WEBVIEW
+// Chỉ trả về 1 nút xem phim, webview sẽ đảm nhận phần lướt tập
 // -----------------------------------------------------------------------------
 function parseMovieDetail(html, url) {
     try {
@@ -308,6 +309,8 @@ function parseMovieDetail(html, url) {
         status = _$(html).find("span:content('Trạng thái:')").parent().text().trim().replace("Trạng thái:", "");
         
         var servers = [];
+        
+        // Lấy link xem phim gốc. Web Shortflix thường có nút "Xem ngay" hoặc link tập 1
         var watchLink = url; 
         
         // Đẩy 1 item duy nhất để mở Webview
@@ -344,39 +347,29 @@ function parseMovieDetail(html, url) {
 }
 
 // -----------------------------------------------------------------------------
-// PARSE DETAIL RESPONSE DÀNH RIÊNG CHO WEBVIEW (XỬ LÝ CLIENT-SIDE BLOCK)
-// Ép mở Webview và Tiêm JavaScript ẩn sạch rác, header, footer, quảng cáo, và popup đăng nhập
+// [ĐÃ SỬA] PARSE DETAIL RESPONSE DÀNH RIÊNG CHO WEBVIEW
+// Ép mở Webview và Tiêm JavaScript ẩn sạch rác, header, footer, quảng cáo
 // -----------------------------------------------------------------------------
 function parseDetailResponse(html, url) {
     try {
         var killAdsCssJs = `
             (function() {
                 var style = document.createElement('style');
-                // Ép ẩn mọi element rác, quảng cáo, nút tải app, và CÁC LỚP CHẶN ĐĂNG NHẬP/VIP
-                style.innerHTML = 'header, .header, nav, footer, .footer, .download-app, .app-download, [class*="ad-"], [id*="ad-"], .popup, .modal, .google-auto-placed, iframe[src*="ads"], .bottom-nav, .navigation, .sidebar, .comments, ' + 
-                                  '[class*="login"], [id*="login"], [class*="vip"], [class*="paywall"], [class*="lock-screen"], .require-login, [class*="overlay"] { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } ' + 
-                                  'body, html { margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: #000 !important; }';
+                // Ép ẩn mọi element rác, quảng cáo, nút tải app
+                style.innerHTML = 'header, .header, nav, footer, .footer, .download-app, .app-download, [class*="ad-"], [id*="ad-"], .popup, .modal, .google-auto-placed, iframe[src*="ads"], .bottom-nav, .navigation, .sidebar, .comments { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } body, html { margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: #000 !important; }';
                 document.head.appendChild(style);
 
                 setInterval(function() {
-                    // Xóa các banner tải app và các modal yêu cầu đăng nhập/VIP đè lên màn hình
-                    var appBanners = document.querySelectorAll('div[class*="download"], div[class*="banner"], div[class*="login"], div[class*="vip-modal"], div[class*="paywall"], div[class*="overlay"]');
+                    // Xóa các banner/box tải app hiển thị đè màn hình
+                    var appBanners = document.querySelectorAll('div[class*="download"], div[class*="banner"]');
                     for (var i = 0; i < appBanners.length; i++) {
                         if (appBanners[i]) appBanners[i].style.display = 'none';
                     }
                     
-                    // Tự động tắt nút Đóng popup (nếu có)
+                    // Tự động tắt nút Đóng popup nếu web tự mở ra quảng cáo
                     var closeBtns = document.querySelectorAll('.close, .btn-close, [aria-label="Close"]');
                     for (var j = 0; j < closeBtns.length; j++) {
                         try { closeBtns[j].click(); } catch(e){}
-                    }
-                    
-                    // Nếu web dùng kịch bản pause video khi hiện popup login, ta ép nó play lại
-                    var videos = document.querySelectorAll('video');
-                    for (var k = 0; k < videos.length; k++) {
-                        if (videos[k].paused) {
-                            try { videos[k].play(); } catch(e){}
-                        }
                     }
                 }, 500);
             })();
@@ -384,7 +377,7 @@ function parseDetailResponse(html, url) {
 
         return JSON.stringify({
             "url": url,
-            "isEmbed": true,
+            "isEmbed": true, // <--- CỰC KỲ QUAN TRỌNG: ÉP MỞ WEBVIEW
             "headers": {
                 "Referer": BASEURL,
                 "Custom-Js": killAdsCssJs.trim()
