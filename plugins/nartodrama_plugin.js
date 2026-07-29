@@ -41,7 +41,6 @@ function getHomeSections() {
             { "slug": "/tag/hien-dai?lang=vi-VN&tab-provider=bibishort", "title": "Hiện Đại", "type": "Horizontal" },
             { "slug": "/tag/bao-thu?lang=vi-VN&tab-provider=bibishort", "title": "Báo Thù", "type": "Horizontal" },
             { "slug": "/tag/bi-an-than-phan?lang=vi-VN&tab-provider=bibishort", "title": "Thân Phận Bí Ẩn", "type": "Horizontal" },
-            { "slug": "/search?lang=vi-VN&q=kinh+d%E1%BB%8B", "title": "Kinh Dị", "type": "Horizontal" }
         ];
         return JSON.stringify(sections);
     } catch (e) {
