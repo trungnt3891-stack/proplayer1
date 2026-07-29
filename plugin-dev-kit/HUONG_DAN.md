@@ -33,21 +33,26 @@ NGƯỜI DÙNG bấm vào mục "Hành Động" trên Trang chủ
 ### Luồng Xem Phim (Chi Tiết → Player)
 
 ```
-Bước 1: parseMovieDetail(html)
-   → Trả servers + episodes (mỗi episode có id = URL hoặc slug)
+NẾU type = "IPTV" HOẶC "VIDEO":
+   App bỏ qua màn hình Chi tiết (Detail Screen) → mở thẳng Player
+   App gọi getUrlDetail(id) để lấy URL luồng phát và phát trực tiếp.
 
-Bước 2: Người dùng chọn tập
-   → App gọi getUrlDetail(episode.id) để lấy URL fetch
-   → App fetch URL → gọi parseDetailResponse(html)
+NẾU type = "MOVIE" / "shortfilm":
+   Bước 1: parseMovieDetail(html)
+      → Trả servers + episodes (mỗi episode có id = URL hoặc slug)
 
-Bước 3: parseDetailResponse(html)
-   → Trả { url, headers, mimeType, subtitles }
+   Bước 2: Người dùng chọn tập
+      → App gọi getUrlDetail(episode.id) để lấy URL fetch
+      → App fetch URL → gọi parseDetailResponse(html)
 
-Bước 4:
-   ├─ Nếu isEmbed = false → ExoPlayer phát url trực tiếp
-   ├─ Nếu isEmbed = true  → App fetch tiếp → gọi parseEmbedResponse()
-   │                        (lặp tối đa 3 lần cho đến khi isEmbed = false)
-   └─ Nếu playerType = "embed" → WebView load url
+   Bước 3: parseDetailResponse(html)
+      → Trả { url, headers, mimeType, subtitles }
+
+   Bước 4:
+      ├─ Nếu isEmbed = false → ExoPlayer phát url trực tiếp
+      ├─ Nếu isEmbed = true  → App fetch tiếp → gọi parseEmbedResponse()
+      │                        (lặp tối đa 3 lần cho đến khi isEmbed = false)
+      └─ Nếu playerType = "embed" → WebView load url
 ```
 
 ---
