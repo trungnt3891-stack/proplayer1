@@ -94,6 +94,13 @@
             "iconUrl": "https://narto-drama.com/narto-drama-logo-compressed.png",
     },
     {
+            "id": "vicdn",
+            "name": "https://vicdn.cc",
+            "version": "1.0",
+            "scriptUrl": "https://rawcdn.githack.com/alokillgtv-gif/VAXAPPSCRIPT/16e131a2d0ce832fb8e5a603626a6a21d08aafa5/Plugins/movie/vicdn_plugin.js",
+            "iconUrl": "https://vicdn.cc/vicdn.png",
+    },
+    {
       "id": "Anime09",
       "name": "Anime09",
       "version": "1.0.3",
