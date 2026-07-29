@@ -7,8 +7,8 @@ function getManifest() {
     return JSON.stringify({
         "id": "nartodrama",
         "name": "Phim Ngắn Narto",
-        "description": "Bản Webview: Vuốt dọc tự chuyển tập, Auto xoay dọc, Chặn Quảng Cáo, Fix lỗi URL",
-        "version": "1.2.1",
+        "description": "Bản Webview: Vuốt dọc chuyển tập, Auto xoay dọc, Chặn Quảng Cáo, Fix lỗi 404",
+        "version": "1.2.2",
         "info": "Nguồn phim ngắn siêu hay. Đã tối ưu hóa giao diện vuốt Tiktok mượt mà cho iOS.",
         "baseUrl": "https://edge.narto-drama.com",
         "iconUrl": "https://narto-drama.com/narto-drama-logo-compressed.png",
@@ -177,19 +177,23 @@ function getUrlYears() { return ""; }
 function parseListResponse(html, $url) {
     try {
         var items = [];
-        _$(html).find("article[class*='card']").each(function() {
-            var href = this.attr("data-watch-url");
+        _$(html).find("article.card, a[href*='/detail/watch/']").each(function() {
+            // Lấy URL nguyên gốc, không append /1 gây lỗi 404 NOT FOUND
+            var href = this.attr("data-watch-url") || this.attr("href") || this.find("a").attr("href");
+            if (!href) return;
             if (href.indexOf("http") == -1) {
-                href = BASEURL + href;
+                href = BASEURL + (href.startsWith('/') ? '' : '/') + href;
             }
-            href = href.replace(/(^[\s\S]*?)\?[\s\S]*$/i,"$1/1?lang=vi-VN");
-            var title = this.attr("data-movie-title");
-            var src = this.find("img").attr("src");
-            if (src.indexOf("http") == -1) {
-                src = BASEURL + src;
+            
+            var title = this.attr("data-movie-title") || this.find(".title").text() || this.find("img").attr("alt") || "";
+            var src = this.find("img").attr("src") || this.find("img").attr("data-src") || "";
+            if (src && src.indexOf("http") == -1) {
+                src = BASEURL + (src.startsWith('/') ? '' : '/') + src;
             }
-            var episode_current = this.find(".episode-badge").text();
-            if (href && href.indexOf("http") > -1 && href.indexOf("watch/") > -1 ) {
+            
+            var episode_current = this.find(".episode-badge").text() || "HD";
+            
+            if (href && title) {
                 var cleanThumb = src.replace(/&amp;/g, '&');
                 items.push({
                     "id": href,
@@ -207,7 +211,7 @@ function parseListResponse(html, $url) {
             "items": items,
             "pagination": {
                 "currentPage": 1,
-                "totalPages": 999
+                "totalPages": items.length > 0 ? 999 : 1
             }
         });
     } catch (e) {
@@ -230,44 +234,31 @@ function parseSearchResponse(html, url) {
 }
 
 // -----------------------------------------------------------------------------
-// ĐÃ FIX: GIỮ NGUYÊN URL GỐC LÀM LINK WATCH, KHÔNG CHẾ CHUỖI GÂY LỖI
+// ĐÃ SỬA: KHÔNG CẮT GHÉP URL NỮA. CHỈ TRẢ VỀ DUY NHẤT 1 LINK VÀO WEBVIEW
 // -----------------------------------------------------------------------------
 function parseMovieDetail(html, url) {
     try {
-        var idMatch = /<link\s+rel="canonical"\s+href="([^"]+)"/i.exec(html) ||
-            /<meta\s+property="og:url"\s+content="([^"]+)"/i.exec(html);
-        var id = idMatch ? idMatch[1] : (url || "");
-
-        var limg = "";
-        var lname = "Đang cập nhật...";
-        var ldes = "Không có mô tả.";
-        var category = "";
-        var episode_current = "";
-
-        var rmatch = html.match(/meta\s+property="og:image"\s+content="([^"]+)"/i);
-        if (rmatch && rmatch[1]) limg = rmatch[1];
-
-        rmatch = html.match(/meta\s+property="og:title"\s+content="([^"]+)"/i);
-        if (rmatch && rmatch[1]) lname = rmatch[1];
-
-        rmatch = html.match(/meta\s+property="og:description"\s+content="([^"]+)"/i);
-        if (rmatch && rmatch[1]) ldes = rmatch[1];
-
-        category = _$(html).find(".movie-tag-pill").textAll(" - ");
-        episode_current = _$(html).find(".movie-sub").text() || "Đang cập nhật";
+        // Lấy thông tin cơ bản để hiển thị ở giao diện chọn phim
+        var rawName = _$(html).find("h1").text() || _$(html).find('meta[property="og:title"]').attr("content") || "Đang cập nhật...";
+        var lname = rawName.split("-")[0].trim(); // Bỏ đuôi - Narto Drama
         
+        var limg = _$(html).find('meta[property="og:image"]').attr("content") || "";
+        var ldes = _$(html).find(".movie-desc").text() || _$(html).find('meta[property="og:description"]').attr("content") || "Không có mô tả.";
+        var category = _$(html).find(".movie-tag-pill").textAll(" - ") || "";
+        var episode_current = _$(html).find(".movie-sub").text() || "Đang cập nhật";
+
         var servers = [];
         servers.push({
             name: "Lướt Tự Động (Webview)",
             episodes: [{
-                id: url, // TRUYỀN CHÍNH XÁC URL GỐC VÀO ĐÂY, KHÔNG CẮT GHÉP GÌ CẢ
+                id: url, // TRUYỀN CHÍNH XÁC URL GỐC ĐỂ NGĂN LỖI 404 NOT FOUND
                 name: "Bấm vào đây để Xem & Vuốt",
                 slug: "webview-player"
             }]
         });
 
         return JSON.stringify({
-            id: id,
+            id: url,
             title: lname,
             posterUrl: limg,
             backdropUrl: limg,
@@ -296,20 +287,20 @@ function parseMovieDetail(html, url) {
 }
 
 // -----------------------------------------------------------------------------
-// ĐÃ FIX CSS/JS ĐÚNG CHUẨN CỦA GIAO DIỆN NARTO DRAMA
+// ĐÃ SỬA: ÉP WEBVIEW VÀ TIÊM JAVASCRIPT/CSS ĐỂ XÓA MỌI RÁC, HEADER, QUẢNG CÁO
 // -----------------------------------------------------------------------------
 function parseDetailResponse(html, url) {
     try {
         var killAdsCssJs = `
             (function() {
                 var style = document.createElement('style');
-                // Narto Drama có class .topbar và .site-footer-wrap. Ẩn chúng đi để full màn.
-                style.innerHTML = '.topbar, .topbar-inner, .site-footer-wrap, .site-footer, .share-buttons, .adsense-wrap, .adsense-box, [class*="ad-"], [id*="ad-"], .watch-history-fab, iframe[src*="ads"] { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } body, html { margin: 0 !important; padding: 0 !important; background: #000 !important; }';
+                // Narto Drama có class .topbar và .site-footer-wrap. Ẩn chúng đi để Webview full màn hình.
+                style.innerHTML = '.topbar, .topbar-inner, .site-footer-wrap, .site-footer, .share-buttons, .adsense-wrap, .adsense-box, [class*="ad-"], [id*="ad-"], .watch-history-fab, iframe[src*="ads"], .nd-auth-modal { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } body, html { margin: 0 !important; padding: 0 !important; background: #000 !important; overflow-x: hidden !important; }';
                 document.head.appendChild(style);
 
                 setInterval(function() {
-                    // Xóa các lớp phủ rác
-                    var popups = document.querySelectorAll('.swal2-container, .last-watch-popup, .watch-history-popup, .nd-auth-modal');
+                    // Xóa các lớp phủ rác và popup bắt đăng nhập
+                    var popups = document.querySelectorAll('.swal2-container, .last-watch-popup, .watch-history-popup, .nd-auth-modal, .nd-auth-backdrop');
                     for (var j = 0; j < popups.length; j++) {
                         if (popups[j]) popups[j].style.display = 'none';
                     }
@@ -328,7 +319,7 @@ function parseDetailResponse(html, url) {
 
         return JSON.stringify({
             "url": url,
-            "isEmbed": true, // BẮT BUỘC TRUE ĐỂ MỞ BẰNG GIAO DIỆN TIKTOK CỦA VAX
+            "isEmbed": true, // BẮT BUỘC TRUE ĐỂ MỞ BẰNG GIAO DIỆN WEBVIEW TIKTOK CỦA VAX
             "headers": {
                 "Referer": BASEURL,
                 "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
