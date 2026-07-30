@@ -95,7 +95,7 @@
     },
     {
             "id": "vicdn",
-            "name": "https://vicdn.cc",
+            "name": "PhimNet OK",
             "version": "1.0",
             "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/Vicdn_plugin.js",
             "iconUrl": "https://vicdn.cc/vicdn.png",
