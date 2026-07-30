@@ -9,9 +9,9 @@ function getManifest() {
     return JSON.stringify({
         "id": "vicdn",
         "name": "Nguồn Vicdn",
-        "description": "Bản Native iOS: Bắt trực tiếp link M3U8 & Phụ đề Vietsub, Thêm Menu Trang chủ.",
-        "version": "2.1.0",
-        "info": "Tối ưu tốc độ cao nhất. Tự động quét và ghép Phụ Đề Tiếng Việt vào ExoPlayer. Không dùng WebView.",
+        "description": "Bản Tối Ưu Native: Bắt trực tiếp link M3U8, Fix Phụ đề Vietsub, Thêm Menu Trang chủ.",
+        "version": "2.1.5",
+        "info": "Tối ưu hóa tốc độ cao nhất nhờ đọc trực tiếp dữ liệu JSON API. Tính năng tìm kiếm được xử lý ngầm siêu tốc. Phát phim và Phụ đề trực tiếp bằng Native Player.",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/vicdn.png",
         "isEnabled": true,
@@ -32,26 +32,26 @@ function log(msg) {
 }
 
 // -----------------------------------------------------------------------------
-// [ĐÃ SỬA]: THÊM 5 DANH MỤC CHÍNH RA TRANG CHỦ THEO YÊU CẦU
+// [ĐÃ SỬA] MENU & TRANG CHỦ (THỂ HIỆN LƯỚT NGANG)
 // -----------------------------------------------------------------------------
 function getHomeSections() {
     return JSON.stringify([
-        { slug: 'update/', title: 'Phim Mới Cập Nhật', type: 'Grid', path: '' },
-        { slug: 'type/hanh-dong/', title: 'Hành Động', type: 'Horizontal', path: '' },
-        { slug: 'type/hoat-hinh/', title: 'Hoạt Hình', type: 'Horizontal', path: '' },
-        { slug: 'type/vien-tuong/', title: 'Viễn Tưởng', type: 'Horizontal', path: '' },
-        { slug: 'type/hinh-su/', title: 'Hình Sự', type: 'Horizontal', path: '' }
+        { "slug": "update", "title": "Phim Mới Cập Nhật", "type": "Grid" },
+        { "slug": "type/hanh-dong", "title": "Hành Động", "type": "Horizontal" },
+        { "slug": "type/hoat-hinh", "title": "Hoạt Hình", "type": "Horizontal" },
+        { "slug": "type/vien-tuong", "title": "Viễn Tưởng", "type": "Horizontal" },
+        { "slug": "type/hinh-su", "title": "Hình Sự", "type": "Horizontal" }
     ]);
 }
 
 function getPrimaryCategories() {
     return JSON.stringify([
-        { name: 'Mới Cập Nhật', slug: 'update/' },
-        { name: 'Hành Động', slug: 'type/hanh-dong/' },
-        { name: 'Hoạt Hình', slug: 'type/hoat-hinh/' },
-        { name: 'Viễn Tưởng', slug: 'type/vien-tuong/' },
-        { name: 'Hình Sự', slug: 'type/hinh-su/' },
-        { name: 'Bí Ẩn', slug: 'type/bi-an/' }
+        { name: 'Mới Cập Nhật', slug: 'update' },
+        { name: 'Hành Động', slug: 'type/hanh-dong' },
+        { name: 'Hoạt Hình', slug: 'type/hoat-hinh' },
+        { name: 'Viễn Tưởng', slug: 'type/vien-tuong' },
+        { name: 'Hình Sự', slug: 'type/hinh-su' },
+        { name: 'Bí Ẩn', slug: 'type/bi-an' }
     ]);
 }
 
@@ -64,45 +64,33 @@ function getFilterConfig() {
 // -----------------------------------------------------------------------------
 function getUrlList(slug, filtersJson) {
     try {
-        if (slug && slug.indexOf("http") > -1) {
-            if (slug.indexOf("search") > -1 && filtersJson) {
-                var fixedJson1 = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
-                try {
-                    var filtersSearch = JSON.parse(fixedJson1);
-                    var pageSearch = parseInt(filtersSearch.page) || 1;
-                    if (pageSearch > 1 && slug.indexOf("page=") === -1) {
-                        return slug + (slug.indexOf("?") > -1 ? "&" : "?") + "page=" + pageSearch;
-                    }
-                } catch (jsonErr) {}
-            }
-            return slug;
-        }
-
         var page = 1;
-        var path = slug || "update/";
+        var path = slug || "update";
 
         if (filtersJson) {
-            var fixedJson2 = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
+            var fixedJson = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
             try {
-                var filters = JSON.parse(fixedJson2);
+                var filters = JSON.parse(fixedJson);
                 page = parseInt(filters.page) || 1;
-                if (filters.category) {
-                    if (Array.isArray(filters.category) && filters.category.length > 0) {
-                        path = filters.category[0].slug;
-                    } else if (typeof filters.category === 'string') {
-                        path = filters.category;
-                    }
+                if (filters.category && filters.category.length > 0) {
+                    path = filters.category[0].slug;
+                } else if (typeof filters.category === 'string') {
+                    path = filters.category;
                 }
             } catch (jsonErr) {}
         }
 
-        var resultUrl = BASEAPI + (path.startsWith("/") ? path : "/" + path);
+        // Chặn nếu URL đã là http
+        if (path.indexOf("http") === 0) return path;
+
+        // Web dùng API dạng: /api/update/1 hoặc /api/type/hoat-hinh/1
+        var resultUrl = BASEAPI + (path.indexOf("/") === 0 ? "" : "/") + path;
         if (page > 0) {
             if (!resultUrl.endsWith("/")) resultUrl += "/";
             resultUrl += page; 
         }
 
-        return resultUrl.replace(/([^:]\/)\/+/g, "$1");
+        return resultUrl;
     } catch (e) {
         return BASEAPI + "/update/1";
     }
@@ -110,12 +98,14 @@ function getUrlList(slug, filtersJson) {
 
 function getUrlSearch(keyword, filtersJson) {
     var encodedKeyword = encodeURIComponent(keyword || "").trim();
+    // Đẩy từ khóa vào param ảo để hàm Parser phía sau có thể nhận diện được
     return BASEURL + "/index.php?search_keyword=" + encodedKeyword;
 }
 
 function getUrlDetail(slug) {
     if (!slug) return "";
     if (slug.indexOf('http') === 0) return slug;
+    // Slug từ trang danh sách là mã ID (VD: tv-278275-1). Ta gọi API Info để lấy chi tiết.
     return BASEAPI + "/info/" + slug.replace(/^\//, "");
 }
 
@@ -124,7 +114,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // -----------------------------------------------------------------------------
-// PARSER 1: TRANG DANH SÁCH & TÌM KIẾM
+// PARSER 1: TRANG DANH SÁCH & TÌM KIẾM (ĐỌC TRỰC TIẾP JSON, KHÔNG DÙNG DOM ẢO)
 // -----------------------------------------------------------------------------
 function parseListResponse(htmlContent, url) {
     try {
@@ -165,6 +155,7 @@ function parseSearchResponse(htmlContent, url) {
         if (matchKw) keyword = decodeURIComponent(matchKw[1]).toLowerCase();
 
         var dataArr = [];
+        // Cào lấy biến const allData = [...] từ trang index.php
         var scriptMatch = htmlContent.match(/const\s+allData\s*=\s*(\[[\s\S]*?\])\s*;/i);
         if (scriptMatch) {
             dataArr = JSON.parse(scriptMatch[1]);
@@ -176,6 +167,7 @@ function parseSearchResponse(htmlContent, url) {
             var vname = (item.vname || "").toLowerCase();
             var ename = (item.ename || "").toLowerCase();
             
+            // Nếu Tên Tiếng Việt hoặc Tên Tiếng Anh khớp với từ khóa
             if (vname.indexOf(keyword) > -1 || ename.indexOf(keyword) > -1) {
                 items.push({
                     "id": item.slug,
@@ -190,7 +182,7 @@ function parseSearchResponse(htmlContent, url) {
 
         return JSON.stringify({
             "items": items,
-            "pagination": { "currentPage": 1, "totalPages": 1 }
+            "pagination": { "currentPage": 1, "totalPages": 1 } // Tìm kiếm client-side nên chỉ có 1 trang tổng
         });
     } catch (e) {
         return JSON.stringify({ "items": [], "pagination": { "currentPage": 1, "totalPages": 1 } });
@@ -198,7 +190,7 @@ function parseSearchResponse(htmlContent, url) {
 }
 
 // -----------------------------------------------------------------------------
-// [ĐÃ SỬA] PARSER 2: CHI TIẾT PHIM VÀ THU THẬP THÔNG TIN SUBTITLE (lech)
+// PARSER 2: CHI TIẾT PHIM (CHUYỀN BIẾN LECH ĐỂ LẤY SUB)
 // -----------------------------------------------------------------------------
 function parseMovieDetail(htmlContent, url) {
     try {
@@ -209,9 +201,10 @@ function parseMovieDetail(htmlContent, url) {
         var episodes = [];
         var lech = data.lech || ""; // Lấy mã số để truy xuất Subtitle
 
+        // 1. Phim bộ: Bóc tách mảng list_episodes
         if (data.list_episodes && Array.isArray(data.list_episodes) && data.list_episodes.length > 0) {
             for (var i = 0; i < data.list_episodes.length; i++) {
-                var parts = data.list_episodes[i].split("|"); 
+                var parts = data.list_episodes[i].split("|"); // Định dạng "1|https://vicdn.cc/tv-278275-1-1"
                 if (parts.length >= 2) {
                     var epNum = parts[0].trim();
                     var epLink = parts[1].trim(); 
@@ -221,13 +214,14 @@ function parseMovieDetail(htmlContent, url) {
                     var finalId = epLink + sep + "lech=" + lech + "&ep=" + epNum;
                     
                     episodes.push({
-                        id: finalId,
+                        id: finalId, // Gửi link Embed có chứa thông số Subtitle
                         name: "Tập " + epNum,
                         slug: "tap-" + epNum
                     });
                 }
             }
         } 
+        // 2. Phim lẻ (Movie): Dùng link MKV nếu không có tập
         else if (data.mkv) {
             var epLink = data.mkv.trim();
             var sep = epLink.indexOf("?") > -1 ? "&" : "?";
@@ -271,7 +265,7 @@ function parseMovieDetail(htmlContent, url) {
 // -----------------------------------------------------------------------------
 function parseDetailResponse(htmlContent, url) {
     try {
-        // 1. Phân tích URL lấy từ hàm parseMovieDetail ở trên để bắt Link Subtitle
+        // 1. Lấy thông số Subtitle từ URL
         var cleanUrl = url.replace(/([?&])lech=[^&]+/, "").replace(/([?&])ep=[^&]+/, "").replace(/&&/g, "&").replace(/[?&]$/, "");
         var lechMatch = url.match(/lech=([^&]+)/);
         var epMatch = url.match(/ep=([^&]+)/);
@@ -282,10 +276,16 @@ function parseDetailResponse(htmlContent, url) {
             var epVal = parseInt(epMatch[1]);
             var epStr = epVal < 10 ? '0' + epVal : epVal.toString();
             
-            // Link lấy Sub vietsub của hệ thống phim
+            // Định dạng Subtitle bắt buộc có mimeType: "text/vtt" để App nhận diện được
             subtitles.push({
-                lang: "vi",
-                url: "https://phimgod.com/api/subtitle/-" + lechVal + "/v" + epStr + ".srt/vtt.css"
+                "lang": "vi",
+                "url": "https://phimgod.com/api/subtitle/-" + lechVal + "/v" + epStr + ".srt/vtt.css",
+                "mimeType": "text/vtt"
+            });
+            subtitles.push({
+                "lang": "en",
+                "url": "https://phimgod.com/api/subtitle/-" + lechVal + "/e" + epStr + ".srt/vtt.css",
+                "mimeType": "text/vtt"
             });
         }
 
@@ -296,8 +296,8 @@ function parseDetailResponse(htmlContent, url) {
                 url: cleanUrl,
                 isEmbed: false,
                 mimeType: cleanUrl.indexOf('.m3u8') > -1 ? "application/x-mpegURL" : "video/mp4",
-                headers: { "Referer": BASEURL, "User-Agent": "Mozilla/5.0" },
-                subtitles: subtitles // Đính kèm sub vào trả cho ExoPlayer
+                headers: { "Referer": BASEURL + "/", "User-Agent": "Mozilla/5.0" },
+                subtitles: subtitles // Trả sub ngay cho ExoPlayer
             });
         }
 
@@ -324,8 +324,8 @@ function parseDetailResponse(htmlContent, url) {
                     url: streamUrl,
                     isEmbed: false,
                     mimeType: streamUrl.indexOf('.m3u8') > -1 ? "application/x-mpegURL" : "",
-                    headers: { "Referer": BASEURL, "User-Agent": "Mozilla/5.0" },
-                    subtitles: subtitles // Đính kèm sub vào trả cho ExoPlayer
+                    headers: { "Referer": BASEURL + "/", "User-Agent": "Mozilla/5.0" },
+                    subtitles: subtitles // Trả sub ngay cho ExoPlayer
                 });
             } else {
                 // Nhét Subtitles vào url để gửi đệ quy qua hàm parseEmbedResponse bên dưới
@@ -348,12 +348,12 @@ function parseDetailResponse(htmlContent, url) {
             subtitles: subtitles
         });
     } catch (e) {
-        return JSON.stringify({ url: "", isEmbed: false, headers: {} });
+        return JSON.stringify({ url: "", isEmbed: false, headers: {}, subtitles: [] });
     }
 }
 
 // -----------------------------------------------------------------------------
-// [ĐÃ SỬA] PARSER 4: TRÍCH XUẤT M3U8 VÀ ĐỌC LẠI SUBTITLE TỪ TRONG MÃ NGUỒN CỦA IFRAME
+// [ĐÃ SỬA] PARSER 4: TRÍCH XUẤT M3U8 VÀ ĐỌC LẠI SUBTITLE SAU KHI QUA IFRAME
 // -----------------------------------------------------------------------------
 function parseEmbedResponse(htmlContent, url) {
     try {
@@ -372,7 +372,7 @@ function parseEmbedResponse(htmlContent, url) {
                 isEmbed: false,
                 mimeType: finalUrl.indexOf('.m3u8') > -1 ? "application/x-mpegURL" : "video/mp4",
                 headers: { "Referer": url, "User-Agent": "Mozilla/5.0" },
-                subtitles: subtitles // Trả sub cuối cùng
+                subtitles: subtitles // Trả phụ đề cho Native Player
             });
         }
         
@@ -384,12 +384,36 @@ function parseEmbedResponse(htmlContent, url) {
                 isEmbed: false,
                 mimeType: jsonUrl.indexOf('.m3u8') > -1 ? "application/x-mpegURL" : "",
                 headers: { "Referer": url, "User-Agent": "Mozilla/5.0" },
-                subtitles: subtitles // Trả sub cuối cùng
+                subtitles: subtitles // Trả phụ đề cho Native Player
             });
         }
 
-        return JSON.stringify({ url: "", isEmbed: false });
+        // Cào thêm Iframe bên trong nếu có
+        var iframeMatch = htmlContent.match(/<iframe[^>]*src=["']([^"']+)["']/i);
+        if (iframeMatch) {
+            var nextInnerUrl = iframeMatch[1];
+            if (nextInnerUrl.indexOf('//') === 0) nextInnerUrl = "https:" + nextInnerUrl;
+            
+            var subsQuery = encodeURIComponent(JSON.stringify(subtitles));
+            var nextUrlWithSubs = nextInnerUrl + (nextInnerUrl.indexOf('?') > -1 ? '&' : '?') + 'subs=' + subsQuery;
+
+            return JSON.stringify({
+                url: nextUrlWithSubs,
+                isEmbed: true, 
+                headers: { "Referer": url, "User-Agent": "Mozilla/5.0" },
+                subtitles: subtitles
+            });
+        }
+
+        return JSON.stringify({ url: "", isEmbed: false, subtitles: subtitles });
     } catch (e) {
-        return JSON.stringify({ url: "", isEmbed: false });
+        return JSON.stringify({ url: "", isEmbed: false, subtitles: [] });
     }
 }
+
+// -----------------------------------------------------------------------------
+// UTILS BẮT BUỘC KHÁC
+// -----------------------------------------------------------------------------
+function parseCategoriesResponse(html) { return "[]"; }
+function parseCountriesResponse(html) { return "[]"; }
+function parseYearsResponse(html) { return "[]"; }
