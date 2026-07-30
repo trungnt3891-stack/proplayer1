@@ -187,6 +187,10 @@ Khi đăng ký plugin trên file JSON hoặc thêm nguồn tùy chỉnh, đườ
     *   **Khuyến nghị**: Hãy `return JSON.stringify({ "url": directUrl, "isEmbed": false, "mimeType": "..." })` ngay lập tức!
     *   **Cơ chế bảo vệ từ App**: Nếu `getUrlDetail` trả về URL video trực tiếp (plain string), App sẽ tự động phát hiện và bỏ qua bước fetch HTML (tránh sập bộ nhớ OOM) đồng thời tự động nhận diện `mimeType`.
 
+#### 4. Cơ Chế Phòng Lỗi Khi `parseEmbedResponse` Trả Về URL Rỗng
+*   Nếu plugin dùng `isEmbed: true` nhưng hàm `parseEmbedResponse` lỡ trả về `url: ""` (rỗng):
+    *   **Từ bản 1.7.8+**: App sẽ tự động phát hiện và **giữ lại URL embed trước đó**, tiếp tục mở WebView và bật Sniffer thay vì bị lỗi rỗng luồng phát.
+
 ---
 
 ## 📋 Danh Sách Tất Cả Các Hàm
