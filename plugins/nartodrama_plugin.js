@@ -8,8 +8,8 @@ function getManifest() {
     return JSON.stringify({
         "id": "nartodrama",
         "name": "Phim Ngắn Narto",
-        "description": "Bản Tốc Độ Bàn Thờ: Fix lỗi không load Player, Thêm mục Trang chủ",
-        "version": "1.4.0",
+        "description": "Bản Tốc Độ Bàn Thờ: Fix lỗi không load Player, Thêm mục Trang chủ, Fix Tìm kiếm",
+        "version": "1.4.1",
         "info": "Tối ưu tốc độ load gấp 10 lần. Mở thẳng giao diện Webview bằng playerType embed chuẩn.",
         "baseUrl": "https://edge.narto-drama.com",
         "iconUrl": "https://narto-drama.com/narto-drama-logo-compressed.png",
@@ -161,48 +161,47 @@ function getUrlCategories() { return BASEURL; }
 function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
-
 // -----------------------------------------------------------------------------
-// ĐÃ TỐI ƯU SIÊU TỐC: DÙNG STRING.SPLIT CHẠY TỨC THÌ, BỎ HOÀN TOÀN DOM _$
+// ĐÃ THÊM: PARSER TÌM KIẾM VÀ DANH SÁCH TỐI ƯU (BẮT data-watch-url)
 // -----------------------------------------------------------------------------
 function parseListResponse(html, $url) {
     try {
         var items = [];
-        // Cắt HTML siêu nhanh dựa trên thẻ article
-        var blocks = html.split('<article');
-        
-        for (var i = 1; i < blocks.length; i++) {
-            var block = blocks[i];
-            if (block.indexOf('card') === -1) continue; // Chỉ xử lý khối chứa class card
+        var seen = {};
 
-            var hrefMatch = block.match(/data-watch-url=["']([^"']+)["']/i);
-            var titleMatch = block.match(/data-movie-title=["']([^"']+)["']/i);
-            var imgMatch = block.match(/<img[^>]+src=["']([^"']+)["']/i);
-            var epMatch = block.match(/episode-badge[^>]*>([^<]+)/i);
+        // Quét nhanh bằng Regex: tìm data-watch-url và data-movie-title cho cả Trang chủ và Tìm kiếm
+        var regex = /data-watch-url\s*=\s*["']([^"']+)["'][^>]*data-movie-title\s*=\s*["']([^"']+)["']/gi;
+        var match;
 
-            if (hrefMatch && titleMatch && imgMatch) {
-                var href = hrefMatch[1];
-                if (href.indexOf("http") == -1) href = BASEURL + href;
-                href = href.replace(/(^[\s\S]*?)\?[\s\S]*$/i, "$1/1?lang=vi-VN");
+        while ((match = regex.exec(html)) !== null) {
+            var href = match[1];
+            var title = match[2];
 
-                var src = imgMatch[1];
-                if (src.indexOf("http") == -1) src = BASEURL + src;
-                var cleanThumb = src.replace(/&amp;/g, '&');
+            if (href.indexOf("http") == -1) href = BASEURL + href;
+            href = href.replace(/(^[\s\S]*?)\?[\s\S]*$/i, "$1/1?lang=vi-VN");
 
-                var title = titleMatch[1].trim();
-                var episode_current = epMatch ? epMatch[1].trim() : "";
+            // Cắt đoạn nhỏ phía sau để lấy ảnh và tập phim
+            var subHtml = html.substring(match.index, match.index + 500);
+            
+            var imgMatch = subHtml.match(/<img[^>]+src=["']([^"']+)["']/i);
+            var src = imgMatch ? imgMatch[1] : "";
+            if (src && src.indexOf("http") == -1) src = BASEURL + src;
+            var cleanThumb = src.replace(/&amp;/g, '&');
 
-                if (href.indexOf("watch/") > -1) {
-                    items.push({
-                        "id": href,
-                        "title": title,
-                        "posterUrl": cleanThumb,
-                        "backdropUrl": cleanThumb,
-                        "quality": "",
-                        "lang": "",
-                        "episode_current": episode_current
-                    });
-                }
+            var epMatch = subHtml.match(/episode-badge[^>]*>([^<]+)/i);
+            var episode_current = epMatch ? epMatch[1].trim() : "";
+
+            if (href.indexOf("watch/") > -1 && !seen[href]) {
+                seen[href] = true;
+                items.push({
+                    "id": href,
+                    "title": title.trim(),
+                    "posterUrl": cleanThumb,
+                    "backdropUrl": cleanThumb,
+                    "quality": "HD",
+                    "lang": "",
+                    "episode_current": episode_current
+                });
             }
         }
         
@@ -212,53 +211,73 @@ function parseListResponse(html, $url) {
         });
     } catch (e) {
         log("parseListResponse: " + e);
-        return JSON.stringify({ "items": [], "pagination": { "currentPage": 1, "totalPages": 1 } });
+        return JSON.stringify({
+            "items": [],
+            "pagination": { "currentPage": 1, "totalPages": 1 }
+        });
     }
 }
 
+// Search Response gọi thẳng List Response đã tối ưu
 function parseSearchResponse(html, url) {
     return parseListResponse(html, url);
 }
 
 // -----------------------------------------------------------------------------
-// ĐÃ TỐI ƯU SIÊU TỐC: CHỈ TRẢ VỀ DUY NHẤT 1 NÚT BẤM
+// GIỮ NGUYÊN HÀM CHI TIẾT TẠO 1 NÚT BẤM WEBVIEW CỦA BẠN
 // -----------------------------------------------------------------------------
 function parseMovieDetail(html, url) {
     try {
-        var titleMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i);
-        var lname = titleMatch ? titleMatch[1] : "Đang cập nhật...";
+        var idMatch = /<link\s+rel="canonical"\s+href="([^"]+)"/i.exec(html) ||
+            /<meta\s+property="og:url"\s+content="([^"]+)"/i.exec(html);
+        var id = idMatch ? idMatch[1] : (url || "");
 
-        var imgMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i);
-        var limg = imgMatch ? imgMatch[1] : "";
-
-        var descMatch = html.match(/<meta\s+property="og:description"\s+content="([^"]+)"/i);
-        var ldes = descMatch ? descMatch[1] : "";
-        
+        var limg = "";
+        var lname = "Đang cập nhật...";
+        var ldes = "Không có mô tả.";
         var category = "";
+        var episode_current = "";
+
+        var rmatch = html.match(/meta\s+property="og:url"\s+content="([^"]+)"/i);
+        if (rmatch && rmatch[1]) lurl = rmatch[1];
+
+        rmatch = html.match(/meta\s+property="og:image"\s+content="([^"]+)"/i);
+        if (rmatch && rmatch[1]) limg = rmatch[1];
+
+        rmatch = html.match(/meta\s+property="og:title"\s+content="([^"]+)"/i);
+        if (rmatch && rmatch[1]) lname = rmatch[1];
+
+        rmatch = html.match(/meta\s+property="og:description"\s+content="([^"]+)"/i);
+        if (rmatch && rmatch[1]) ldes = rmatch[1];
+        
+        // Quét thể loại
+        var catRegex = /class=["'][^"']*movie-tag-pill[^"']*["'][^>]*>([^<]+)/gi;
         var cats = [];
-        var catBlocks = html.split('movie-tag-pill');
-        for (var i = 1; i < catBlocks.length; i++) {
-            var catText = catBlocks[i].match(/^[^>]*>([^<]+)/);
-            if (catText) cats.push(catText[1].trim());
+        var cM;
+        while ((cM = catRegex.exec(html)) !== null) {
+            cats.push(cM[1].trim());
         }
         category = cats.join(" - ");
 
-        var epMatch = html.match(/movie-sub[^>]*>([^<]+)/i);
-        var episode_current = epMatch ? epMatch[1].trim() : "";
+        // Quét số tập
+        var epMatch = html.match(/class=["'][^"']*movie-sub[^"']*["'][^>]*>([^<]+)/i);
+        if (epMatch) {
+            episode_current = epMatch[1].trim();
+        }
         
-        // Trả về 1 tập duy nhất để App hiện nút "Bấm vào để Xem"
+        // Trả về 1 tập duy nhất gọi là "Lướt Tự Động" chứa URL xem trực tiếp
         var servers = [];
         servers.push({
             name: "Lướt Tự Động (Webview)",
             episodes: [{
-                id: url, // TRUYỀN NGUYÊN GỐC ĐƯỜNG LINK VÀO BƯỚC TIẾP THEO
-                name: "Bấm vào để xem Phim",
+                id: url, // TRUYỀN NGUYÊN GỐC ĐƯỜNG LINK VÀO WEBVIEW
+                name: "Bấm vào đây để Xem & Vuốt",
                 slug: "webview-player"
             }]
         });
 
         return JSON.stringify({
-            id: url, 
+            id: id, 
             title: lname,
             posterUrl: limg,
             backdropUrl: limg,
@@ -278,43 +297,66 @@ function parseMovieDetail(html, url) {
 
     } catch (e) {
         log("parseMovieDetail:" + e);
-        return JSON.stringify({ id: url || "error", title: "Lỗi chi tiết", servers: [] });
+        return JSON.stringify({
+            id: url || "error",
+            title: "Lỗi chi tiết",
+            servers: []
+        });
     }
 }
 
 // -----------------------------------------------------------------------------
-// ĐÃ SỬA: CHUYỂN MÃ JS THÀNH 1 DÒNG ĐỂ ĐẢM BẢO KHÔNG BỊ APP VAX LỖI PARSER
+// GIỮ NGUYÊN BỘ AUTO-CLICK VƯỢT QUẢNG CÁO CỦA BẠN
 // -----------------------------------------------------------------------------
 function parseDetailResponse(html, url) {
     try {
-        // Rút gọn thành 1 chuỗi string liên tục để 100% không bị Crash App
-        var killAdsJs = "var s=document.createElement('style');s.innerHTML='header,.topbar,.topbar-inner,footer,.site-footer-wrap,.desktop-sidebar-left,.desktop-sidebar-right,.player-seo-block,.player-random-section,.watch-history-fab,.share-buttons,[class*=\"ad-\"],[id*=\"ad-\"],iframe[src*=\"ads\"]{display:none!important;opacity:0!important;pointer-events:none!important}body,html{background:#000!important}';document.head.appendChild(s);setInterval(function(){var btn=document.querySelector('.swal2-confirm');if(btn){try{btn.click()}catch(e){}}var btns=document.querySelectorAll('button,a,.vast-ad-cta');for(var i=0;i<btns.length;i++){var t=(btns[i].innerText||btns[i].textContent||'').toLowerCase();if(t.indexOf('đồng ý')>-1||t.indexOf('tiếp tục')>-1||t.indexOf('continue')>-1){try{btns[i].click()}catch(e){}}}var m=document.querySelector('.nd-auth-modal');if(m)m.remove();var b=document.querySelector('.nd-auth-backdrop');if(b)b.remove();},300);";
+        var killAdsCssJs = `
+            (function() {
+                var style = document.createElement('style');
+                style.innerHTML = 'header, .topbar, .topbar-inner, footer, .site-footer-wrap, .site-footer, .desktop-sidebar-left, .desktop-sidebar-right, .player-seo-block, .player-random-section, .watch-history-fab, .share-buttons, .adsense-wrap, .adsense-box, [class*="ad-"], [id*="ad-"], iframe[src*="ads"], .player-subscribe-overlay { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } body, html { background: #000 !important; }';
+                document.head.appendChild(style);
+
+                setInterval(function() {
+                    var swalConfirm = document.querySelector('.swal2-confirm');
+                    if (swalConfirm) {
+                        try { swalConfirm.click(); } catch(e){}
+                    }
+                    var btns = document.querySelectorAll('button, a, .vast-ad-cta');
+                    for (var k = 0; k < btns.length; k++) {
+                        var t = btns[k].innerText || btns[k].textContent || '';
+                        var tLower = t.toLowerCase();
+                        if (tLower.indexOf('đồng ý') > -1 || tLower.indexOf('tiếp tục') > -1 || tLower.indexOf('continue') > -1) {
+                            try { btns[k].click(); } catch(e){}
+                        }
+                    }
+                    var loginPopup = document.querySelector('.nd-auth-modal');
+                    if (loginPopup) loginPopup.remove();
+                    var authBackdrop = document.querySelector('.nd-auth-backdrop');
+                    if (authBackdrop) authBackdrop.remove();
+                }, 300);
+            })();
+        `;
 
         return JSON.stringify({
             "url": url,
-            "isEmbed": true, // Gắn cờ true + playerType=embed sẽ ép mở WebView
+            "isEmbed": true, // Ép Webview hoạt động (kết hợp với playerType: embed)
             "headers": {
                 "Referer": BASEURL,
-                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15",
-                "Custom-Js": killAdsJs
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
+                "Custom-Js": killAdsCssJs.trim()
             },
             "subtitles": []
         });
     } catch (e) {
-        return JSON.stringify({ "url": url, "isEmbed": true, "headers": {} });
+        return JSON.stringify({
+            "url": url,
+            "isEmbed": true,
+            "headers": {}
+        });
     }
 }
 
-function parseCategoriesResponse(apiResponseJson) {
-    try {
-        var listurl = getLISTmenu();
-        var menulist = buildMenu(listurl);
-        return JSON.stringify(menulist);
-    } catch (e) {
-        return JSON.stringify([]);
-    }
-}
-
+function parseCategoriesResponse(apiResponseJson) { return "[]"; }
 function parseCountriesResponse(html) { return "[]"; }
 function parseYearsResponse(html) { return "[]"; }
 
