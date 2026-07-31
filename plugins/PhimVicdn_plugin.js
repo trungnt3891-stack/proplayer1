@@ -9,15 +9,15 @@ function getManifest() {
     return JSON.stringify({
         "id": "vicdn",
         "name": "Nguồn Vicdn",
-        "description": "Bản Webview Tối Giản: 1 Nút bấm để xem trên giao diện gốc, 100% có Vietsub.",
-        "version": "2.4.0",
+        "description": "Bản Webview Chuẩn: Mở giao diện gốc để chọn Sub/Thuyết minh.",
+        "version": "2.4.5",
         "info": "Tối ưu hóa tốc độ load trang chủ. Mở phim bằng Webview để đảm bảo sub và player hoạt động chuẩn xác nhất.",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/vicdn.png",
         "isEnabled": true,
         "type": "MOVIE",
         "layoutType": "VERTICAL",
-        "playerType": "embed" // [ĐÃ SỬA]: Bắt buộc dùng "embed" để mở Webview
+        "playerType": "embed" // [BẮT BUỘC] Dùng "embed" để App dùng trình phát Webview
     });
 }
 
@@ -32,7 +32,7 @@ function log(msg) {
 }
 
 // -----------------------------------------------------------------------------
-// GIỮ NGUYÊN MENU & TRANG CHỦ (THỂ HIỆN LƯỚT NGANG)
+// MENU & TRANG CHỦ (THỂ HIỆN LƯỚT NGANG)
 // -----------------------------------------------------------------------------
 function getHomeSections() {
     return JSON.stringify([
@@ -60,7 +60,7 @@ function getFilterConfig() {
 }
 
 // -----------------------------------------------------------------------------
-// GIỮ NGUYÊN URL GENERATOR SIÊU TỐC
+// URL GENERATOR SIÊU TỐC
 // -----------------------------------------------------------------------------
 function getUrlList(slug, filtersJson) {
     try {
@@ -110,7 +110,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // -----------------------------------------------------------------------------
-// GIỮ NGUYÊN PARSER 1: TRANG DANH SÁCH & TÌM KIẾM
+// PARSER 1: TRANG DANH SÁCH & TÌM KIẾM (ĐỌC API JSON)
 // -----------------------------------------------------------------------------
 function parseListResponse(htmlContent, url) {
     try {
@@ -181,7 +181,7 @@ function parseSearchResponse(htmlContent, url) {
 }
 
 // -----------------------------------------------------------------------------
-// [ĐÃ SỬA] PARSER 2: TẠO DUY NHẤT 1 NÚT BẤM ĐỂ MỞ WEBVIEW
+// PARSER 2: TẠO NÚT BẤM DUY NHẤT TRUYỀN URL WEB GỐC
 // -----------------------------------------------------------------------------
 function parseMovieDetail(htmlContent, url) {
     try {
@@ -191,7 +191,7 @@ function parseMovieDetail(htmlContent, url) {
         var servers = [];
         var watchUrl = BASEURL;
 
-        // Trích xuất link xem phim (Tập 1) từ API để làm link gốc cho Webview
+        // Trích xuất link trang xem phim (Tập 1) từ JSON API để làm link gốc cho Webview
         if (data.list_episodes && Array.isArray(data.list_episodes) && data.list_episodes.length > 0) {
             var parts = data.list_episodes[0].split("|"); 
             if (parts.length >= 2) {
@@ -206,7 +206,7 @@ function parseMovieDetail(htmlContent, url) {
         servers.push({
             name: "Giao Diện Web Gốc",
             episodes: [{
-                id: watchUrl, // Truyền link xem phim vào hàm parseDetailResponse
+                id: watchUrl, // Truyền link trang xem phim vào hàm parseDetailResponse
                 name: "Bấm vào để xem Phim",
                 slug: "webview-player"
             }]
@@ -235,17 +235,17 @@ function parseMovieDetail(htmlContent, url) {
 }
 
 // -----------------------------------------------------------------------------
-// [ĐÃ SỬA] PARSER 3: TRẢ VỀ LINK GỐC ĐỂ APP MỞ WEBVIEW
+// PARSER 3: MỞ TRÌNH DUYỆT WEBVIEW LÊN MÀN HÌNH
 // -----------------------------------------------------------------------------
 function parseDetailResponse(htmlContent, url) {
     try {
-        // Đoạn Custom-JS siêu nhẹ giúp ẩn bớt rác (header, footer, ads) trên web gốc
-        // Trả lại không gian trống trải chỉ hiện Player và Chọn tập
+        // Đoạn Custom-JS nhẹ giúp ẩn thanh menu, quảng cáo trên web gốc
+        // Trả lại không gian trống trải chỉ hiện Player và mục Chọn tập / Chọn Sub
         var cleanUI_JS = "var s=document.createElement('style');s.innerHTML='header,.footer,[class*=\"ad-\"],[id*=\"ad-\"]{display:none!important}body,html{background:#000!important}';document.head.appendChild(s);";
         
         return JSON.stringify({
             "url": url, 
-            "isEmbed": true, // BẮT BUỘC TRUE ĐỂ APP MỞ TRONG WEBVIEW
+            "isEmbed": false, // [SỬA LẠI THÀNH FALSE]: Báo cho App biết đây là link cuối, hãy mở Webview lên luôn!
             "mimeType": "",
             "headers": {
                 "Referer": BASEURL,
@@ -258,7 +258,7 @@ function parseDetailResponse(htmlContent, url) {
     } catch (e) {
         return JSON.stringify({ 
             "url": url, 
-            "isEmbed": true, 
+            "isEmbed": false, 
             "headers": {} 
         });
     }
