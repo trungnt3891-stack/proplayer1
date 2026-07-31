@@ -30,12 +30,16 @@ NGƯỜI DÙNG bấm vào mục "Hành Động" trên Trang chủ
 └───────────────────────────────────────────────────────────────────┘
 ```
 
-### Luồng Xem Phim (Chi Tiết → Player)
+### Luồng Xem Phim & Truyền Hình IPTV (Chi Tiết → Player)
 
 ```
 NẾU type = "IPTV" HOẶC "VIDEO":
-   App bỏ qua màn hình Chi tiết (Detail Screen) → mở thẳng Player
-   App gọi getUrlDetail(id) để lấy URL luồng phát và phát trực tiếp.
+   App bỏ qua màn hình Chi tiết (Detail Screen) → mở thẳng Màn hình Player
+   App chạy ngầm luồng lấy link:
+      1. Gọi getUrlDetail(id) để lấy URL API chi tiết kênh
+      2. App fetch HTTP URL đó (Hỗ trợ Kodi Pipe Header: "url|User-Agent=...&Referer=...")
+      3. App gọi parseDetailResponse(html) để lấy JSON luồng phát & DRM
+      4. ExoPlayer tự động nạp User-Agent/DRM Key và phát video
 
 NẾU type = "MOVIE" / "shortfilm":
    Bước 1: parseMovieDetail(html)
@@ -46,7 +50,7 @@ NẾU type = "MOVIE" / "shortfilm":
       → App fetch URL → gọi parseDetailResponse(html)
 
    Bước 3: parseDetailResponse(html)
-      → Trả { url, headers, mimeType, subtitles }
+      → Trả { url, headers, mimeType, subtitles, drmType, drmKid, drmKey, drmLicenseKey }
 
    Bước 4:
       ├─ Nếu isEmbed = false → ExoPlayer phát url trực tiếp
@@ -54,6 +58,72 @@ NẾU type = "MOVIE" / "shortfilm":
       │                        (lặp tối đa 3 lần cho đến khi isEmbed = false)
       └─ Nếu playerType = "embed" → WebView load url
 ```
+
+---
+
+## 📺 Cấu Hình Đặc Thù Cho Plugin IPTV & Mã Hóa DRM (ClearKey / Widevine)
+
+### 1. Manifest Plugin IPTV (`getManifest`)
+```javascript
+function getManifest() {
+  return JSON.stringify({
+    "id": "my_iptv_plugin",
+    "name": "Kênh Truyền Hình IPTV",
+    "baseUrl": "https://tv.example.com",
+    "isEnabled": true,
+    "debug": true,         // Bật debug=true để hiện Console Toast Log nổi trên màn hình
+    "type": "IPTV",        // Khai báo kiểu IPTV
+    "layoutType": "HORIZONTAL",
+    "playerType": "exoplayer"
+  });
+}
+```
+
+### 2. Cấu Hình DRM trong `parseDetailResponse()`
+
+#### Cách A: Trả về cặp chìa khóa ClearKey dạng Offline Hex (Khuyên dùng)
+Nếu plugin đã trích xuất được cặp `KID` và `KEY` dạng Hex 32 ký tự:
+```javascript
+function parseDetailResponse(html, apiUrl) {
+  return JSON.stringify({
+    isEmbed: false,
+    url: "https://cdn.example.com/live/manifest.mpd",
+    mimeType: "application/dash+xml",
+    drmType: "clearkey",
+    drmKid: "c410ddc6a75244639fd0561fba5ef19b", // Hex KID 32 ký tự
+    drmKey: "30d13ea42031b9ff8271e5dc37d90e10"   // Hex KEY 32 ký tự
+  });
+}
+```
+👉 **Cơ chế:** ExoPlayer giải mã trực tiếp nội tuyến mà không phát bất kỳ HTTP request DRM nào lúc phát!
+
+#### Cách B: Trả về URL License Server kèm `headers` (`User-Agent`)
+Nếu ExoPlayer cần tự gọi HTTP Request lên URL để xin chìa khóa và bắt buộc có `User-Agent`:
+```javascript
+function parseDetailResponse(html, apiUrl) {
+  return JSON.stringify({
+    isEmbed: false,
+    url: "https://cdn.example.com/live/manifest.mpd",
+    mimeType: "application/dash+xml",
+    drmType: "clearkey", // Hoặc "widevine"
+    drmLicenseKey: "https://tv.example.com/key.php?id=...",
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      "Referer": "https://tv.example.com/"
+    }
+  });
+}
+```
+👉 **Cơ chế:** Đối tượng `headers` khai báo ở đây sẽ được ExoPlayer đính kèm trực tiếp vào HTTP Request khi tự động phát lệnh lấy chìa khóa DRM!
+
+### 3. Cú pháp Kodi Pipe Header (`|`)
+App hỗ trợ cú pháp Kodi Pipe Header tại mọi điểm truyền URL:
+- **Truyền Custom User-Agent cho bước App fetch URL chi tiết kênh**:  
+  `"id": "https://tv.example.com/channel?id=90|User-Agent=Mozilla/5.0...&Referer=https://tv.example.com/"`
+- **Truyền Custom User-Agent cho URL License Server**:  
+  `"drmLicenseKey": "https://tv.example.com/key.php?id=...|User-Agent=Mozilla/5.0..."`
+
+App sẽ tự động loại bỏ cú pháp `|` để lấy URL sạch và trích xuất đúng các tham số Header nạp vào Request!
 
 ---
 
