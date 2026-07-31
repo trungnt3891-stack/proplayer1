@@ -9,15 +9,15 @@ function getManifest() {
     return JSON.stringify({
         "id": "vicdn",
         "name": "Nguồn Vicdn",
-        "description": "Bản Webview Chuẩn: Mở giao diện gốc để chọn Sub/Thuyết minh.",
-        "version": "2.4.5",
-        "info": "Tối ưu hóa tốc độ load trang chủ. Mở phim bằng Webview để đảm bảo sub và player hoạt động chuẩn xác nhất.",
+        "description": "Bản Webview Chuẩn: Mở giao diện gốc để chọn Sub/Thuyết minh. Tìm kiếm siêu tốc.",
+        "version": "2.5.0",
+        "info": "Tối ưu hóa tốc độ load trang chủ. Sử dụng Webview để giữ nguyên 100% tính năng chọn Phụ đề và Thuyết minh của web gốc.",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/vicdn.png",
         "isEnabled": true,
         "type": "MOVIE",
         "layoutType": "VERTICAL",
-        "playerType": "embed" // [BẮT BUỘC] Dùng "embed" để App dùng trình phát Webview
+        "playerType": "webview" // [ĐÃ SỬA]: Khai báo chuẩn WebView để App mở màn hình duyệt web
     });
 }
 
@@ -32,7 +32,7 @@ function log(msg) {
 }
 
 // -----------------------------------------------------------------------------
-// MENU & TRANG CHỦ (THỂ HIỆN LƯỚT NGANG)
+// MENU & TRANG CHỦ (1 GRID + 4 LƯỚT NGANG)
 // -----------------------------------------------------------------------------
 function getHomeSections() {
     return JSON.stringify([
@@ -94,14 +94,16 @@ function getUrlList(slug, filtersJson) {
     }
 }
 
+// ĐÃ SỬA: URL TÌM KIẾM CHUẨN CỦA VICDN
 function getUrlSearch(keyword, filtersJson) {
     var encodedKeyword = encodeURIComponent(keyword || "").trim();
-    return BASEURL + "/index.php?search_keyword=" + encodedKeyword;
+    return BASEURL + "/?q=" + encodedKeyword;
 }
 
 function getUrlDetail(slug) {
     if (!slug) return "";
     if (slug.indexOf('http') === 0) return slug;
+    // Gọi API Info để lấy dữ liệu json chi tiết
     return BASEAPI + "/info/" + slug.replace(/^\//, "");
 }
 
@@ -110,14 +112,38 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // -----------------------------------------------------------------------------
-// PARSER 1: TRANG DANH SÁCH & TÌM KIẾM (ĐỌC API JSON)
+// PARSER 1: TRANG DANH SÁCH & TÌM KIẾM (ĐỌC API VÀ JSON SIÊU NHANH)
 // -----------------------------------------------------------------------------
 function parseListResponse(htmlContent, url) {
     try {
-        var jsonRes = JSON.parse(htmlContent);
-        var dataArr = jsonRes.data || [];
-        var totalPages = jsonRes.pagination ? parseInt(jsonRes.pagination.total_pages) : 1;
-        var currentPage = jsonRes.pagination ? parseInt(jsonRes.pagination.current_page) : 1;
+        var dataArr = [];
+        var totalPages = 1;
+        var currentPage = 1;
+
+        // Nếu là trang tìm kiếm (/?q=) -> Web nhúng JSON vào biến allData
+        if (url.indexOf("/?q=") > -1) {
+            var scriptMatch = htmlContent.match(/const\s+allData\s*=\s*(\[[\s\S]*?\])\s*;/i);
+            if (scriptMatch) {
+                var allData = JSON.parse(scriptMatch[1]);
+                var keyword = decodeURIComponent(url.match(/q=([^&]+)/)[1]).toLowerCase();
+                
+                // Lọc phim theo từ khóa
+                for (var j = 0; j < allData.length; j++) {
+                    var vname = (allData[j].vname || "").toLowerCase();
+                    var ename = (allData[j].ename || "").toLowerCase();
+                    if (vname.indexOf(keyword) > -1 || ename.indexOf(keyword) > -1) {
+                        dataArr.push(allData[j]);
+                    }
+                }
+            }
+        } 
+        // Nếu là trang danh sách (API) -> Web trả về JSON gốc
+        else {
+            var jsonRes = JSON.parse(htmlContent);
+            dataArr = jsonRes.data || [];
+            totalPages = jsonRes.pagination ? parseInt(jsonRes.pagination.total_pages) : 1;
+            currentPage = jsonRes.pagination ? parseInt(jsonRes.pagination.current_page) : 1;
+        }
 
         var items = [];
         for (var i = 0; i < dataArr.length; i++) {
@@ -142,46 +168,11 @@ function parseListResponse(htmlContent, url) {
 }
 
 function parseSearchResponse(htmlContent, url) {
-    try {
-        var keyword = "";
-        var matchKw = url.match(/search_keyword=([^&]+)/);
-        if (matchKw) keyword = decodeURIComponent(matchKw[1]).toLowerCase();
-
-        var dataArr = [];
-        var scriptMatch = htmlContent.match(/const\s+allData\s*=\s*(\[[\s\S]*?\])\s*;/i);
-        if (scriptMatch) {
-            dataArr = JSON.parse(scriptMatch[1]);
-        }
-
-        var items = [];
-        for (var i = 0; i < dataArr.length; i++) {
-            var item = dataArr[i];
-            var vname = (item.vname || "").toLowerCase();
-            var ename = (item.ename || "").toLowerCase();
-            
-            if (vname.indexOf(keyword) > -1 || ename.indexOf(keyword) > -1) {
-                items.push({
-                    "id": item.slug,
-                    "title": item.vname || item.ename || "Chưa có tên",
-                    "posterUrl": item.poster ? "https://image.tmdb.org/t/p/w300/" + item.poster + ".jpg" : "",
-                    "backdropUrl": item.banner ? "https://image.tmdb.org/t/p/w533_and_h300_face/" + item.banner + ".jpg" : "",
-                    "quality": (item.type || "HD").toUpperCase(),
-                    "episode_current": "Tập " + (item.stt || 0) + "/" + (item.total || "?")
-                });
-            }
-        }
-
-        return JSON.stringify({
-            "items": items,
-            "pagination": { "currentPage": 1, "totalPages": 1 } 
-        });
-    } catch (e) {
-        return JSON.stringify({ "items": [], "pagination": { "currentPage": 1, "totalPages": 1 } });
-    }
+    return parseListResponse(htmlContent, url);
 }
 
 // -----------------------------------------------------------------------------
-// PARSER 2: TẠO NÚT BẤM DUY NHẤT TRUYỀN URL WEB GỐC
+// PARSER 2: TẠO DUY NHẤT 1 NÚT BẤM VỚI LINK WEB GỐC
 // -----------------------------------------------------------------------------
 function parseMovieDetail(htmlContent, url) {
     try {
@@ -191,7 +182,7 @@ function parseMovieDetail(htmlContent, url) {
         var servers = [];
         var watchUrl = BASEURL;
 
-        // Trích xuất link trang xem phim (Tập 1) từ JSON API để làm link gốc cho Webview
+        // Trích xuất link xem phim (Tập 1) từ API để làm link gốc cho Webview
         if (data.list_episodes && Array.isArray(data.list_episodes) && data.list_episodes.length > 0) {
             var parts = data.list_episodes[0].split("|"); 
             if (parts.length >= 2) {
@@ -239,26 +230,24 @@ function parseMovieDetail(htmlContent, url) {
 // -----------------------------------------------------------------------------
 function parseDetailResponse(htmlContent, url) {
     try {
-        // Đoạn Custom-JS nhẹ giúp ẩn thanh menu, quảng cáo trên web gốc
-        // Trả lại không gian trống trải chỉ hiện Player và mục Chọn tập / Chọn Sub
-        var cleanUI_JS = "var s=document.createElement('style');s.innerHTML='header,.footer,[class*=\"ad-\"],[id*=\"ad-\"]{display:none!important}body,html{background:#000!important}';document.head.appendChild(s);";
+        // Tùy chọn: Bạn có thể viết thêm JS để ẩn Header/Footer nếu muốn Webview trông giống App hơn.
+        // Ở đây tôi giữ giao diện mộc mạc nhất để đảm bảo không có gì ngăn cản Player hoạt động.
         
         return JSON.stringify({
             "url": url, 
-            "isEmbed": false, // [SỬA LẠI THÀNH FALSE]: Báo cho App biết đây là link cuối, hãy mở Webview lên luôn!
+            "isEmbed": true, // [ĐÃ SỬA]: Với playerType=webview, isEmbed: true sẽ ép bật khung duyệt web lên màn hình
             "mimeType": "",
             "headers": {
                 "Referer": BASEURL,
                 "Origin": BASEURL,
-                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15",
-                "Custom-Js": cleanUI_JS
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15"
             },
             "subtitles": []
         });
     } catch (e) {
         return JSON.stringify({ 
             "url": url, 
-            "isEmbed": false, 
+            "isEmbed": true, 
             "headers": {} 
         });
     }
