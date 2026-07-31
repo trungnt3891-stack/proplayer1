@@ -108,7 +108,7 @@ function parseDetailResponse(html, apiUrl) {
     drmType: "clearkey", // Hoặc "widevine"
     drmLicenseKey: "https://tv.example.com/key.php?id=...",
     headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      "User-Agent": "Dalvik/2.1.0", // Hoặc User-Agent yêu cầu của server nguồn
       "Referer": "https://tv.example.com/"
     }
   });
@@ -119,9 +119,9 @@ function parseDetailResponse(html, apiUrl) {
 ### 3. Cú pháp Kodi Pipe Header (`|`)
 App hỗ trợ cú pháp Kodi Pipe Header tại mọi điểm truyền URL:
 - **Truyền Custom User-Agent cho bước App fetch URL chi tiết kênh**:  
-  `"id": "https://tv.example.com/channel?id=90|User-Agent=Mozilla/5.0...&Referer=https://tv.example.com/"`
+  `"id": "https://tv.example.com/channel?id=90|User-Agent=Dalvik/2.1.0&Referer=https://tv.example.com/"`
 - **Truyền Custom User-Agent cho URL License Server**:  
-  `"drmLicenseKey": "https://tv.example.com/key.php?id=...|User-Agent=Mozilla/5.0..."`
+  `"drmLicenseKey": "https://tv.example.com/key.php?id=...|User-Agent=Dalvik/2.1.0"`
 
 App sẽ tự động loại bỏ cú pháp `|` để lấy URL sạch và trích xuất đúng các tham số Header nạp vào Request!
 
