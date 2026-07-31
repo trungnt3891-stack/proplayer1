@@ -9,15 +9,15 @@ function getManifest() {
     return JSON.stringify({
         "id": "vicdn",
         "name": "Nguồn Vicdn",
-        "description": "Bản Webview Tối Ưu: Mở thẳng khung Iframe, Full Vietsub, Thêm Menu Trang chủ.",
-        "version": "2.3.0",
-        "info": "Tốc độ quét API siêu tốc. Trình phát sử dụng Webview lấy nguyên gốc Iframe để giữ lại 100% Phụ đề Tiếng Việt.",
+        "description": "Bản Webview Tối Giản: 1 Nút bấm để xem trên giao diện gốc, 100% có Vietsub.",
+        "version": "2.4.0",
+        "info": "Tối ưu hóa tốc độ load trang chủ. Mở phim bằng Webview để đảm bảo sub và player hoạt động chuẩn xác nhất.",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/vicdn.png",
         "isEnabled": true,
         "type": "MOVIE",
         "layoutType": "VERTICAL",
-        "playerType": "embed" // [ĐÃ SỬA]: Sử dụng WebView để đảm bảo Subtitle gốc hoạt động
+        "playerType": "embed" // [ĐÃ SỬA]: Bắt buộc dùng "embed" để mở Webview
     });
 }
 
@@ -32,7 +32,7 @@ function log(msg) {
 }
 
 // -----------------------------------------------------------------------------
-// [ĐÃ DUY TRÌ] MENU & TRANG CHỦ (1 GRID + 4 LƯỚT NGANG)
+// GIỮ NGUYÊN MENU & TRANG CHỦ (THỂ HIỆN LƯỚT NGANG)
 // -----------------------------------------------------------------------------
 function getHomeSections() {
     return JSON.stringify([
@@ -60,7 +60,7 @@ function getFilterConfig() {
 }
 
 // -----------------------------------------------------------------------------
-// URL GENERATOR
+// GIỮ NGUYÊN URL GENERATOR SIÊU TỐC
 // -----------------------------------------------------------------------------
 function getUrlList(slug, filtersJson) {
     try {
@@ -110,7 +110,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // -----------------------------------------------------------------------------
-// PARSER 1: TRANG DANH SÁCH & TÌM KIẾM (ĐỌC JSON SIÊU TỐC)
+// GIỮ NGUYÊN PARSER 1: TRANG DANH SÁCH & TÌM KIẾM
 // -----------------------------------------------------------------------------
 function parseListResponse(htmlContent, url) {
     try {
@@ -181,7 +181,7 @@ function parseSearchResponse(htmlContent, url) {
 }
 
 // -----------------------------------------------------------------------------
-// PARSER 2: CHI TIẾT PHIM
+// [ĐÃ SỬA] PARSER 2: TẠO DUY NHẤT 1 NÚT BẤM ĐỂ MỞ WEBVIEW
 // -----------------------------------------------------------------------------
 function parseMovieDetail(htmlContent, url) {
     try {
@@ -189,35 +189,28 @@ function parseMovieDetail(htmlContent, url) {
         var data = jsonRes.data;
 
         var servers = [];
-        var episodes = [];
+        var watchUrl = BASEURL;
 
-        // Lấy danh sách link xem phim
+        // Trích xuất link xem phim (Tập 1) từ API để làm link gốc cho Webview
         if (data.list_episodes && Array.isArray(data.list_episodes) && data.list_episodes.length > 0) {
-            for (var i = 0; i < data.list_episodes.length; i++) {
-                var parts = data.list_episodes[i].split("|"); 
-                if (parts.length >= 2) {
-                    var epNum = parts[0].trim();
-                    var epLink = parts[1].trim(); 
-                    
-                    episodes.push({
-                        id: epLink, // Ví dụ: https://vicdn.cc/tv-278275-1-1
-                        name: "Tập " + epNum,
-                        slug: "tap-" + epNum
-                    });
-                }
+            var parts = data.list_episodes[0].split("|"); 
+            if (parts.length >= 2) {
+                watchUrl = parts[1].trim(); 
             }
         } 
         else if (data.mkv) {
-            episodes.push({
-                id: data.mkv.trim(), 
-                name: "Full HD",
-                slug: "full"
-            });
+            watchUrl = data.mkv.trim();
         }
 
-        if (episodes.length > 0) {
-            servers.push({ name: "ViCDN Server", episodes: episodes });
-        }
+        // TẠO 1 TẬP ẢO DUY NHẤT: "Bấm vào để xem Phim"
+        servers.push({
+            name: "Giao Diện Web Gốc",
+            episodes: [{
+                id: watchUrl, // Truyền link xem phim vào hàm parseDetailResponse
+                name: "Bấm vào để xem Phim",
+                slug: "webview-player"
+            }]
+        });
 
         return JSON.stringify({
             id: url,
@@ -242,60 +235,35 @@ function parseMovieDetail(htmlContent, url) {
 }
 
 // -----------------------------------------------------------------------------
-// [ĐÃ SỬA] PARSER 3: BÓC TÁCH IFRAME ĐỂ ĐƯA LÊN WEBVIEW
+// [ĐÃ SỬA] PARSER 3: TRẢ VỀ LINK GỐC ĐỂ APP MỞ WEBVIEW
 // -----------------------------------------------------------------------------
 function parseDetailResponse(htmlContent, url) {
     try {
-        var streamUrl = "";
-
-        // Tìm Iframe (ví dụ: viewcrate.cc) nằm trong trang xem phim
-        var iframeMatch = htmlContent.match(/<iframe[^>]*src=["']([^"']+)["']/i);
-        if (iframeMatch) {
-            streamUrl = iframeMatch[1];
-        } else {
-            // Nếu không có iframe, bắt link gốc
-            var m3u8Match = htmlContent.match(/(https?:\/\/[^"'\s<>]*\.(?:m3u8|mp4)[^"'\s<>]*)/i);
-            if (m3u8Match) streamUrl = m3u8Match[1].replace(/\\/g, '');
-        }
-
-        if (!streamUrl) {
-            var jsonMatch = htmlContent.match(/["'](?:file|link|url)["']\s*:\s*["']([^"']+)["']/i);
-            if (jsonMatch) streamUrl = jsonMatch[1].replace(/\\/g, '');
-        }
-
-        // Tối ưu UI cho Webview: CSS ẩn bớt quảng cáo nếu lỡ có
-        var killAdsJs = "var s=document.createElement('style');s.innerHTML='header,.footer,[class*=\"ad-\"],[id*=\"ad-\"]{display:none!important}body,html{background:#000!important}';document.head.appendChild(s);";
-
-        if (streamUrl) {
-            if (streamUrl.indexOf('//') === 0) streamUrl = "https:" + streamUrl;
-            
-            return JSON.stringify({
-                url: streamUrl,
-                isEmbed: false, // DO CHÚNG TA ĐÃ DÙNG PLAYERTYPE: "embed", APP SẼ MỞ URL NÀY TRONG WEBVIEW NGAY LẬP TỨC
-                headers: { 
-                    "Referer": BASEURL + "/",
-                    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15",
-                    "Custom-Js": killAdsJs
-                },
-                subtitles: []
-            });
-        }
+        // Đoạn Custom-JS siêu nhẹ giúp ẩn bớt rác (header, footer, ads) trên web gốc
+        // Trả lại không gian trống trải chỉ hiện Player và Chọn tập
+        var cleanUI_JS = "var s=document.createElement('style');s.innerHTML='header,.footer,[class*=\"ad-\"],[id*=\"ad-\"]{display:none!important}body,html{background:#000!important}';document.head.appendChild(s);";
         
-        // Fallback: Mở nguyên cả trang nếu không tìm thấy iframe
         return JSON.stringify({
-            url: url,
-            isEmbed: false, 
-            headers: { "Referer": BASEURL + "/", "Custom-Js": killAdsJs },
-            subtitles: []
+            "url": url, 
+            "isEmbed": true, // BẮT BUỘC TRUE ĐỂ APP MỞ TRONG WEBVIEW
+            "mimeType": "",
+            "headers": {
+                "Referer": BASEURL,
+                "Origin": BASEURL,
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15",
+                "Custom-Js": cleanUI_JS
+            },
+            "subtitles": []
         });
     } catch (e) {
-        return JSON.stringify({ url: "", isEmbed: false, headers: {} });
+        return JSON.stringify({ 
+            "url": url, 
+            "isEmbed": true, 
+            "headers": {} 
+        });
     }
 }
 
-// -----------------------------------------------------------------------------
-// KHÔNG DÙNG TỚI VỚI WEBVIEW, TRẢ VỀ RỖNG
-// -----------------------------------------------------------------------------
 function parseEmbedResponse(htmlContent, url) {
     return JSON.stringify({ url: "", isEmbed: false });
 }
