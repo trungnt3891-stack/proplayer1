@@ -478,10 +478,35 @@ Khi trang web sử dụng link stream có đuôi mở rộng lạ (ví dụ: lu�
        }
    }
    ```
-   👉 *App Core sẽ ưu tiên 100% `mimeType` và `Stream-Regex` do plugin định nghĩa để phát video mà không cần quan tâm đuôi file.*
-App sẽ POST tới URL đó → nhận response → gọi `parseEmbedResponse(html, url)` → lặp lại nếu `isEmbed` vẫn = `true`.
+   #### 🔐 Khai báo DRM (ClearKey & Widevine DRM)
+Nếu luồng phát DASH (`.mpd`) yêu cầu mã hóa bản quyền DRM, plugin trả về các trường DRM tương ứng trong `parseDetailResponse`:
+
+1. **ClearKey DRM (Cần KID + KEY)**:
+```json
+{
+    "url": "https://example.com/manifest.mpd",
+    "isEmbed": false,
+    "mimeType": "application/dash+xml",
+    "drmType": "clearkey",
+    "drmKid": "aabbcc112233...",
+    "drmKey": "445566778899..."
+}
+```
+
+2. **Widevine DRM (Cần licenseUrl)**:
+```json
+{
+    "url": "https://s7485.cdn.mytvnet.vn/pkg20/__cl/gvtsig/vstv451/manifest.mpd",
+    "isEmbed": false,
+    "mimeType": "application/dash+xml",
+    "drmType": "widevine",
+    "licenseUrl": "https://tv.vietanhtv.top/mytv2/key.php"
+}
+```
 
 ---
+
+### `parseEmbedResponse()` — Phân Tích Iframe Embed
 
 ### 🎬 Chế Độ `embedtoexoplay` & EmbedSniffer (Nâng Cao)
 
