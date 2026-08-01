@@ -986,58 +986,19 @@ function parseDetailResponse(html, episodeUrl) {
 }
 ```
 
-##### Ví dụ 2: Mã hóa Base64 cho Dữ liệu LỚN / Phức Tạp (Tránh vỡ cú pháp URL)
+##### Ví dụ 2: Mã hóa / Nén Dữ liệu LỚN hoặc Phức Tạp (Tránh vỡ cú pháp ID / URL)
 
-Khi cần truyền Object chứa nhiều dữ liệu (Cookie, Token JWT, bối cảnh Session...), bạn dùng Base64 để nén thành chuỗi 1 dòng chữ an toàn.
+> [!WARNING]
+> **Lưu ý quan trọng về môi trường QuickJS:**
+> Môi trường QuickJS của ứng dụng **KHÔNG có sẵn** 2 hàm `btoa()` và `atob()` của trình duyệt Web.
+> Nếu dùng `atob()` trong khối `try { ... } catch(e) {}`, lỗi `ReferenceError: atob is not defined` sẽ bị nuốt im lặng, khiến dữ liệu giải mã bị rỗng `{}` mà không hiện lỗi ra console.
 
-> 💡 **LƯU Ý VỀ `btoa()` VÀ `atob()` TRONG QUICKJS:**
-> 1. **Tự động tích hợp (App v1.7.9+)**: VAAPP đã tích hợp sẵn hàm `btoa()` và `atob()` chuẩn (hỗ trợ cả Tiếng Việt / UTF-8) vào engine QuickJS của App.
-> 2. **Tránh bẫy Nuốt Lỗi `catch(e) {}`**: Nếu hàm `atob` bị lỗi hoặc dữ liệu hỏng, mã `try { data = JSON.parse(atob(str)); } catch(e) {}` sẽ lặng lẽ bắt lỗi mà không in ra console, khiến bạn tưởng code không chạy. Luôn dùng `console.error("Lỗi:", e)` trong khối `catch` để phát hiện lỗi ngay!
-> 3. **Mã Helper Polyfill (Dành cho bản cũ / tester.html)**: Nếu bạn muốn plugin chạy tương thích trên mọi môi trường JavaScript (kể cả QuickJS thuần không có DOM API), hãy copy hàm Polyfill dưới đây vào file plugin:
+Khi cần truyền Object chứa nhiều dữ liệu (Cookie, Token JWT, bối cảnh Session...), cách chuẩn nhất và tương thích 100% với QuickJS là sử dụng cặp hàm JS chuẩn: `encodeURIComponent()` và `decodeURIComponent()`.
+
+###### 🚀 Cách 1: Dùng `encodeURIComponent` & `decodeURIComponent` (Khuyên dùng - Có sẵn trong QuickJS)
 
 ```javascript
-// Base64 Polyfill hỗ trợ Unicode/Tiếng Việt cho QuickJS
-var _vaB64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-if (typeof btoa === 'undefined') {
-    function btoa(input) {
-        var str = encodeURIComponent(String(input)).replace(/%([0-9A-F]{2})/g, function(_, p1) {
-            return String.fromCharCode('0x' + p1);
-        });
-        var output = '';
-        for (var i = 0; i < str.length; i += 3) {
-            var c1 = str.charCodeAt(i), c2 = str.charCodeAt(i + 1), c3 = str.charCodeAt(i + 2);
-            var b1 = c1 >> 2, b2 = ((c1 & 3) << 4) | (isNaN(c2) ? 0 : c2 >> 4);
-            var b3 = isNaN(c2) ? 64 : ((c2 & 15) << 2) | (isNaN(c3) ? 0 : c3 >> 6);
-            var b4 = isNaN(c3) ? 64 : c3 & 63;
-            output += _vaB64Chars.charAt(b1) + _vaB64Chars.charAt(b2) + _vaB64Chars.charAt(b3) + _vaB64Chars.charAt(b4);
-        }
-        return output;
-    }
-}
-if (typeof atob === 'undefined') {
-    function atob(input) {
-        var str = String(input).replace(/[\t\n\r\f\s]/g, '');
-        var output = '';
-        for (var i = 0; i < str.length; i += 4) {
-            var b1 = _vaB64Chars.indexOf(str.charAt(i)), b2 = _vaB64Chars.indexOf(str.charAt(i + 1));
-            var b3 = _vaB64Chars.indexOf(str.charAt(i + 2)), b4 = _vaB64Chars.indexOf(str.charAt(i + 3));
-            if (b1 === -1 || b2 === -1) break;
-            var c1 = (b1 << 2) | (b2 >> 4);
-            output += String.fromCharCode(c1);
-            if (b3 !== -1 && b3 !== 64) output += String.fromCharCode(((b2 & 15) << 4) | (b3 >> 2));
-            if (b4 !== -1 && b4 !== 64) output += String.fromCharCode(((b3 & 3) << 6) | b4);
-        }
-        try {
-            return decodeURIComponent(output.split('').map(function(c) {
-                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-            }).join(''));
-        } catch(e) { return output; }
-    }
-}
-
-// --- Ví dụ sử dụng trong Plugin ---
-
-// 1. Ở parseListResponse: Mã hóa Object thành Base64 đính vào ID
+// 1. Ở parseListResponse: Mã hóa Object thành chuỗi URL safe đính vào ID
 function parseListResponse(html) {
     var bigData = {
         token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -1045,8 +1006,8 @@ function parseListResponse(html) {
         quality: "1080p"
     };
 
-    // Nén Object thành chuỗi Base64 an toàn 1 dòng
-    var encodedData = btoa(JSON.stringify(bigData));
+    // Mã hóa JSON string thành chuỗi an toàn 1 dòng (không bị vỡ dấu |, ký tự đặc biệt, xuống dòng)
+    var encodedData = encodeURIComponent(JSON.stringify(bigData));
 
     return JSON.stringify({
         "items": [
@@ -1058,25 +1019,70 @@ function parseListResponse(html) {
     });
 }
 
-// 2. Ở parseDetailResponse: Giải mã Base64 ngược lại thành Object
+// 2. Ở parseDetailResponse: Giải mã ngược lại thành Object
 function parseDetailResponse(html, episodeUrl) {
     var data = {};
     if (episodeUrl && episodeUrl.indexOf("|") > -1) {
-        var base64Str = episodeUrl.split("|")[1];
+        var encodedStr = episodeUrl.split("|")[1];
         try {
-            data = JSON.parse(atob(base64Str)); // Giải mã Base64 ngược lại
+            data = JSON.parse(decodeURIComponent(encodedStr)); // Giải mã URL-encode lại thành Object
         } catch(e) {
-            console.error("Lỗi giải mã Base64:", e); // Log rõ nguyên nhân thay vì nuốt lỗi!
+            console.error("Lỗi parse data:", e);
         }
     }
 
-    console.log("Token giải mã được:", data.token);
+    console.log(data.token);   // "eyJhbGciOi..."
+    console.log(data.session); // "sess_9988776655"
 
     return JSON.stringify({
-        "url": "https://server.com/stream?token=" + data.token,
+        "url": "https://server.com/stream?token=" + (data.token || ""),
         "isEmbed": false
     });
 }
+```
+
+###### 💡 Cách 2: Nếu bắt buộc cần Base64 (Viết hàm Base64 thuần JS)
+
+Nếu logic của bạn bắt buộc phải tạo/đọc chuỗi mã hóa chuẩn Base64, hãy nhúng 2 hàm helper thuần JS dưới đây vào plugin (thay thế hoàn toàn cho `btoa`/`atob`):
+
+```javascript
+// Helper Base64 thuần JS (Tương thích 100% với QuickJS)
+function base64Encode(str) {
+    var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    var output = '';
+    var utf8Str = unescape(encodeURIComponent(str));
+    for (var block, charCode, idx = 0, map = chars;
+        utf8Str.charAt(idx | 0) || (map = '=', idx % 1);
+        output += map.charAt(63 & block >> 8 - idx % 1 * 8)) {
+        charCode = utf8Str.charCodeAt(idx += 3/4);
+        if (charCode > 255) {
+            throw new Error("'base64Encode' failed: string contains out of range characters");
+        }
+        block = block << 8 | charCode;
+    }
+    return output;
+}
+
+function base64Decode(input) {
+    var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    var str = String(input).replace(/=+$/, '');
+    var output = '';
+    if (str.length % 4 === 1) {
+        throw new Error("'base64Decode' failed: invalid length");
+    }
+    for (var bc = 0, bs, buffer, idx = 0;
+        buffer = str.charAt(idx++);
+        ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer,
+            bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0
+    ) {
+        buffer = chars.indexOf(buffer);
+    }
+    return decodeURIComponent(escape(output));
+}
+
+// Cách dùng trong Plugin:
+// var encoded = base64Encode(JSON.stringify(bigData));
+// var data = JSON.parse(base64Decode(encoded));
 ```
 
 ---
@@ -1109,12 +1115,11 @@ while ((match = regex.exec(html)) !== null) {
 ❌ `require()`, `import`
 
 ### Những thứ DÙNG ĐƯỢC:
-✅ `btoa()`, `atob()` *(Mặc định từ VAAPP 1.7.9+)*
 ✅ `JSON.parse()`, `JSON.stringify()`
 ✅ `String.match()`, `String.replace()`, `String.split()`, `String.indexOf()`
 ✅ `RegExp`, `/pattern/g.exec()`
 ✅ `Array.map()`, `Array.filter()`, `Array.forEach()`
-✅ `try {} catch(e) {}` *(Lưu ý in log trong catch với `console.error(e)`)*
+✅ `try {} catch(e) {}`
 ✅ `encodeURIComponent()`, `decodeURIComponent()`
 
 ---
