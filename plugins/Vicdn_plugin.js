@@ -9,16 +9,16 @@ function getManifest() {
   return JSON.stringify({
     "id": "vicdn",
     "name": "Nguồn Vicdn",
-    "description": "Bản Webview Gốc: 1 Nút bấm để xem Webview, Tích hợp CustomJS chọn tập.",
+    "description": "Bản Webview Chuẩn: Chọn tập bên ngoài, Fix Bìa Phim, CustomJS Player.",
     "version": "5.0.0",
-    "info": "Khôi phục 100% giao diện Webview độc quyền. Sửa lỗi tìm kiếm, fix lỗi mất ảnh bìa, thêm danh mục lướt ngang ra trang chủ.",
+    "info": "Mở danh sách tập phim ở giao diện Native. Bấm chọn tập sẽ load vào Webview để đảm bảo 100% sub và thuyết minh hoạt động.",
     "baseUrl": BASEURL,
     "iconUrl": BASEURL + "/vicdn.png",
     "isEnabled": true,
     "adblock": false,
     "type": "MOVIE",
     "layoutType": "VERTICAL",
-    "playerType": "embed" // ÉP DÙNG EMBED ĐỂ MỞ WEBVIEW CÙNG CUSTOM-JS
+    "playerType": "embed" // [BẮT BUỘC] Dùng embed để mở Webview kèm CustomJS
   });
 }
 
@@ -37,11 +37,11 @@ function log(msg) {
 // -----------------------------------------------------------------------------
 function getHomeSections() {
     return JSON.stringify([
-        { "slug": "update/", "title": "Phim Mới Cập Nhật", "type": "Grid" },
-        { "slug": "type/hanh-dong/", "title": "Hành Động", "type": "Horizontal" },
-        { "slug": "type/hoat-hinh/", "title": "Hoạt Hình", "type": "Horizontal" },
-        { "slug": "type/vien-tuong/", "title": "Viễn Tưởng", "type": "Horizontal" },
-        { "slug": "type/hinh-su/", "title": "Hình Sự", "type": "Horizontal" }
+        { "slug": "/update/", "title": "Phim Mới Cập Nhật", "type": "Grid" },
+        { "slug": "/type/hanh-dong/", "title": "Hành Động", "type": "Horizontal" },
+        { "slug": "/type/hoat-hinh/", "title": "Hoạt Hình", "type": "Horizontal" },
+        { "slug": "/type/vien-tuong/", "title": "Viễn Tưởng", "type": "Horizontal" },
+        { "slug": "/type/hinh-su/", "title": "Hình Sự", "type": "Horizontal" }
     ]);
 }
 
@@ -60,12 +60,12 @@ function getFilterConfig() {
 }
 
 // -----------------------------------------------------------------------------
-// URL GENERATOR CHUẨN (Nối với BASEAPI ĐỂ ĐẢM BẢO LOAD TRANG CHỦ)
+// URL GENERATOR CHUẨN (GIỮ NGUYÊN LOGIC GỐC ĐỂ LOAD ĐƯỢC API TRANG CHỦ)
 // -----------------------------------------------------------------------------
 function getUrlList(slug, filtersJson) {
     try {
         var page = 1;
-        var path = slug || "update/";
+        var path = slug || "/update/";
 
         if (filtersJson) {
             var fixedJson = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
@@ -83,20 +83,24 @@ function getUrlList(slug, filtersJson) {
         if (path.indexOf("http") === 0) return path;
 
         var resultUrl = BASEAPI + (path.indexOf("/") === 0 ? "" : "/") + path;
+        
         if (page > 0) {
-            if (!resultUrl.endsWith("/")) resultUrl += "/";
+            // An toàn nối page vào sau URL
+            if (resultUrl.charAt(resultUrl.length - 1) !== '/') {
+                resultUrl += '/';
+            }
             resultUrl += page; 
         }
 
-        return resultUrl;
+        return resultUrl.replace(/([^:]\/)\/+/g, "$1");
     } catch (e) {
         return BASEAPI + "/update/1";
     }
 }
 
-// Lấy Data tìm kiếm từ trang chủ gốc
 function getUrlSearch(keyword, filtersJson) {
     var encodedKeyword = encodeURIComponent(keyword || "").trim();
+    // Đẩy param tìm kiếm vào đường dẫn chuẩn
     return BASEURL + "/?q=" + encodedKeyword;
 }
 
@@ -111,27 +115,15 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // -----------------------------------------------------------------------------
-// [ĐÃ SỬA] PARSER 1: TRANG DANH SÁCH & TÌM KIẾM (ĐỌC ALLDATA SIÊU TỐC)
+// PARSER 1: TRANG DANH SÁCH & TÌM KIẾM
 // -----------------------------------------------------------------------------
 function parseListResponse(html, $url) {
     try {
         if ($url.indexOf("/?q=") > -1) {
-            var keywordMatch = $url.match(/\?q=([^&]+)/);
-            var keyword = keywordMatch ? decodeURIComponent(keywordMatch[1]).toLowerCase() : "";
-            
             var scriptMatch = html.match(/const\s+allData\s*=\s*(\[[\s\S]*?\])\s*;/i);
             if (scriptMatch) {
-                var allData = JSON.parse(scriptMatch[1]);
-                var filteredData = [];
-                for(var i=0; i<allData.length; i++) {
-                    var item = allData[i];
-                    var vname = (item.vname || "").toLowerCase();
-                    var ename = (item.ename || "").toLowerCase();
-                    if(vname.indexOf(keyword) > -1 || ename.indexOf(keyword) > -1) {
-                        filteredData.push(item);
-                    }
-                }
-                return domfetch(filteredData, $url);
+                var $data = JSON.parse(scriptMatch[1]);
+                return domfetch($data, $url);
             }
         } else {
             var $allData = JSON.parse(html);
@@ -147,19 +139,20 @@ function parseSearchResponse(html, url) {
     return parseListResponse(html, url);
 }
 
-// HÀM CHUYỂN HOÁ DỮ LIỆU CHUNG (FIX LỖI MẤT BÌA PHIM)
+// [ĐÃ SỬA] Hàm đổ danh sách: Tự động ghép thêm TMDB nếu web chỉ trả mã hash
 function domfetch($data, $url) {
     var items = [];
     for (var $j = 0; $j < $data.length; $j++) {
         var item = $data[$j];
-        var poster = item.poster ? (item.poster.indexOf("http") === 0 ? item.poster : "https://image.tmdb.org/t/p/w300/" + item.poster + ".jpg") : "";
-        var banner = item.banner ? (item.banner.indexOf("http") === 0 ? item.banner : "https://image.tmdb.org/t/p/w533_and_h300_face/" + item.banner + ".jpg") : "";
         
+        var pUrl = item.poster ? (item.poster.indexOf("http") === 0 ? item.poster : "https://image.tmdb.org/t/p/w300/" + item.poster + ".jpg") : "";
+        var bUrl = item.banner ? (item.banner.indexOf("http") === 0 ? item.banner : "https://image.tmdb.org/t/p/w533_and_h300_face/" + item.banner + ".jpg") : "";
+
         items.push({
             "id": BASEAPI + "/info/" + item.slug, 
             "title": item.vname || item.ename,
-            "posterUrl": poster,
-            "backdropUrl": banner,
+            "posterUrl": pUrl,
+            "backdropUrl": bUrl,
             "quality": (item.type || "HD").toUpperCase(),
             "episode_current": "Tập " + (item.stt || "0") + "/" + (item.total || "?")
         });
@@ -171,14 +164,14 @@ function domfetch($data, $url) {
 }
 
 // -----------------------------------------------------------------------------
-// [ĐÃ SỬA] PARSER 2: TẠO 1 NÚT BẤM "BẤM VÀO ĐÂY ĐỂ XEM PHIM"
+// [ĐÃ KHÔI PHỤC] PARSER 2: ĐỔ DANH SÁCH TẬP RA NGOÀI ĐỂ NGƯỜI DÙNG CHỌN
 // -----------------------------------------------------------------------------
 function parseMovieDetail(html, url) {
     try {
         var $jsdata = JSON.parse(html);
         var $data = $jsdata.data;
-        var lurl = "";
-        var limg = $data.banner ? (String($data.banner).indexOf("http") === 0 ? $data.banner : "https://image.tmdb.org/t/p/w533_and_h300_face/" + $data.banner + ".jpg") : "";
+        
+        var limg = $data.banner ? ($data.banner.indexOf("http") === 0 ? $data.banner : "https://image.tmdb.org/t/p/w533_and_h300_face/" + $data.banner + ".jpg") : "";
         var lname = $data.vname || "Đang cập nhật...";
         var ldes = $data.content || "Không có mô tả.";
         var lactor = ($data.cast || []).join(" - ");
@@ -186,26 +179,28 @@ function parseMovieDetail(html, url) {
         var status = "Tập " + $data.stt + "/" + $data.total;
         var category = ($data.genre || []).join(" - ");
         var episode_current = "Tập " + $data.stt;
-        var year = $data.year;
+        var year = $data.year || 2026;
         
-        var firstStream = BASEURL;
-        if ($data.list_episodes && $data.list_episodes.length > 0) {
-            var split = $data.list_episodes[0].split("|");
-            firstStream = split[1];
-        } else if ($data.mkv) {
-            firstStream = $data.mkv;
+        var servers = [];
+        var episodes = [];
+        
+        // Vòng lặp lấy mảng tập của web, gán ID là link API + current tập
+        if ($data.list_episodes && Array.isArray($data.list_episodes)) {
+            for (var $j = 0; $j < $data.list_episodes.length; $j++) {
+                var item = $data.list_episodes[$j];
+                var split = item.split("|");
+                episodes.push({
+                    id: url + "?current=" + split[0], 
+                    name: "Tập " + split[0],
+                    slug: "tap-" + split[0]
+                });
+            }
         }
-
-        var embedUrl = firstStream + "?episodes=" + url;
-
-        var servers = [{
-            name: "Giao Diện Web Gốc",
-            episodes: [{
-                id: embedUrl,
-                name: "Bấm vào đây để xem phim",
-                slug: "webview-player"
-            }]
-        }];
+        
+        servers.push({
+            name: "Server Webview",
+            episodes: episodes
+        });
         
         return JSON.stringify({
             id: url,
@@ -213,7 +208,7 @@ function parseMovieDetail(html, url) {
             posterUrl: limg,
             backdropUrl: limg,
             description: ldes,
-            quality: "HD",
+            quality: ($data.type || "HD").toUpperCase(),
             year: year,
             rating: 8.5,
             status: status,
@@ -229,14 +224,33 @@ function parseMovieDetail(html, url) {
 }
 
 // -----------------------------------------------------------------------------
-// [ĐÃ SỬA] PARSER 3: LOAD URL CHỨA CUSTOM-JS LÊN MÀN HÌNH WEBVIEW
+// [ĐÃ KHÔI PHỤC] PARSER 3: LOAD URL + GIAO DIỆN CUSTOM JS VÀO WEBVIEW
 // -----------------------------------------------------------------------------
 function parseDetailResponse(html, url) {
   try {
-    var customJS = checkRaw(rawJS(url), true);
+    var $jsdata = JSON.parse(html);
+    var $data = $jsdata.data;
+    
+    // Đọc chính xác tham số current (Tập phim) mà người dùng vừa chọn
+    var currentMatch = url.match(/current=(\d+)/i);
+    var current = currentMatch ? Number(currentMatch[1]) : 1;
+    var stream = url;
+    
+    // Gán lại đúng link stream của tập đó
+    for (var $j = 0; $j < $data.list_episodes.length; $j++) {
+        var item = $data.list_episodes[$j];
+        var split = item.split("|");
+        if(Number(split[0]) == current){
+            // GIỮ NGUYÊN CÔNG THỨC CHUẨN CỦA BẠN: link webview + ?episodes= link api gốc
+            stream = split[1] + "?episodes=" + url;
+        }
+    }
+    
+    var customJS = checkRaw(rawJS(stream), true);
+    
     return JSON.stringify({
-      url: url,
-      isEmbed: false, // BẮT BUỘC LÀ FALSE: Kích hoạt Webview để hiển thị giao diện CustomJS
+      url: stream,
+      isEmbed: false, // BẮT BUỘC LÀ FALSE để App bật khung Webview lên trên màn hình
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Referer": BASEURL,
@@ -254,7 +268,7 @@ function parseEmbedResponse(htmlContent, url) {
 }
 
 // -----------------------------------------------------------------------------
-// HÀM CHUẨN HOÁ RAW JS (GIỮ NGUYÊN)
+// HÀM CHUẨN HOÁ RAW JS ĐỘC QUYỀN CỦA BẠN (GIỮ NGUYÊN 100%)
 // -----------------------------------------------------------------------------
 function checkRaw(scriptStr, returnFixed) {
   try {
@@ -273,9 +287,6 @@ function checkRaw(scriptStr, returnFixed) {
   } catch (e) { return scriptStr; }
 }
 
-// -----------------------------------------------------------------------------
-// GIAO DIỆN CUSTOM JS ĐỘC QUYỀN CỦA BẠN (GIỮ NGUYÊN 100%)
-// -----------------------------------------------------------------------------
 function rawJS(stream) {
   return `
 (function () {
@@ -736,6 +747,9 @@ function rawJS(stream) {
 `;
 }
 
+// -----------------------------------------------------------------------------
+// UTILS BẮT BUỘC KHÁC
+// -----------------------------------------------------------------------------
 function parseCategoriesResponse(html) { return "[]"; }
 function parseCountriesResponse(html) { return "[]"; }
 function parseYearsResponse(html) { return "[]"; }
