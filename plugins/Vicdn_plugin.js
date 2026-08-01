@@ -9,9 +9,9 @@ function getManifest() {
   return JSON.stringify({
     "id": "vicdn",
     "name": "Nguồn Vicdn",
-    "description": "Bản Webview Chuẩn: Chọn tập bên ngoài, Fix Bìa Phim, CustomJS Player.",
-    "version": "5.0.0",
-    "info": "Mở danh sách tập phim ở giao diện Native. Bấm chọn tập sẽ load vào Webview để đảm bảo 100% sub và thuyết minh hoạt động.",
+    "description": "Bản Gốc Hoàn Hảo: 1 Nút Bấm Webview, Giao diện CustomJS Chọn Tập.",
+    "version": "6.0.0",
+    "info": "Khôi phục toàn bộ giao diện Webview độc quyền. Sửa lỗi trang chủ, sửa tìm kiếm siêu tốc, tự động fix bìa phim.",
     "baseUrl": BASEURL,
     "iconUrl": BASEURL + "/vicdn.png",
     "isEnabled": true,
@@ -33,7 +33,7 @@ function log(msg) {
 }
 
 // -----------------------------------------------------------------------------
-// [ĐÃ SỬA] MENU & TRANG CHỦ (1 GRID + 4 HORIZONTAL LƯỚT NGANG)
+// MENU & TRANG CHỦ (1 GRID + 4 HORIZONTAL LƯỚT NGANG)
 // -----------------------------------------------------------------------------
 function getHomeSections() {
     return JSON.stringify([
@@ -60,7 +60,7 @@ function getFilterConfig() {
 }
 
 // -----------------------------------------------------------------------------
-// URL GENERATOR CHUẨN (GIỮ NGUYÊN LOGIC GỐC ĐỂ LOAD ĐƯỢC API TRANG CHỦ)
+// URL GENERATOR CHUẨN ĐỂ ĐỌC API TRANG CHỦ & TÌM KIẾM
 // -----------------------------------------------------------------------------
 function getUrlList(slug, filtersJson) {
     try {
@@ -85,13 +85,13 @@ function getUrlList(slug, filtersJson) {
         var resultUrl = BASEAPI + (path.indexOf("/") === 0 ? "" : "/") + path;
         
         if (page > 0) {
-            // An toàn nối page vào sau URL
             if (resultUrl.charAt(resultUrl.length - 1) !== '/') {
                 resultUrl += '/';
             }
             resultUrl += page; 
         }
 
+        // Lọc bỏ dấu gạch chéo dư thừa (VD: //1 -> /1) để API không bị lỗi 404
         return resultUrl.replace(/([^:]\/)\/+/g, "$1");
     } catch (e) {
         return BASEAPI + "/update/1";
@@ -99,9 +99,15 @@ function getUrlList(slug, filtersJson) {
 }
 
 function getUrlSearch(keyword, filtersJson) {
+    var page = 1;
+    if (filtersJson) {
+        var fixedJson = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
+        try { var filters = JSON.parse(fixedJson); page = parseInt(filters.page) || 1; } catch (e) {}
+    }
     var encodedKeyword = encodeURIComponent(keyword || "").trim();
-    // Đẩy param tìm kiếm vào đường dẫn chuẩn
-    return BASEURL + "/?q=" + encodedKeyword;
+    var res = BASEURL + "/?q=" + encodedKeyword;
+    if (page > 1) res += "&page=" + page;
+    return res;
 }
 
 function getUrlDetail(slug) {
@@ -120,12 +126,14 @@ function getUrlYears() { return ""; }
 function parseListResponse(html, $url) {
     try {
         if ($url.indexOf("/?q=") > -1) {
+            // Tìm kiếm: Lọc phim từ mảng allData của trang chủ
             var scriptMatch = html.match(/const\s+allData\s*=\s*(\[[\s\S]*?\])\s*;/i);
             if (scriptMatch) {
                 var $data = JSON.parse(scriptMatch[1]);
                 return domfetch($data, $url);
             }
         } else {
+            // Trang danh sách: Trả về JSON chuẩn
             var $allData = JSON.parse(html);
             return domfetch($allData.data || [], $url);
         }
@@ -139,7 +147,7 @@ function parseSearchResponse(html, url) {
     return parseListResponse(html, url);
 }
 
-// [ĐÃ SỬA] Hàm đổ danh sách: Tự động ghép thêm TMDB nếu web chỉ trả mã hash
+// Hàm chuẩn hoá dữ liệu chung (Tự ghép link image.tmdb.org để fix mất ảnh)
 function domfetch($data, $url) {
     var items = [];
     for (var $j = 0; $j < $data.length; $j++) {
@@ -164,7 +172,7 @@ function domfetch($data, $url) {
 }
 
 // -----------------------------------------------------------------------------
-// [ĐÃ KHÔI PHỤC] PARSER 2: ĐỔ DANH SÁCH TẬP RA NGOÀI ĐỂ NGƯỜI DÙNG CHỌN
+// PARSER 2: TẠO 1 NÚT BẤM "BẤM VÀO ĐÂY ĐỂ XEM PHIM" DẪN VÀO WEBVIEW
 // -----------------------------------------------------------------------------
 function parseMovieDetail(html, url) {
     try {
@@ -172,7 +180,7 @@ function parseMovieDetail(html, url) {
         var $data = $jsdata.data;
         
         var limg = $data.banner ? ($data.banner.indexOf("http") === 0 ? $data.banner : "https://image.tmdb.org/t/p/w533_and_h300_face/" + $data.banner + ".jpg") : "";
-        var lname = $data.vname || "Đang cập nhật...";
+        var lname = $data.vname || $data.ename || "Đang cập nhật...";
         var ldes = $data.content || "Không có mô tả.";
         var lactor = ($data.cast || []).join(" - ");
         var lduran = $data.duration ? $data.duration + " phút" : "";
@@ -181,26 +189,15 @@ function parseMovieDetail(html, url) {
         var episode_current = "Tập " + $data.stt;
         var year = $data.year || 2026;
         
-        var servers = [];
-        var episodes = [];
-        
-        // Vòng lặp lấy mảng tập của web, gán ID là link API + current tập
-        if ($data.list_episodes && Array.isArray($data.list_episodes)) {
-            for (var $j = 0; $j < $data.list_episodes.length; $j++) {
-                var item = $data.list_episodes[$j];
-                var split = item.split("|");
-                episodes.push({
-                    id: url + "?current=" + split[0], 
-                    name: "Tập " + split[0],
-                    slug: "tap-" + split[0]
-                });
-            }
-        }
-        
-        servers.push({
-            name: "Server Webview",
-            episodes: episodes
-        });
+        var servers = [{
+            name: "Giao Diện Web Gốc",
+            episodes: [{
+                // CHÚ Ý: Gắn thêm current=1 vào đuôi để hàm parseDetailResponse bóc được link stream
+                id: url + "?current=1", 
+                name: "Bấm vào đây để xem phim",
+                slug: "webview-player"
+            }]
+        }];
         
         return JSON.stringify({
             id: url,
@@ -224,33 +221,38 @@ function parseMovieDetail(html, url) {
 }
 
 // -----------------------------------------------------------------------------
-// [ĐÃ KHÔI PHỤC] PARSER 3: LOAD URL + GIAO DIỆN CUSTOM JS VÀO WEBVIEW
+// PARSER 3: LOAD URL + GIAO DIỆN CUSTOM JS VÀO WEBVIEW
 // -----------------------------------------------------------------------------
 function parseDetailResponse(html, url) {
   try {
     var $jsdata = JSON.parse(html);
     var $data = $jsdata.data;
     
-    // Đọc chính xác tham số current (Tập phim) mà người dùng vừa chọn
+    // Tách lấy current=1 từ url
     var currentMatch = url.match(/current=(\d+)/i);
     var current = currentMatch ? Number(currentMatch[1]) : 1;
-    var stream = url;
     
-    // Gán lại đúng link stream của tập đó
-    for (var $j = 0; $j < $data.list_episodes.length; $j++) {
-        var item = $data.list_episodes[$j];
-        var split = item.split("|");
-        if(Number(split[0]) == current){
-            // GIỮ NGUYÊN CÔNG THỨC CHUẨN CỦA BẠN: link webview + ?episodes= link api gốc
-            stream = split[1] + "?episodes=" + url;
+    // Lấy lại url gốc của API để bỏ tham số current
+    var baseUrl = url.split("?")[0];
+    var stream = baseUrl;
+    
+    if ($data.list_episodes && Array.isArray($data.list_episodes)) {
+        for (var $j = 0; $j < $data.list_episodes.length; $j++) {
+            var item = $data.list_episodes[$j];
+            var split = item.split("|");
+            if(Number(split[0]) === current){
+                stream = split[1] + "?episodes=" + baseUrl;
+            }
         }
+    } else if ($data.mkv) {
+        stream = $data.mkv + "?episodes=" + baseUrl;
     }
-    
+
     var customJS = checkRaw(rawJS(stream), true);
     
     return JSON.stringify({
       url: stream,
-      isEmbed: false, // BẮT BUỘC LÀ FALSE để App bật khung Webview lên trên màn hình
+      isEmbed: false, // isEmbed: false + playerType: "embed" sẽ bắt App mở Webview trực tiếp lên màn hình!
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Referer": BASEURL,
@@ -268,7 +270,7 @@ function parseEmbedResponse(htmlContent, url) {
 }
 
 // -----------------------------------------------------------------------------
-// HÀM CHUẨN HOÁ RAW JS ĐỘC QUYỀN CỦA BẠN (GIỮ NGUYÊN 100%)
+// HÀM CHUẨN HOÁ RAW JS CỦA BẠN (GIỮ NGUYÊN)
 // -----------------------------------------------------------------------------
 function checkRaw(scriptStr, returnFixed) {
   try {
@@ -287,6 +289,9 @@ function checkRaw(scriptStr, returnFixed) {
   } catch (e) { return scriptStr; }
 }
 
+// -----------------------------------------------------------------------------
+// GIAO DIỆN CUSTOM JS ĐỘC QUYỀN CỦA BẠN (GIỮ NGUYÊN 100%)
+// -----------------------------------------------------------------------------
 function rawJS(stream) {
   return `
 (function () {
@@ -747,9 +752,6 @@ function rawJS(stream) {
 `;
 }
 
-// -----------------------------------------------------------------------------
-// UTILS BẮT BUỘC KHÁC
-// -----------------------------------------------------------------------------
 function parseCategoriesResponse(html) { return "[]"; }
 function parseCountriesResponse(html) { return "[]"; }
 function parseYearsResponse(html) { return "[]"; }
