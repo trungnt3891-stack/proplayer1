@@ -36,20 +36,20 @@ NGƯỜI DÙNG bấm vào mục "Hành Động" trên Trang chủ
 NẾU type = "IPTV" HOẶC "VIDEO":
    App bỏ qua màn hình Chi tiết (Detail Screen) → mở thẳng Màn hình Player
    App chạy ngầm luồng lấy link:
-      1. Gọi getUrlDetail(id) để lấy URL API chi tiết kênh
+      1. Gọi getUrlDetail(id) để lấy URL API chi tiết kênh (lưu ý: id ban đầu là URL gốc chưa có query param)
       2. App fetch HTTP URL đó (Hỗ trợ Kodi Pipe Header: "url|User-Agent=...&Referer=...")
-      3. App gọi parseDetailResponse(html) để lấy JSON luồng phát & DRM
+      3. App gọi parseDetailResponse(html, apiUrl) để lấy JSON luồng phát & DRM
       4. ExoPlayer tự động nạp User-Agent/DRM Key và phát video
 
 NẾU type = "MOVIE" / "shortfilm":
    Bước 1: parseMovieDetail(html)
-      → Trả servers + episodes (mỗi episode có id = URL hoặc slug)
+      → Trả servers + episodes (mỗi episode có id = URL hoặc slug, bắt buộc slug phải duy nhất cho từng tập)
 
    Bước 2: Người dùng chọn tập
       → App gọi getUrlDetail(episode.id) để lấy URL fetch
-      → App fetch URL → gọi parseDetailResponse(html)
+      → App fetch URL → gọi parseDetailResponse(html, apiUrl)
 
-   Bước 3: parseDetailResponse(html)
+   Bước 3: parseDetailResponse(html, apiUrl)
       → Trả { url, headers, mimeType, subtitles, drmType, drmKid, drmKey, drmLicenseKey }
 
    Bước 4:
@@ -58,6 +58,10 @@ NẾU type = "MOVIE" / "shortfilm":
       │                        (lặp tối đa 3 lần cho đến khi isEmbed = false)
       └─ Nếu playerType = "embed" → WebView load url
 ```
+
+> 💡 **LƯU Ý QUAN TRỌNG KHI VIẾT PLUGIN (Tránh lỗi mất param & gọi sai tập):**
+> 1. **Gán Param Mặc Định:** Khi phát kiểu `VIDEO` (hoặc bấm Play từ ngoài), `apiUrl` truyền vào `parseDetailResponse` là URL gốc chưa có param. Plugin nên gán giá trị mặc định trong `getUrlDetail()` hoặc `parseDetailResponse()` (ví dụ: `if (!url.includes("streamVD=")) url += "?streamVD=1";`).
+> 2. **Slug Tập Phải Duy Nhất (`slug`):** Mỗi episode trong mảng `episodes` bắt buộc phải có `slug` độc nhất (ví dụ: `ep-1`, `ep-2`, `720p`, `480p`). **KHÔNG ĐẶT TRÙNG SLUG** (như tất cả tập đều là `"slug": "full"`), vì cơ chế Preload (tải ngầm tập tiếp theo) của App dùng `slug` để xác định tập hiện tại — nếu trùng slug `"full"`, App sẽ luôn xác định bạn đang ở Tập 1 và tự động preload Tập 2!
 
 ---
 
@@ -984,9 +988,55 @@ function parseDetailResponse(html, episodeUrl) {
 
 ##### Ví dụ 2: Mã hóa Base64 cho Dữ liệu LỚN / Phức Tạp (Tránh vỡ cú pháp URL)
 
-Khi cần truyền Object chứa nhiều dữ liệu (Cookie, Token JWT, bối cảnh Session...), bạn dùng `btoa()` để nén thành chuỗi Base64 1 dòng chữ an toàn:
+Khi cần truyền Object chứa nhiều dữ liệu (Cookie, Token JWT, bối cảnh Session...), bạn dùng Base64 để nén thành chuỗi 1 dòng chữ an toàn.
+
+> 💡 **LƯU Ý VỀ `btoa()` VÀ `atob()` TRONG QUICKJS:**
+> 1. **Tự động tích hợp (App v1.7.9+)**: VAAPP đã tích hợp sẵn hàm `btoa()` và `atob()` chuẩn (hỗ trợ cả Tiếng Việt / UTF-8) vào engine QuickJS của App.
+> 2. **Tránh bẫy Nuốt Lỗi `catch(e) {}`**: Nếu hàm `atob` bị lỗi hoặc dữ liệu hỏng, mã `try { data = JSON.parse(atob(str)); } catch(e) {}` sẽ lặng lẽ bắt lỗi mà không in ra console, khiến bạn tưởng code không chạy. Luôn dùng `console.error("Lỗi:", e)` trong khối `catch` để phát hiện lỗi ngay!
+> 3. **Mã Helper Polyfill (Dành cho bản cũ / tester.html)**: Nếu bạn muốn plugin chạy tương thích trên mọi môi trường JavaScript (kể cả QuickJS thuần không có DOM API), hãy copy hàm Polyfill dưới đây vào file plugin:
 
 ```javascript
+// Base64 Polyfill hỗ trợ Unicode/Tiếng Việt cho QuickJS
+var _vaB64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+if (typeof btoa === 'undefined') {
+    function btoa(input) {
+        var str = encodeURIComponent(String(input)).replace(/%([0-9A-F]{2})/g, function(_, p1) {
+            return String.fromCharCode('0x' + p1);
+        });
+        var output = '';
+        for (var i = 0; i < str.length; i += 3) {
+            var c1 = str.charCodeAt(i), c2 = str.charCodeAt(i + 1), c3 = str.charCodeAt(i + 2);
+            var b1 = c1 >> 2, b2 = ((c1 & 3) << 4) | (isNaN(c2) ? 0 : c2 >> 4);
+            var b3 = isNaN(c2) ? 64 : ((c2 & 15) << 2) | (isNaN(c3) ? 0 : c3 >> 6);
+            var b4 = isNaN(c3) ? 64 : c3 & 63;
+            output += _vaB64Chars.charAt(b1) + _vaB64Chars.charAt(b2) + _vaB64Chars.charAt(b3) + _vaB64Chars.charAt(b4);
+        }
+        return output;
+    }
+}
+if (typeof atob === 'undefined') {
+    function atob(input) {
+        var str = String(input).replace(/[\t\n\r\f\s]/g, '');
+        var output = '';
+        for (var i = 0; i < str.length; i += 4) {
+            var b1 = _vaB64Chars.indexOf(str.charAt(i)), b2 = _vaB64Chars.indexOf(str.charAt(i + 1));
+            var b3 = _vaB64Chars.indexOf(str.charAt(i + 2)), b4 = _vaB64Chars.indexOf(str.charAt(i + 3));
+            if (b1 === -1 || b2 === -1) break;
+            var c1 = (b1 << 2) | (b2 >> 4);
+            output += String.fromCharCode(c1);
+            if (b3 !== -1 && b3 !== 64) output += String.fromCharCode(((b2 & 15) << 4) | (b3 >> 2));
+            if (b4 !== -1 && b4 !== 64) output += String.fromCharCode(((b3 & 3) << 6) | b4);
+        }
+        try {
+            return decodeURIComponent(output.split('').map(function(c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+        } catch(e) { return output; }
+    }
+}
+
+// --- Ví dụ sử dụng trong Plugin ---
+
 // 1. Ở parseListResponse: Mã hóa Object thành Base64 đính vào ID
 function parseListResponse(html) {
     var bigData = {
@@ -1015,11 +1065,12 @@ function parseDetailResponse(html, episodeUrl) {
         var base64Str = episodeUrl.split("|")[1];
         try {
             data = JSON.parse(atob(base64Str)); // Giải mã Base64 ngược lại
-        } catch(e) {}
+        } catch(e) {
+            console.error("Lỗi giải mã Base64:", e); // Log rõ nguyên nhân thay vì nuốt lỗi!
+        }
     }
 
-    console.log(data.token);   // "eyJhbGciOi..."
-    console.log(data.session); // "sess_9988776655"
+    console.log("Token giải mã được:", data.token);
 
     return JSON.stringify({
         "url": "https://server.com/stream?token=" + data.token,
@@ -1058,11 +1109,12 @@ while ((match = regex.exec(html)) !== null) {
 ❌ `require()`, `import`
 
 ### Những thứ DÙNG ĐƯỢC:
+✅ `btoa()`, `atob()` *(Mặc định từ VAAPP 1.7.9+)*
 ✅ `JSON.parse()`, `JSON.stringify()`
 ✅ `String.match()`, `String.replace()`, `String.split()`, `String.indexOf()`
 ✅ `RegExp`, `/pattern/g.exec()`
 ✅ `Array.map()`, `Array.filter()`, `Array.forEach()`
-✅ `try {} catch(e) {}`
+✅ `try {} catch(e) {}` *(Lưu ý in log trong catch với `console.error(e)`)*
 ✅ `encodeURIComponent()`, `decodeURIComponent()`
 
 ---
