@@ -630,12 +630,54 @@ Khi viết `Custom-Js` hoặc mã xử lý trong WebView, plugin có thể sử 
 |------------|---------|-------|
 | `SnifferBridge.play(url)` | `url`: String | Truyền link stream trực tiếp cho ExoPlayer phát |
 | `SnifferBridge.play(url, headersJson)` | `url`: String, `headersJson`: JSON String | Truyền link stream kèm Header tùy chỉnh (ví dụ: `Referer`, `User-Agent`) |
+| `SnifferBridge.playM3u8Content(m3u8Content, baseUrl)` | `m3u8Content`: String, `baseUrl`: String | ⚡ **Giải mã & Phát Blob M3U8 tại Local (127.0.0.1)**. Tự động chuẩn hóa đường dẫn tương đối và phát qua ExoPlayer không qua server trung gian |
+| `SnifferBridge.playM3u8Content(m3u8Content, baseUrl, headersJson)` | Thêm `headersJson`: String | Giống `playM3u8Content()` nhưng đính kèm thêm Header cho ExoPlayer |
 | `SnifferBridge.playVideo(url, headersJson)` | Bí danh | Giống `play()` |
 | `SnifferBridge.playExoPlayer(url, headersJson)` | Bí danh | Giống `play()` |
 | `SnifferBridge.sendToPlayer(url, headersJson)` | Bí danh | Giống `play()` |
 | `SnifferBridge.toast(message)` | `message`: String | 💡 **Hiển thị thông báo Toast nổi trên màn hình App** (Rất hữu ích khi debug WebView ngầm/embed) |
 | `SnifferBridge.log(message)` | `message`: String | 📝 **Ghi log debug ra Android Logcat** (Tag: `SnifferBridgeJS`) |
 | `SnifferBridge.onVideoDetected(url)` | `url`: String | Hàm callback cũ (tương thích ngược) |
+
+#### ⚡ Hướng Dẫn Bắt & Giải Mã Blob M3U8 Trực Tiếp Tại Local (Không Dùng Worker/GAS)
+
+Đối với các trang web phim sử dụng kỹ thuật giấu link stream bằng cách đọc file M3U8 và tạo Blob URL trong bộ nhớ RAM trình duyệt (`URL.createObjectURL`), bạn không cần gửi dữ liệu thô lên Cloudflare Worker hay Google Apps Script nữa. 
+
+Trong mã `Custom-Js`, bạn chỉ cần hook `URL.createObjectURL` và truyền nội dung M3U8 thô về cho App bằng `SnifferBridge.playM3u8Content(...)`:
+
+```javascript
+(function initBlobSniffer() {
+  if (typeof URL !== 'undefined' && URL.createObjectURL) {
+    var originalCreateObjectURL = URL.createObjectURL;
+    URL.createObjectURL = function(blob) {
+      var blobUrl = originalCreateObjectURL.apply(this, arguments);
+      if (blob && (blob instanceof Blob || blob instanceof File)) {
+        var processContent = function(content) {
+          if (content && content.trim().indexOf('#EXTM3U') === 0) {
+            // Gửi trực tiếp nội dung M3U8 thô và URL trang hiện tại về App
+            if (window.SnifferBridge && typeof window.SnifferBridge.playM3u8Content === 'function') {
+              window.SnifferBridge.playM3u8Content(content, window.location.href);
+            }
+          }
+        };
+
+        if (typeof blob.text === 'function') {
+          blob.text().then(processContent).catch(function(){});
+        } else {
+          var reader = new FileReader();
+          reader.onload = function(e) { processContent(e.target.result); };
+          reader.readAsText(blob);
+        }
+      }
+      return blobUrl;
+    };
+  }
+})();
+```
+
+👉 **Cơ chế xử lý tự động trong App Android:**
+1. App sẽ tự động quét và chuyển hóa tất cả các đường dẫn phân đoạn tương đối trong M3U8 (ví dụ: `segment_01.ts`, `key.key`) thành đường dẫn tuyệt đối (`https://domain-goc.com/path/segment_01.ts`).
+2. App khởi tạo một **Local HTTP Server** ngầm trên `127.0.0.1` của thiết bị và chuyển URL local cho ExoPlayer phát ngay lập tức với độ trễ ~0ms.
 
 ### 🛠️ Hướng Dẫn Debug Log, Hàm `print()` & Khung Console Nổi (Dành Cho Dev Plugin Local)
 
