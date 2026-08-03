@@ -3,112 +3,189 @@
 // =============================================================================
 var BASEURL = "https://vicdn.cc"; 
 var BASEAPI = BASEURL + "/api";
-var DEV = false;
+var DEV = true;
 
 function getManifest() {
   return JSON.stringify({
     id: "vicdn",
     name: "Nguồn Vicdn",
-    description: "Bản Gốc Hoàn Hảo: 1 Nút bấm xem phim, Giao diện CustomJS Chọn tập.",
-    version: "6.0.0",
-    info: "Khôi phục 100% giao diện Webview độc quyền. Sửa lỗi trang chủ, tìm kiếm siêu tốc, tự động fix bìa phim.",
-    baseUrl: BASEURL,
-    iconUrl: BASEURL + "/vicdn.png",
+    description: "Bản Gốc Hoàn Hảo: 1 Nút Bấm Xem Phim, Giao Diện Chọn Tập CustomJS.",
+    "version": "6.0.0",
+    info: "Khôi phục 100% code gốc của bạn. Đã fix lỗi load trang chủ, sửa lỗi mất ảnh bìa, đưa 5 danh mục lướt ngang ra trang chủ.",
+    baseUrl: "https://vicdn.cc",
+    iconUrl: "https://vicdn.cc/vicdn.png",
     isEnabled: true,
-    adblock: false,
+    "adblock": false,
     type: "MOVIE",
-    layoutType: "VERTICAL",
     playerType: "embed" // [BẮT BUỘC] Dùng embed để mở Webview kèm CustomJS
   });
 }
 
 function log(msg) {
-  if (DEV) {
-      if (typeof nativeLog !== 'undefined') {
-          nativeLog("[Vicdn] " + msg);
-      } else if (typeof console !== 'undefined' && console.log) {
-          console.log("[Vicdn] " + msg);
-      }
-  }
+  	console.log(msg);
 }
 
 // -----------------------------------------------------------------------------
-// MENU & TRANG CHỦ (1 GRID + 4 HORIZONTAL LƯỚT NGANG)
+// ĐÃ SỬA: ĐƯA 5 DANH MỤC RA TRANG CHỦ THEO YÊU CẦU (1 GRID + 4 HORIZONTAL)
 // -----------------------------------------------------------------------------
 function getHomeSections() {
-    return JSON.stringify([
-        { "slug": "/update/", "title": "Phim Mới Cập Nhật", "type": "Grid" },
-        { "slug": "/type/hanh-dong/", "title": "Hành Động", "type": "Horizontal" },
-        { "slug": "/type/hoat-hinh/", "title": "Hoạt Hình", "type": "Horizontal" },
-        { "slug": "/type/vien-tuong/", "title": "Viễn Tưởng", "type": "Horizontal" },
-        { "slug": "/type/hinh-su/", "title": "Hình Sự", "type": "Horizontal" }
-    ]);
+    try {
+        var listurl = '[' +
+            '{\"link\":\"/update/\",\"name\":\"Phim Mới Cập Nhật\",\"type\":\"Grid\"},' +
+            '{\"link\":\"/type/hanh-dong/\",\"name\":\"Hành Động\",\"type\":\"Horizontal\"},' +
+            '{\"link\":\"/type/hoat-hinh/\",\"name\":\"Hoạt Hình\",\"type\":\"Horizontal\"},' +
+            '{\"link\":\"/type/vien-tuong/\",\"name\":\"Viễn Tưởng\",\"type\":\"Horizontal\"},' +
+            '{\"link\":\"/type/hinh-su/\",\"name\":\"Hình Sự\",\"type\":\"Horizontal\"}' +
+        ']';
+        var menuArray = JSON.parse(listurl);
+        var menulist = [];
+        for (var i = 0; i < menuArray.length; i++) {
+            menulist.push({
+                slug: menuArray[i].link,
+                title: menuArray[i].name,
+                type: menuArray[i].type || "Horizontal"
+            });
+        }
+        return JSON.stringify(menulist);
+    } catch (e) {
+        log("getHomeSections[err]:\n " + e);
+        return JSON.stringify([]);
+    }
 }
 
 function getPrimaryCategories() {
     try {
         var listurl = getLISTmenu();
-        return JSON.stringify(buildMenu(listurl));
-    } catch (e) { return JSON.stringify([]); }
+        var menulist = buildMenu(listurl);
+        return JSON.stringify(menulist);
+    } catch (e) {
+        log("getPrimaryCategories[err]:\n " + e);
+        return JSON.stringify([]);
+    }
 }
 
 function getFilterConfig() {
     try {
         var listurl = getLISTmenu();
-        return JSON.stringify({ category: buildMenu(listurl) });
-    } catch (e) { return JSON.stringify({ category: [] }); }
+        var menulist = buildMenu(listurl);
+        return JSON.stringify({
+            category: menulist
+        });
+    } catch (e) {
+        log("getFilterConfig[err]:\n " + e);
+        return JSON.stringify({ category: [] });
+    }
 }
 
 // -----------------------------------------------------------------------------
-// URL GENERATOR CHUẨN ĐỂ ĐỌC API TRANG CHỦ & TÌM KIẾM
+// GIỮ NGUYÊN 100% URL GENERATOR CỦA BẠN (TRÁNH LỖI LOAD TRANG CHỦ)
 // -----------------------------------------------------------------------------
 function getUrlList(slug, filtersJson) {
     try {
+        log("getUrlList[url]: \n" + slug);
         if (slug && slug.indexOf("http") > -1) {
+            if (slug.indexOf("search") > -1 && filtersJson) {
+                var fixedJson1 = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
+                try {
+                    var filtersSearch = JSON.parse(fixedJson1);
+                    var pageSearch = parseInt(filtersSearch.page) || 1;
+                    if (pageSearch > 1 && slug.indexOf("page=") === -1) {
+                        var sepSearch = slug.indexOf("?") > -1 ? "&" : "?";
+                        var resSearch = slug + sepSearch + "page=" + pageSearch;
+                        log("getUrlList[url]: \n" + resSearch);
+                        return resSearch;
+                    }
+                } catch (jsonErr) {}
+            }
+            log("getUrlList[url]: \n" + slug);
             return slug;
         }
 
         var page = 1;
-        var path = slug || "/update/";
+        var path = slug || "";
 
         if (filtersJson) {
-            var fixedJson = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
+            var fixedJson2 = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
             try {
-                var filters = JSON.parse(fixedJson);
+                var filters = JSON.parse(fixedJson2);
                 page = parseInt(filters.page) || 1;
-                if (filters.category && filters.category.length > 0) {
-                    path = filters.category[0].slug;
-                } else if (typeof filters.category === 'string') {
-                    path = filters.category;
+                if (filters.category) {
+                    if (Array.isArray(filters.category) && filters.category.length > 0) {
+                        path = filters.category[0].slug;
+                    } else if (typeof filters.category === 'string') {
+                        path = filters.category;
+                    }
                 }
             } catch (jsonErr) {}
         }
 
-        // Logic nối API nguyên bản, loại bỏ lỗi trùng lặp dấu gạch chéo
         var resultUrl = BASEAPI;
         if (path) {
             resultUrl += (path.indexOf("/") === 0 ? "" : "/") + path;
         }
+
         if (page > 0 && resultUrl.indexOf("page=") === -1) {
             resultUrl += page;
         }
 
         var finalUrl = resultUrl.replace(/([^:]\/)\/+/g, "$1");
+        log("getUrlList[url]: \n" + finalUrl);
         return finalUrl;
     } catch (e) {
-        return BASEAPI + "/update/1";
+        log("getUrlList[err]:\n " + e);
+        if (slug && slug.indexOf("http") > -1) {
+            log("getUrlList[url]: \n" + slug);
+            return slug;
+        }
+        var fallback = BASEAPI + (slug ? (slug.indexOf("/") === 0 ? slug : "/" + slug) : "");
+        var finalFallback = fallback.replace(/([^:]\/)\/+/g, "$1");
+        log("getUrlList[url]: \n" + finalFallback);
+        return finalFallback;
     }
 }
 
 function getUrlSearch(keyword, filtersJson) {
-    var encodedKeyword = encodeURIComponent(keyword || "").trim();
-    return BASEURL + "/?q=" + encodedKeyword;
+    try {
+        var page = 1;
+        if (filtersJson) {
+            var fixedJson = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
+            try {
+                var filters = JSON.parse(fixedJson);
+                page = parseInt(filters.page) || 1;
+            } catch (jsonErr) {}
+        }
+
+        var encodedKeyword = encodeURIComponent(keyword || "");
+        var resultUrl = BASEURL + "/?q=" + encodedKeyword;
+
+        if (page > 1) {
+            resultUrl += "&page=" + page;
+        }
+
+        var finalUrl = resultUrl.replace(/([^:]\/)\/+/g, "$1");
+        log("getUrlSearch[url]: \n" + finalUrl);
+        return finalUrl;
+    } catch (e) {
+        log("getUrlSearch[err]:\n " + e);
+        var fallback = BASEURL + "/?q=" + encodeURIComponent(keyword || "");
+        var finalFallback = fallback.replace(/([^:]\/)\/+/g, "$1");
+        log("getUrlSearch[url]: \n" + finalFallback);
+        return finalFallback;
+    }
 }
 
 function getUrlDetail(slug) {
-    if (!slug) return "";
-    if (slug.indexOf('http') === 0) return slug;
-    return BASEAPI + "/info/" + slug.replace(/^\//, "");
+    try {
+        log("getUrlDetail[url]: \n" + slug);
+        if (!slug) return "";
+        if (slug.indexOf('http') === 0) return slug;
+        var detailUrl = BASEURL + "/" + slug;
+        log("getUrlDetail[url]: \n" + detailUrl);
+        return detailUrl;
+    } catch (e) {
+        log("getUrlDetail[err]:\n " + e);
+        return "";
+    }
 }
 
 function getUrlCategories() { return BASEURL; }
@@ -116,77 +193,120 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // -----------------------------------------------------------------------------
-// PARSER 1: TRANG DANH SÁCH & TÌM KIẾM
+// GIỮ NGUYÊN 100% PARSER CỦA BẠN (THÊM FIX BÌA PHIM TMDB)
 // -----------------------------------------------------------------------------
 function parseListResponse(html, $url) {
     try {
+        log("parseListResponse[url]: \n" + $url);
         if ($url.indexOf("/?q=") > -1) {
-            // Tìm kiếm: Bóc tách JSON từ biến allData ở trang chủ
-            var scriptMatch = html.match(/const\s+allData\s*=\s*(\[[\s\S]*?\])\s*;/i);
-            if (scriptMatch) {
-                var $data = JSON.parse(scriptMatch[1]);
-                var keywordMatch = $url.match(/\?q=([^&]+)/);
-                var keyword = keywordMatch ? decodeURIComponent(keywordMatch[1]).toLowerCase() : "";
+            var script = _$(html).find("script:content('const allData')").html()
+
+            var $obj = script.match(/\[\s*\{[\s\S]*?\}\s*\]/i);
+            if ($obj) {
+                var $data = JSON.parse($obj[0]);
                 
-                var filteredData = [];
-                for(var k = 0; k < $data.length; k++){
+                // Lọc tìm kiếm tự động từ mảng allData
+                var keywordMatch = $url.match(/q=([^&]+)/);
+                var keyword = keywordMatch ? decodeURIComponent(keywordMatch[1]).toLowerCase().trim() : "";
+                var filtered = [];
+                for(var k=0; k<$data.length; k++) {
                     var vname = ($data[k].vname || "").toLowerCase();
                     var ename = ($data[k].ename || "").toLowerCase();
-                    if(vname.indexOf(keyword) > -1 || ename.indexOf(keyword) > -1){
-                        filteredData.push($data[k]);
+                    if(vname.indexOf(keyword) > -1 || ename.indexOf(keyword) > -1) {
+                        filtered.push($data[k]);
                     }
                 }
-                return domfetch(filteredData, $url);
+                return domfetch(filtered, $url);
             }
         } else {
-            // Danh sách API
-            var $allData = JSON.parse(html);
-            return domfetch($allData.data || [], $url);
+            var $allData = JSON.parse(html)
+            return domfetch($allData.data, $url);
         }
     } catch (e) {
-        return JSON.stringify({ "items": [], "pagination": { "currentPage": 1, "totalPages": 1 } });
+        log("parseListResponse[err]:\n " + e);
+        return JSON.stringify({
+            "items": [{
+                "id": $url || "error_url",
+                "title": "Lỗi: " + e,
+                "posterUrl": "",
+                "backdropUrl": ""
+            }],
+            "pagination": { "currentPage": 1, "totalPages": 1 }
+        });
     }
-    return JSON.stringify({ "items": [], "pagination": { "currentPage": 1, "totalPages": 1 } });
 }
 
-function parseSearchResponse(html, url) {
-    return parseListResponse(html, url);
-}
-
-// Hàm chuẩn hoá dữ liệu chung (Tự ghép link image.tmdb.org để fix mất ảnh)
 function domfetch($data, $url) {
     var items = [];
     for (var $j = 0; $j < $data.length; $j++) {
         var item = $data[$j];
         
-        var pUrl = item.poster ? (item.poster.indexOf("http") === 0 ? item.poster : "https://image.tmdb.org/t/p/w300/" + item.poster + ".jpg") : "";
-        var bUrl = item.banner ? (item.banner.indexOf("http") === 0 ? item.banner : "https://image.tmdb.org/t/p/w533_and_h300_face/" + item.banner + ".jpg") : "";
+        // ĐÃ FIX ẢNH BÌA: Tự động ghép link tmdb nếu web trả về mã băm
+        var pUrl = item.poster || "";
+        if (pUrl && pUrl.indexOf("http") === -1) pUrl = "https://image.tmdb.org/t/p/w300/" + pUrl + ".jpg";
+        
+        var bUrl = item.banner || "";
+        if (bUrl && bUrl.indexOf("http") === -1) bUrl = "https://image.tmdb.org/t/p/w533_and_h300_face/" + bUrl + ".jpg";
 
         items.push({
             "id": BASEAPI + "/info/" + item.slug, 
             "title": item.vname || item.ename,
             "posterUrl": pUrl,
             "backdropUrl": bUrl,
-            "quality": (item.type || "HD").toUpperCase(),
-            "episode_current": "Tập " + (item.stt || "0") + "/" + (item.total || "?")
+            "quality": item.type ? item.type.toUpperCase() : "HD",
+            "episode_current": "Tập " + item.stt + "/" + item.total
         });
     }
     return JSON.stringify({
         "items": items,
-        "pagination": { "currentPage": 1, "totalPages": 999 }
+        "pagination": {
+            "currentPage": 1,
+            "totalPages": 999
+        }
     });
 }
 
+function parseSearchResponse(html, url) {
+    try {
+        log("parseSearchResponse[url]: \n" + url);
+        return parseListResponse(html, url);
+    } catch (e) {
+        log("parseSearchResponse[err]:\n " + e);
+        return JSON.stringify({
+            "items": [],
+            "pagination": { "currentPage": 1, "totalPages": 1 }
+        });
+    }
+}
+
+function decodeHTMLEntities(str) {
+    try {
+        if (!str) return "";
+        return str.replace(/&#(\d+);|&#x([0-9a-fA-F]+);/g, (match, dec, hex) => {
+            if (dec) { return String.fromCharCode(parseInt(dec, 10)); }
+            if (hex) { return String.fromCharCode(parseInt(hex, 16)); }
+            return match;
+        });
+    } catch (e) {
+        log("decodeHTMLEntities[err]:\n " + e);
+    }
+}
+
 // -----------------------------------------------------------------------------
-// PARSER 2: TẠO 1 NÚT BẤM "BẤM VÀO ĐÂY ĐỂ XEM PHIM"
+// TẠO 1 NÚT BẤM "Bấm Vào Đây Để Xem Phim"
 // -----------------------------------------------------------------------------
 function parseMovieDetail(html, url) {
     try {
+        log("parseMovieDetail[url]: \n" + url);
         var $jsdata = JSON.parse(html);
         var $data = $jsdata.data;
         
-        var limg = $data.banner ? ($data.banner.indexOf("http") === 0 ? $data.banner : "https://image.tmdb.org/t/p/w533_and_h300_face/" + $data.banner + ".jpg") : "";
-        var lname = $data.vname || $data.ename || "Đang cập nhật...";
+        var limg = $data.banner || "";
+        if (limg && limg.indexOf("http") === -1) {
+            limg = "https://image.tmdb.org/t/p/w533_and_h300_face/" + limg + ".jpg";
+        }
+        
+        var lname = $data.vname || "Đang cập nhật...";
         var ldes = $data.content || "Không có mô tả.";
         var lactor = ($data.cast || []).join(" - ");
         var lduran = $data.duration ? $data.duration + " phút" : "";
@@ -195,15 +315,20 @@ function parseMovieDetail(html, url) {
         var episode_current = "Tập " + $data.stt;
         var year = $data.year || 2026;
         
-        var servers = [{
+        var servers = [];
+        var episodes = [];
+        
+        // Đẩy ra duy nhất 1 nút để người dùng bấm vào Webview
+        episodes.push({
+            id: url + "?current=1",
+            name: "Bấm Vào Đây Để Xem Phim",
+            slug: "tap-1"
+        });
+        
+        servers.push({
             name: "Giao Diện Web Gốc",
-            episodes: [{
-                // CHÚ Ý: Bắt buộc gắn thêm "?current=1" vào đuôi để hàm DetailResponse đọc được
-                id: url + "?current=1", 
-                name: "Bấm vào đây để xem phim",
-                slug: "webview-player"
-            }]
-        }];
+            episodes: episodes
+        });
         
         return JSON.stringify({
             id: url,
@@ -218,82 +343,105 @@ function parseMovieDetail(html, url) {
             category: category,
             episode_current: episode_current,
             servers: servers,
-            duration: lduran,
-            casts: lactor
+            duration: lduran || "",
+            casts: lactor || ""
         });
+
     } catch (e) {
-        return JSON.stringify({ id: url || "error", title: "Lỗi chi tiết", servers: [] });
+        log("parseMovieDetail[err]:\n " + e);
+        return JSON.stringify({
+            id: url || "error",
+            title: "error",
+            servers: []
+        });
     }
 }
 
 // -----------------------------------------------------------------------------
-// PARSER 3: LOAD WEBVIEW VÀ GẮN GIAO DIỆN CUSTOM JS
+// GIỮ NGUYÊN 100% CỦA BẠN (CHÈN CUSTOM-JS VÀO WEBVIEW)
 // -----------------------------------------------------------------------------
 function parseDetailResponse(html, url) {
   try {
     var $jsdata = JSON.parse(html);
     var $data = $jsdata.data;
-    
-    // Tách lấy current=1 từ url
-    var currentMatch = url.match(/current=(\d+)/i);
-    var current = currentMatch ? Number(currentMatch[1]) : 1;
-    
-    // Lấy lại url API gốc để bỏ tham số current
-    var baseUrl = url.split("?")[0];
-    var stream = baseUrl;
+    var servers = [];
+    var current = url.match(/current=(\d+)/i)[1];
+    var stream = url;
+    current = Number(current);
     
     if ($data.list_episodes && $data.list_episodes.length > 0) {
         for (var $j = 0; $j < $data.list_episodes.length; $j++) {
             var item = $data.list_episodes[$j];
             var split = item.split("|");
             if(Number(split[0]) == current){
-              // Ghép URL phát giống hệt nguyên bản bạn viết
-              stream = split[1] + "?episodes=" + baseUrl;
+              stream = split[1] + "?episodes=" + url;
             }
         }
     } else if ($data.mkv) {
-        stream = $data.mkv + "?episodes=" + baseUrl;
+        stream = $data.mkv + "?episodes=" + url;
     }
-
-    var customJS = checkRaw(rawJS(stream), true);
+    
+    var customJS = checkRaw(rawJS(stream),true);
+    log("Embed: " + stream);
     
     return JSON.stringify({
       url: stream,
-      isEmbed: false, // isEmbed: false + playerType: "embed" sẽ bắt App mở Webview trên màn hình!
+      isEmbed: false, // Bắt buộc là false để mở Webview
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": BASEURL,
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Referer: BASEURL,
         "Custom-Js": customJS
       },
       subtitles: [],
     });
   } catch (e) {
-    return JSON.stringify({ url: "", isEmbed: false, headers: {}, subtitles: [] });
+    log("parseDetailResponse[err]:\n " + e);
+    return JSON.stringify({
+      url: "",
+      isEmbed: false,
+      headers: {},
+      subtitles: [],
+    });
   }
 }
 
-function parseEmbedResponse(htmlContent, url) {
-    return JSON.stringify({ url: "", isEmbed: false });
-}
-
-// -----------------------------------------------------------------------------
-// HÀM CHUẨN HOÁ RAW JS CỦA BẠN (GIỮ NGUYÊN)
-// -----------------------------------------------------------------------------
 function checkRaw(scriptStr, returnFixed) {
   try {
-    if (!scriptStr || typeof scriptStr !== 'string') return scriptStr || "";
+    if (!scriptStr || typeof scriptStr !== 'string') {
+      console.log("[Lỗi escape runJS]\r\n\t Dữ liệu đầu vào không phải là chuỗi hợp lệ!");
+      return scriptStr || "";
+    }
+
     var lines = scriptStr.split('\n');
     var fixedLines = [];
+    var hasError = false;
+
     for (var i = 0; i < lines.length; i++) {
       var currentLine = lines[i];
+      var lineNum = i + 1;
+      var lineErrorFound = false;
+
+      if (/([^\\]|^)(\r\n|\r|\n)/.test(currentLine)) { lineErrorFound = true; }
+      if (/\t/.test(currentLine) && !/\\t/.test(currentLine)) { lineErrorFound = true; }
+      if (/([^\\])\\$/.test(currentLine)) { lineErrorFound = true; }
+
+      if (lineErrorFound) { hasError = true; }
+
       var fixedLine = currentLine;
       if (returnFixed) {
         fixedLine = fixedLine.replace(/\r/g, "").replace(/\t/g, "  ");
       }
       fixedLines.push(fixedLine);
     }
+
+    try { new Function(scriptStr); } catch (syntaxErr) { hasError = true; }
+
     return returnFixed ? fixedLines.join('\n') : scriptStr;
-  } catch (e) { return scriptStr; }
+
+  } catch (e) {
+    return scriptStr; 
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -310,11 +458,17 @@ function rawJS(stream) {
         try {
             var time = new Date().toISOString().split('T')[1].slice(0, 8);
             var logText = '[CustomJS][' + time + '][' + step + '] ' + String(msg);
-            if (typeof console !== 'undefined') {
-                if (err) console.error(logText); else console.log(logText);
+            
+            if (window.SnifferBridge && typeof window.SnifferBridge.log === 'function') {
+                window.SnifferBridge.log(logText);
+            } else if (typeof console !== 'undefined') {
+                if (err) console.error(logText);
+                else console.log(logText);
             }
         } catch (e) {}
     }
+
+    log('INIT', 'Bắt đầu khởi tạo CustomJS với EMBED_STREAM_URL = ' + EMBED_STREAM_URL);
 
     function ensureDOMReady(callback) {
         if (document && document.body) {
@@ -323,8 +477,12 @@ function rawJS(stream) {
             var checkCount = 0;
             var checkTimer = setInterval(function () {
                 checkCount++;
-                if (document && document.body) { clearInterval(checkTimer); callback(); } 
-                else if (checkCount > 200) { clearInterval(checkTimer); }
+                if (document && document.body) {
+                    clearInterval(checkTimer);
+                    callback();
+                } else if (checkCount > 200) {
+                    clearInterval(checkTimer);
+                }
             }, 30);
         }
     }
@@ -333,12 +491,18 @@ function rawJS(stream) {
         var memCache = {};
         return {
             getItem: function(key, defaultVal) {
-                try { var val = localStorage.getItem(key); return val !== null ? val : defaultVal; } 
-                catch(e) { return memCache[key] !== undefined ? memCache[key] : defaultVal; }
+                try {
+                    var val = localStorage.getItem(key);
+                    return val !== null ? val : defaultVal;
+                } catch(e) {
+                    return memCache[key] !== undefined ? memCache[key] : defaultVal;
+                }
             },
             setItem: function(key, val) {
                 memCache[key] = val;
-                try { localStorage.setItem(key, val); } catch(e) {}
+                try {
+                    localStorage.setItem(key, val);
+                } catch(e) {}
             }
         };
     })();
@@ -352,7 +516,9 @@ function rawJS(stream) {
                 while (target && target !== document) {
                     if (target.id && target.id.indexOf('v-') === 0) return;
                     if (target.tagName === 'A' && (target.getAttribute('target') === '_blank' || target.target === '_blank')) {
-                        e.preventDefault(); e.stopPropagation(); return false;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
                     }
                     target = target.parentNode;
                 }
@@ -397,9 +563,13 @@ function rawJS(stream) {
         var nextBtn = document.getElementById('v-arrow-next');
 
         var elements = [topBar, prevBtn, nextBtn];
-        elements.forEach(function(el) { if (el) el.classList.remove('v-idle-fade'); });
+        
+        elements.forEach(function(el) {
+            if (el) el.classList.remove('v-idle-fade');
+        });
 
         if (idleTimer) clearTimeout(idleTimer);
+        
         idleTimer = setTimeout(function() {
             var gridDiv = document.getElementById('v-box-list');
             var histDiv = document.getElementById('v-hist-box');
@@ -407,7 +577,9 @@ function rawJS(stream) {
             if (gridDiv) gridDiv.className = 'closed';
             if (histDiv) histDiv.className = 'closed';
 
-            elements.forEach(function(el) { if (el) el.classList.add('v-idle-fade'); });
+            elements.forEach(function(el) {
+                if (el) el.classList.add('v-idle-fade');
+            });
         }, 5000);
     }
 
@@ -506,7 +678,9 @@ function rawJS(stream) {
             var raw = SmartStorage.getItem('watch_hist_' + seriesKey, null);
             if (!raw) return null;
             return typeof raw === 'string' ? JSON.parse(raw) : raw;
-        } catch(e) { return null; }
+        } catch(e) {
+            return null;
+        }
     }
 
     function tryPlayIframeVideo() {
@@ -516,7 +690,10 @@ function rawJS(stream) {
             var iDoc = iframe.contentDocument || iframe.contentWindow.document;
             if (iDoc) {
                 var video = iDoc.querySelector('video');
-                if (video) { video.play(); return; }
+                if (video) {
+                    video.play();
+                    return;
+                }
                 var playBtn = iDoc.querySelector('.vjs-big-play-button, .jw-display-icon-container, .play-btn, [aria-label="Play"]');
                 if (playBtn) playBtn.click();
             }
@@ -527,6 +704,7 @@ function rawJS(stream) {
         try {
             showLoadingScreen('Đang chuyển sang Tập ' + epiItem.num + '...');
             currentEpisode = parseInt(epiItem.num, 10);
+            
             saveHistory(currentEpisode);
             isFirstLoadWithHist = false; 
 
@@ -697,6 +875,7 @@ function rawJS(stream) {
             var prevHist = getHistory();
             if (prevHist && prevHist.lastEpi) {
                 savedHistoryEpi = parseInt(prevHist.lastEpi, 10);
+                
                 if (Number(currentEpisode) !== Number(savedHistoryEpi) && 
                     Number(currentEpisode) !== (Number(savedHistoryEpi) + 1)) {
                     isFirstLoadWithHist = true; 
@@ -759,9 +938,24 @@ function rawJS(stream) {
 `;
 }
 
-function parseCategoriesResponse(html) { return "[]"; }
-function parseCountriesResponse(html) { return "[]"; }
-function parseYearsResponse(html) { return "[]"; }
+function parseCategoriesResponse(apiResponseJson) {
+    try {
+        var listurl = getLISTmenu();
+        var menulist = buildMenu(listurl);
+        return JSON.stringify(menulist);
+    } catch (e) {
+        log("parseCategoriesResponse[err]:\n " + e);
+        return JSON.stringify([]);
+    }
+}
+
+function parseCountriesResponse(html) {
+    try { return "[]"; } catch (e) { return "[]"; }
+}
+
+function parseYearsResponse(html) {
+    try { return "[]"; } catch (e) { return "[]"; }
+}
 
 function getLISTmenu() {
     return `[{\"link\":\"/type/hoat-hinh/\",\"name\":\"Hoạt Hình\"},{\"link\":\"/type/vien-tuong/\",\"name\":\"Viễn Tưởng\"},{\"link\":\"/type/hinh-su/\",\"name\":\"Hình Sự\"},{\"link\":\"/type/bi-an/\",\"name\":\"Bí Ẩn\"},{\"link\":\"/type/hanh-dong/\",\"name\":\"Hành Động\"}]`;
@@ -790,3 +984,7 @@ function buildMenu(menuStr, type) {
     } 
     return menulist; 
 }
+
+function _$(htmlOrBlock){ 
+  if (htmlOrBlock && typeof htmlOrBlock === 'object' && htmlOrBlock.elements) { return htmlOrBlock; } var instance = { sourceHtml: typeof htmlOrBlock === 'string' ? htmlOrBlock : '', elements: Array.isArray(htmlOrBlock) ? htmlOrBlock : (htmlOrBlock ? [htmlOrBlock] : []), length: 0, find: function (selector) { if (selector.indexOf(',') !== -1) { var results = []; var selectors = selector.split(',').map(function (s) { return s.trim(); }); for (var s = 0; s < selectors.length; s++) { if (selectors[s] === "") continue; var subInstance = this.find(selectors[s]); for (var r = 0; r < subInstance.elements.length; r++) { var element = subInstance.elements[r]; if (results.indexOf(element) === -1) { results.push(element); } } } var multiInstance = _$(results); multiInstance.sourceHtml = this.sourceHtml; return multiInstance; } var results = []; var contentFilter = ""; if (selector.indexOf(":content(") !== -1) { var contentMatch = selector.match(/:content\((?:"([^"]*)"|'([^']*)'|([^)]*))\)/); if (contentMatch) { contentFilter = contentMatch[1] || contentMatch[2] || contentMatch[3] || ""; selector = selector.replace(/:content\((?:"[^"]*"|'[^']*'|[^)]*)\)/, ""); } } var attrNameFilter = ""; var attrValueFilter = ""; var attrOperator = "="; var hasAttrFilter = false; var attrMatch = selector.match(/\[([a-zA-Z0-9_-]+)\s*([*^$]?=)\s*(?:"([^"]*)"|'([^']*)'|([^\]"']*))\]/); if (attrMatch) { hasAttrFilter = true; attrNameFilter = attrMatch[1]; attrOperator = attrMatch[2]; attrValueFilter = attrMatch[3] || attrMatch[4] || attrMatch[5] || ""; selector = selector.replace(/\[.*?\]/, ""); } var notSelector = ""; if (selector.indexOf(":not(") !== -1) { var notMatch = selector.match(/:not\(([^)]+)\)/); if (notMatch) { notSelector = notMatch[1]; selector = selector.replace(/:not\([^)]+\)/, ""); } } var isFirstFilter = selector.indexOf(":first") !== -1; var isLastFilter = selector.indexOf(":last") !== -1; selector = selector.replace(/:first|:last/g, ""); var targetTagName = ""; var targetId = ""; var targetClasses = []; var selectorToParse = selector.trim(); if (selectorToParse !== "") { var idIndex = selectorToParse.indexOf('#'); if (idIndex !== -1) { var afterId = selectorToParse.substring(idIndex + 1); var nextDot = afterId.indexOf('.'); targetId = nextDot === -1 ? afterId : afterId.substring(0, nextDot); selectorToParse = selectorToParse.substring(0, idIndex) + (nextDot === -1 ? "" : "." + afterId.substring(nextDot + 1)); } var classParts = selectorToParse.split('.'); var possibleTag = classParts.shift(); if (possibleTag) { targetTagName = possibleTag.toLowerCase(); } targetClasses = classParts.filter(function (c) { return c.length > 0; }); } for (var i = 0; i < this.elements.length; i++) { var currentHtml = this.elements[i]; var pos = 0; var subResults = []; while ((pos = currentHtml.indexOf('<', pos)) !== -1) { if (currentHtml.charAt(pos + 1) === '/' || currentHtml.charAt(pos + 1) === '!') { pos++; continue; } var endOpenTag = -1; var insideQuote = false; var quoteChar = ''; for (var j = pos + 1; j < currentHtml.length; j++) { var char = currentHtml.charAt(j); if ((char === '"' || char === "'") && currentHtml.charAt(j - 1) !== '\\') { if (!insideQuote) { insideQuote = true; quoteChar = char; } else if (char === quoteChar) { insideQuote = false; } } if (char === '>' && !insideQuote) { endOpenTag = j; break; } } if (endOpenTag === -1) break; var fullOpenTag = currentHtml.substring(pos, endOpenTag + 1); var tagMatch = fullOpenTag.match(/^<([a-zA-Z0-9_-]+)/); var currentTagName = tagMatch ? tagMatch[1].toLowerCase() : ""; var isMatched = true; if (targetTagName && targetTagName !== currentTagName) { isMatched = false; } var getClassAttr = fullOpenTag.match(/class\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i); var classMatchStr = getClassAttr ? (getClassAttr[1] || getClassAttr[2] || getClassAttr[3] || "") : ""; var getIdAttr = fullOpenTag.match(/id\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i); var idMatchStr = getIdAttr ? (getIdAttr[1] || getIdAttr[2] || getIdAttr[3] || "") : ""; if (isMatched && targetId && idMatchStr !== targetId) { isMatched = false; } if (isMatched && targetClasses.length > 0) { if (classMatchStr) { var currentClasses = classMatchStr.trim().split(/\s+/); for (var c = 0; c < targetClasses.length; c++) { if (currentClasses.indexOf(targetClasses[c]) === -1) { isMatched = false; break; } } } else { isMatched = false; } } if (isMatched && hasAttrFilter) { var actualValue = ""; if (attrNameFilter === "class") { actualValue = classMatchStr; } else if (attrNameFilter === "id") { actualValue = idMatchStr; } else { var getAnyAttr = fullOpenTag.match(new RegExp(attrNameFilter + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s>]+))', 'i')); actualValue = getAnyAttr ? (getAnyAttr[1] || getAnyAttr[2] || getAnyAttr[3] || "") : ""; } var attrExists = fullOpenTag.search(new RegExp(attrNameFilter + '\\s*=', 'i')) !== -1; if (!attrExists) { isMatched = false; } else { if (attrOperator === "=") { if (attrNameFilter === "class") { var classes = actualValue.trim().split(/\s+/); if (classes.indexOf(attrValueFilter) === -1) isMatched = false; } else if (actualValue !== attrValueFilter) { isMatched = false; } } else if (attrOperator === "*=") { if (actualValue.indexOf(attrValueFilter) === -1) isMatched = false; } else if (attrOperator === "^=") { if (actualValue.indexOf(attrValueFilter) !== 0) isMatched = false; } else if (attrOperator === "$=") { if (actualValue.slice(-attrValueFilter.length) !== attrValueFilter) isMatched = false; } } } if (isMatched) { var startTagPos = pos; var endTagPos = endOpenTag + 1; var selfClosingTags = ['img', 'source', 'input', 'br', 'hr', 'link', 'meta']; if (selfClosingTags.indexOf(currentTagName) === -1 && fullOpenTag.indexOf('/>') === -1) { var closeRegex = new RegExp('</' + currentTagName + '\\s*>', 'i'); var subHtml = currentHtml.substring(endOpenTag + 1); var matchClose = subHtml.match(closeRegex); if (matchClose) { endTagPos = endOpenTag + 1 + matchClose.index + matchClose[0].length; } else { endTagPos = currentHtml.length; } } var foundBlock = currentHtml.substring(startTagPos, endTagPos); if (contentFilter) { var pureText = ""; if (currentTagName === "script" || currentTagName === "style") { var innerStart = foundBlock.indexOf('>') + 1; var innerEnd = foundBlock.search(/<\/(?:script|style)/i); pureText = innerEnd !== -1 ? foundBlock.substring(innerStart, innerEnd) : foundBlock.substring(innerStart); } else { pureText = foundBlock.replace(/<[^>]+>/g, "").trim(); } var keywords = contentFilter.split('|'); var isContentMatched = false; for (var k = 0; k < keywords.length; k++) { if (pureText.indexOf(keywords[k].trim()) !== -1) { isContentMatched = true; break; } } if (!isContentMatched) { pos = endTagPos; continue; } } if (notSelector) { var isNotClass = notSelector.indexOf('.') === 0; var isNotId = notSelector.indexOf('#') === 0; var notValue = notSelector.substring(1); var hasNot = false; if (isNotClass && classMatchStr.indexOf(notValue) !== -1) hasNot = true; if (isNotId && idMatchStr.indexOf(notValue) !== -1) hasNot = true; if (!hasNot) subResults.push(foundBlock); } else { subResults.push(foundBlock); } pos = endTagPos; } else { pos++; } } if (isFirstFilter && subResults.length > 0) subResults = [subResults[0]]; if (isLastFilter && subResults.length > 0) subResults = [subResults[subResults.length - 1]]; results = results.concat(subResults); } var newInstance = _$(results); newInstance.sourceHtml = this.sourceHtml || currentHtml; return newInstance; }, each: function (callback) { for (var i = 0; i < this.elements.length; i++) { var childInstance = _$(this.elements[i]); childInstance.sourceHtml = this.sourceHtml; callback.call(childInstance, i, this.elements[i]); } return this; }, eq: function (index) { if (index < 0) index = this.elements.length + index; var matchedElement = this.elements[index]; this.elements = matchedElement ? [matchedElement] : []; this.length = this.elements.length; return this; }, attr: function (attrName) { if (this.elements.length === 0) return ""; var elem = this.elements[0]; var getAttr = elem.match(new RegExp(attrName + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s>]+))', 'i')); return getAttr ? (getAttr[1] || getAttr[2] || getAttr[3] || "") : ""; }, html: function () { if (this.elements.length === 0) return ""; var elem = this.elements[0]; var start = elem.indexOf('>') + 1; var matchClose = elem.match(/<\/([a-zA-Z0-9_-]+)\s*>\s*$/i); if (matchClose) { var end = elem.lastIndexOf(matchClose[0]); if (start > 0 && end >= start) return elem.substring(start, end); } return start > 0 ? elem.substring(start) : ""; }, text: function (separator) { if (this.elements.length === 0) return ""; var elem = this.elements[0]; var start = elem.indexOf('>') + 1; var end = elem.lastIndexOf('</'); if (start > 0 && end > start) { var content = elem.substring(start, end); var pureText = content.replace(/<\/?[^>]+(>|$)/g, "\n"); if (typeof separator === 'string') { return pureText .split('\n') .map(function (item) { return item.trim(); }) .filter(function (item) { return item !== ''; }) .join(separator); } return pureText .split('\n') .map(function (item) { return item.trim(); }) .filter(function (item) { return item !== ''; }) .join(' '); } return ""; }, textAll: function (separator) { if (this.elements.length === 0) return ""; var sep = typeof separator === 'string' ? separator : " "; var allTexts = []; for (var i = 0; i < this.elements.length; i++) { var elem = this.elements[i]; var start = elem.indexOf('>') + 1; var end = elem.lastIndexOf('</'); if (start > 0 && end > start) { var content = elem.substring(start, end); var pureText = content.replace(/<\/?[^>]+(>|$)/g, "\n"); var cleanText = pureText .split('\n') .map(function (item) { return item.trim(); }) .filter(function (item) { return item !== ''; }) .join(' '); if (cleanText !== '') { allTexts.push(cleanText); } } } return allTexts.join(sep); }, next: function () { var results = []; if (!this.sourceHtml) return this; for (var i = 0; i < this.elements.length; i++) { var elem = this.elements[i]; var idx = this.sourceHtml.indexOf(elem); if (idx === -1) continue; var scanPos = idx + elem.length; var nextOpen = this.sourceHtml.indexOf('<', scanPos); if (nextOpen !== -1) { if (this.sourceHtml.charAt(nextOpen + 1) === '/') continue; var endOpenTag = this.sourceHtml.indexOf('>', nextOpen); if (endOpenTag === -1) continue; var fullOpenTag = this.sourceHtml.substring(nextOpen, endOpenTag + 1); var spacePos = fullOpenTag.indexOf(' '); var currentTagName = (spacePos === -1) ? fullOpenTag.substring(1, fullOpenTag.length - 1).toLowerCase() : fullOpenTag.substring(1, spacePos).toLowerCase(); var startTagPos = nextOpen; var endTagPos = endOpenTag + 1; var selfClosingTags = ['img', 'source', 'input', 'br', 'hr', 'link', 'meta']; if (selfClosingTags.indexOf(currentTagName) === -1 && fullOpenTag.indexOf('/>') === -1) { var closeRegex = new RegExp('</' + currentTagName + '\\s*>', 'i'); var subHtml = this.sourceHtml.substring(endOpenTag + 1); var matchClose = subHtml.match(closeRegex); if (matchClose) { endTagPos = endOpenTag + 1 + matchClose.index + matchClose[0].length; } else { endTagPos = this.sourceHtml.length; } } results.push(this.sourceHtml.substring(startTagPos, endTagPos)); } } var nextInstance = _$(results); nextInstance.sourceHtml = this.sourceHtml; this.elements = results; this.length = results.length; return this; }, parent: function () { var results = []; if (!this.sourceHtml) return this; for (var i = 0; i < this.elements.length; i++) { var elem = this.elements[i]; var idx = this.sourceHtml.indexOf(elem); if (idx <= 0) continue; var scanPos = idx - 1; while (scanPos >= 0) { var openTagPos = this.sourceHtml.lastIndexOf('<', scanPos); if (openTagPos === -1) break; if (this.sourceHtml.charAt(openTagPos + 1) !== '/' && this.sourceHtml.charAt(openTagPos + 1) !== '!') { var endOpenTag = this.sourceHtml.indexOf('>', openTagPos); if (endOpenTag !== -1 && endOpenTag > openTagPos) { var fullOpenTag = this.sourceHtml.substring(openTagPos, endOpenTag + 1); var spacePos = fullOpenTag.indexOf(' '); var currentTagName = (spacePos === -1) ? fullOpenTag.substring(1, fullOpenTag.length - 1).toLowerCase() : fullOpenTag.substring(1, spacePos).toLowerCase(); var endTagPos = endOpenTag + 1; var selfClosingTags = ['img', 'source', 'input', 'br', 'hr', 'link', 'meta']; if (selfClosingTags.indexOf(currentTagName) === -1 && fullOpenTag.indexOf('/>') === -1) { var closeRegex = new RegExp('</' + currentTagName + '\\s*>', 'i'); var subHtml = this.sourceHtml.substring(endOpenTag + 1); var matchClose = subHtml.match(closeRegex); if (matchClose) { endTagPos = endOpenTag + 1 + matchClose.index + matchClose[0].length; } else { endTagPos = this.sourceHtml.length; } } if (endTagPos >= idx + elem.length) { var parentBlock = this.sourceHtml.substring(openTagPos, endTagPos); if (results.indexOf(parentBlock) === -1) results.push(parentBlock); break; } } } scanPos = openTagPos - 1; } } var parentInstance = _$(results); parentInstance.sourceHtml = this.sourceHtml; this.elements = results; this.length = results.length; return this; }, closest: function (selector) { var results = []; if (!this.sourceHtml || this.elements.length === 0) return _$([]); for (var i = 0; i < this.elements.length; i++) { var currentElem = this.elements[i]; var currentObj = _$(currentElem); currentObj.sourceHtml = this.sourceHtml; var selfCheck = _$(this.sourceHtml).find(selector); var isSelfMatched = false; for (var s = 0; s < selfCheck.elements.length; s++) { if (selfCheck.elements[s] === currentElem) { isSelfMatched = true; break; } } if (isSelfMatched) { if (results.indexOf(currentElem) === -1) results.push(currentElem); continue; } var parentObj = currentObj.parent(); while (parentObj.elements.length > 0) { var parentElem = parentObj.elements[0]; var checkMatch = _$(this.sourceHtml).find(selector); var isMatched = false; for (var j = 0; j < checkMatch.elements.length; j++) { if (checkMatch.elements[j] === parentElem) { isMatched = true; break; } } if (isMatched) { if (results.indexOf(parentElem) === -1) results.push(parentElem); break; } parentObj = parentObj.parent(); } } var closestInstance = _$(results); closestInstance.sourceHtml = this.sourceHtml; return closestInstance; } }; instance.length = instance.elements.length; return instance; 
+};
