@@ -1,7 +1,7 @@
 // =============================================================================
 // CẤU HÌNH DOMAIN & METADATA (CHỈ CẦN SỬA TÊN MIỀN Ở ĐÂY KHI WEB CÓ UPDATE)
 // =============================================================================
-var BASE_DOMAIN = "yanhh3d.ac";
+var BASE_DOMAIN = "yanhh3d.love";
 var BASEURL = "https://" + BASE_DOMAIN;
 
 function getManifest() {
