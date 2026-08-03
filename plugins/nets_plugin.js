@@ -7,7 +7,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "netshort",
         "name": "NetShort VN",
-        "description": "Nền tảng Phim Ngắn hot nhất: Hỗ trợ vuốt dọc, Xóa sạch quảng cáo, Giao diện tối ưu.",
+        "description": "Bắt link MP4 gốc. Tự động đăng nhập tài khoản VIP để mở khóa tập. Vuốt dọc Tiktok.",
         "version": "1.0.0",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/favicon.ico",
@@ -15,7 +15,7 @@ function getManifest() {
         "isAdult": false,
         "type": "shortfilm", // Kích hoạt trình phát xoay dọc và vuốt chuyển tập
         "layoutType": "VERTICAL",
-        "playerType": "webview" // Bắt buộc dùng Webview để vuốt phim
+        "playerType": "auto" // Auto: Native cho tập Free, Webview cho tập VIP
     });
 }
 
@@ -56,9 +56,7 @@ function getPrimaryCategories() {
     ]);
 }
 
-function getFilterConfig() {
-    return JSON.stringify({});
-}
+function getFilterConfig() { return JSON.stringify({}); }
 
 // =============================================================================
 // URL GENERATION
@@ -67,20 +65,11 @@ function getUrlList(slug, filtersJson) {
     try {
         var page = 1;
         if (filtersJson) {
-            try {
-                var filters = JSON.parse(filtersJson);
-                page = parseInt(filters.page) || 1;
-            } catch(e) {}
+            try { page = parseInt(JSON.parse(filtersJson).page) || 1; } catch(e) {}
         }
-        
         var url = slug;
-        if (url.indexOf("http") === -1) {
-            url = BASEURL + (url.indexOf("/") === 0 ? "" : "/") + url;
-        }
-        
-        if (page > 1) {
-            url += (url.indexOf('?') > -1 ? '&' : '?') + "page=" + page;
-        }
+        if (url.indexOf("http") === -1) url = BASEURL + (url.indexOf("/") === 0 ? "" : "/") + url;
+        if (page > 1) url += (url.indexOf('?') > -1 ? '&' : '?') + "page=" + page;
         return url;
     } catch(e) {
         return BASEURL + "/vi/drama/all-plots";
@@ -88,7 +77,8 @@ function getUrlList(slug, filtersJson) {
 }
 
 function getUrlSearch(keyword, filtersJson) {
-    return BASEURL + "/vi/search?q=" + encodeURIComponent(keyword.trim());
+    // API Tìm kiếm của NetShort
+    return BASEURL + "/vi/search/" + encodeURIComponent(keyword.trim());
 }
 
 function getUrlDetail(slug) {
@@ -109,65 +99,35 @@ function parseNextPayload(raw) {
         var match = raw.match(/self\.__next_f\.push\((.*)\)/);
         if (!match) return null;
         var pushArgs = JSON.parse(match[1]);
-        var rawString = pushArgs[1];
-        var cleanJsonStr = rawString.replace(/^\w+:/, '').replace(/\n$/, '');
-        return JSON.parse(cleanJsonStr);
-    } catch (e) {
-        return null;
-    }
-}
-
-function extractListData(data) {
-    var resultList = [];
-    function traverse(node) {
-        if (!node) return;
-        if (typeof node === 'object' && !Array.isArray(node)) {
-            // Tìm mảng itemListElement chứa danh sách phim
-            if (node.itemListElement && Array.isArray(node.itemListElement)) {
-                for(var i=0; i<node.itemListElement.length; i++){
-                    if(node.itemListElement[i].item && node.itemListElement[i].item.name) {
-                        resultList.push(node.itemListElement[i].item);
-                    }
-                }
-            }
-            // Fallback tìm hotRecommendList
-            if (node.hotRecommendList && Array.isArray(node.hotRecommendList)) {
-                for(var i=0; i<node.hotRecommendList.length; i++){
-                    resultList.push(node.hotRecommendList[i]);
-                }
-            }
-            for (var key in node) {
-                if (node.hasOwnProperty(key)) traverse(node[key]);
-            }
-        } else if (Array.isArray(node)) {
-            for (var i = 0; i < node.length; i++) {
-                traverse(node[i]);
+        if (Array.isArray(pushArgs) && pushArgs.length > 1) {
+            var rawString = pushArgs[1];
+            if (typeof rawString === 'string') {
+                var cleanJsonStr = rawString.replace(/^[0-9a-zA-Z]+:/, '').replace(/\n$/, '');
+                return JSON.parse(cleanJsonStr);
             }
         }
-    }
-    traverse(data);
-    return resultList;
+    } catch (e) {}
+    return null;
 }
 
-function extractDetailData(data) {
+function extractData(node, key) {
     var result = null;
-    function traverse(node) {
-        if (!node) return;
-        if (typeof node === 'object' && !Array.isArray(node)) {
-            if (node.shortPlayDetailVo && typeof node.shortPlayDetailVo === 'object') {
-                result = node.shortPlayDetailVo;
+    function traverse(n) {
+        if (result) return;
+        if (!n) return;
+        if (typeof n === 'object' && !Array.isArray(n)) {
+            if (n[key] !== undefined) {
+                result = n[key];
                 return;
             }
-            for (var key in node) {
-                if (node.hasOwnProperty(key)) traverse(node[key]);
+            for (var k in n) {
+                if (n.hasOwnProperty(k)) traverse(n[k]);
             }
-        } else if (Array.isArray(node)) {
-            for (var i = 0; i < node.length; i++) {
-                traverse(node[i]);
-            }
+        } else if (Array.isArray(n)) {
+            for (var i = 0; i < n.length; i++) traverse(n[i]);
         }
     }
-    traverse(data);
+    traverse(node);
     return result;
 }
 
@@ -177,79 +137,64 @@ function extractDetailData(data) {
 function parseListResponse(html, url) {
     try {
         var items = [];
-        
-        // 1. Cố gắng lấy data từ JSON Payload của NextJS
         var foundJson = false;
-        var scripts = html.match(/<script>self\.__next_f\.push\([^>]+<\/script>/gi);
         
+        var scripts = html.match(/self\.__next_f\.push\([^>]+/gi);
         if (scripts) {
             for(var i = 0; i < scripts.length; i++){
                 var payload = parseNextPayload(scripts[i]);
                 if (payload) {
-                    var listData = extractListData(payload);
-                    if (listData && listData.length > 0) {
+                    var listData = extractData(payload, 'hotRecommendList') || extractData(payload, 'list');
+                    if (listData && Array.isArray(listData) && listData.length > 0) {
                         foundJson = true;
                         for (var j = 0; j < listData.length; j++) {
                             var item = listData[j];
-                            var name = item.name || item.shortPlayName || "";
-                            var link = item.url || item.shortPlayNameUrl || "";
-                            var img = item.image || item.shortPlayCover || "";
-                            var ep = item.numberOfEpisodes || item.totalEpisode || "";
+                            var name = item.shortPlayName || item.name || "";
+                            var link = item.shortPlayNameUrl || item.fullEpisodeNameUrl || item.url || "";
+                            var img = item.shortPlayCover || item.image || "";
                             
                             if (name && link) {
                                 items.push({
                                     id: link,
-                                    title: name.replace(/Xem trực tuyến - NetShort/i, "").trim(),
+                                    title: name,
                                     posterUrl: img,
                                     backdropUrl: img,
-                                    episode_current: ep ? "Full " + ep : "HD",
+                                    episode_current: item.totalEpisode ? "Full " + item.totalEpisode : "HD",
                                     quality: "HD",
                                     lang: ""
                                 });
                             }
                         }
-                        break;
                     }
                 }
             }
         }
         
-        // 2. Fallback bóc tách từ HTML gốc nếu không tìm thấy JSON
+        // Fallback HTML nếu cấu trúc Web bị đổi
         if (!foundJson) {
-            var itemPattern = /<li[^>]*class=["'][^"']*video-list-item[^"']*["'][^>]*>[\s\S]*?<a[^>]*href=["']([^"']+)["'][^>]*>[\s\S]*?<img[^>]*src=["']([^"']+)["'][\s\S]*?<a[^>]*class=["'][^"']*video-list-item-name[^"']*["'][^>]*>([^<]+)<\/a>/gi;
+            var itemPattern = /<a[^>]*href=["']([^"']+)["'][^>]*>[\s\S]*?<img[^>]*src=["']([^"']+)["'][\s\S]*?<a[^>]*class=["'][^"']*video-list-item-name[^"']*["'][^>]*>([^<]+)<\/a>/gi;
             var match;
             while ((match = itemPattern.exec(html)) !== null) {
                 var link = match[1];
                 var img = match[2];
                 var title = match[3];
-                
-                // Giải mã ảnh nếu bị mã hóa Base64 hoặc URL
                 if (img.indexOf('url(') > -1) {
                     var m = img.match(/url\(['"]?([^'"\)]+)['"]?\)/);
                     if (m) img = m[1];
                 }
-                
                 items.push({
                     id: link,
                     title: title.trim(),
                     posterUrl: img,
                     backdropUrl: img,
                     episode_current: "HD",
-                    quality: "HD",
-                    lang: ""
+                    quality: "HD"
                 });
             }
         }
         
-        // Cắt bỏ phần đuôi dư thừa của ID
-        for(var k=0; k<items.length; k++) {
-            if(items[k].id.indexOf("#") > -1) items[k].id = items[k].id.split("#")[0];
-        }
-        
-        // Tìm phân trang từ HTML
         var totalPages = 1;
         var currentPage = 1;
-        
         var pageMatch = html.match(/<span[^>]*class=["'][^"']*tabular-nums[^"']*["'][^>]*>(\d+)[^<]*\/[^<]*(\d+)<\/span>/i);
         if(pageMatch) {
             currentPage = parseInt(pageMatch[1]);
@@ -274,61 +219,80 @@ function parseMovieDetail(html, url) {
         var title = "";
         var posterUrl = "";
         var description = "";
-        var totalEpisodes = 0;
-        var categories = [];
-        
-        // 1. Cố gắng lấy data từ JSON Payload của NextJS để có thông tin xịn nhất
-        var foundJson = false;
-        var scripts = html.match(/<script>self\.__next_f\.push\([^>]+<\/script>/gi);
-        
+        var episode_current = "";
+        var category = "";
+        var servers = [];
+
+        var scripts = html.match(/self\.__next_f\.push\([^>]+/gi);
+        var detailObj = null;
+
         if (scripts) {
-            for(var i = 0; i < scripts.length; i++){
+            for (var i = 0; i < scripts.length; i++) {
                 var payload = parseNextPayload(scripts[i]);
                 if (payload) {
-                    var detailData = extractDetailData(payload);
-                    if (detailData) {
-                        foundJson = true;
-                        title = detailData.shortPlayName || "";
-                        posterUrl = detailData.shortPlayCover || "";
-                        description = detailData.shotIntroduce || "";
-                        
-                        if(detailData.videoEpisodeInfos) {
-                            totalEpisodes = detailData.videoEpisodeInfos.length;
-                        }
-                        
-                        if(detailData.labelList) {
-                            for(var j=0; j<detailData.labelList.length; j++){
-                                categories.push(detailData.labelList[j].labelName);
-                            }
-                        }
-                        break;
-                    }
+                    var obj = extractData(payload, 'shortPlayDetailVo');
+                    if (obj) { detailObj = obj; break; }
                 }
             }
         }
-        
-        // 2. Fallback bóc HTML nếu không có JSON
-        if (!foundJson) {
-            var titleMatch = /<meta\s+property="og:title"\s+content="([^"]+)"/i.exec(html);
-            if (titleMatch) title = titleMatch[1].replace(/Xem trực tuyến - NetShort/i, "").trim();
 
-            var posterMatch = /<meta\s+property="og:image"\s+content="([^"]+)"/i.exec(html);
-            if (posterMatch) posterUrl = posterMatch[1];
+        if (detailObj) {
+            title = detailObj.shortPlayName || "";
+            posterUrl = detailObj.shortPlayCover || "";
+            description = detailObj.shotIntroduce || "";
+            
+            var cats = [];
+            if (detailObj.labelList) {
+                detailObj.labelList.forEach(c => cats.push(c.labelName));
+            }
+            category = cats.join(", ");
+            
+            var eps = [];
+            // BẮT TRỌN BỘ CÁC CHUNK TẬP PHIM (Vượt giới hạn hiển thị)
+            if (detailObj.episodeChunkList) {
+                detailObj.episodeChunkList.forEach(chunk => {
+                    if (chunk.data && Array.isArray(chunk.data)) {
+                        chunk.data.forEach(ep => {
+                            var epName = "Tập " + ep.episodeNo;
+                            if (ep.isLock) epName += " 🔒"; // Thêm icon khóa cho tập VIP
+                            eps.push({
+                                id: ep.url, // Url của tập phim
+                                name: epName,
+                                slug: "tap-" + ep.episodeNo
+                            });
+                        });
+                    }
+                });
+            } else if (detailObj.videoEpisodeInfos) {
+                detailObj.videoEpisodeInfos.forEach(ep => {
+                    var epName = "Tập " + ep.episodeNo;
+                    if (ep.isLock) epName += " 🔒";
+                    var epUrl = url + "-ep-" + ep.episodeNo; 
+                    eps.push({ id: epUrl, name: epName, slug: "tap-" + ep.episodeNo });
+                });
+            }
 
-            var descMatch = /<meta\s+property="og:description"\s+content="([^"]+)"/i.exec(html);
-            if (descMatch) description = descMatch[1].trim();
+            if (eps.length > 0) {
+                servers.push({ name: "NetShort VN", episodes: eps });
+                episode_current = "Tập " + eps.length;
+            }
         }
 
-        if (posterUrl && posterUrl.indexOf('http') === -1) posterUrl = BASEURL + (posterUrl.startsWith('/') ? '' : '/') + posterUrl;
+        // Fallback HTML Header nếu JSON bị lỗi
+        if (!title) {
+            var mTitle = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i);
+            if (mTitle) title = mTitle[1].replace(/Xem trực tuyến - NetShort/i, "").trim();
+        }
+        if (!posterUrl) {
+            var mImg = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i);
+            if (mImg) posterUrl = mImg[1];
+        }
+        if (!description) {
+            var mDesc = html.match(/<meta\s+property="og:description"\s+content="([^"]+)"/i);
+            if (mDesc) description = mDesc[1];
+        }
 
-        var servers = [{
-            name: "NetShort VN",
-            episodes: [{
-                id: url,
-                name: "Bấm Vào Đây Lướt Tập",
-                slug: "webview"
-            }]
-        }];
+        if (posterUrl && !posterUrl.startsWith("http")) posterUrl = BASEURL + posterUrl;
 
         return JSON.stringify({
             id: url,
@@ -338,9 +302,9 @@ function parseMovieDetail(html, url) {
             description: description,
             servers: servers,
             quality: "HD",
-            episode_current: totalEpisodes ? (totalEpisodes + " Tập") : "Full",
+            episode_current: episode_current || "Full",
             year: 2026,
-            category: categories.join(", ") || "Phim Ngắn",
+            category: category || "Phim Ngắn",
             status: "Hoàn Thành"
         });
     } catch (e) {
@@ -348,16 +312,72 @@ function parseMovieDetail(html, url) {
     }
 }
 
+// -----------------------------------------------------------------------------
+// [BẮT LINK GỐC + AUTO LOGIN WEBVIEW]
+// -----------------------------------------------------------------------------
 function parseDetailResponse(html, url) {
     try {
-        // MÃ HÓA JS BẰNG CÁCH DỌN DẸP XUỐNG DÒNG, TIÊM VÀO ĐỂ XÓA QUẢNG CÁO WEB
-        var killAdsJs = `
+        var streamUrl = "";
+        var isEmbed = true; // Mặc định dùng webview để có thể Auto Login
+        var subs = [];
+
+        var scripts = html.match(/self\.__next_f\.push\([^>]+/gi);
+        var epInfo = null;
+
+        if (scripts) {
+            for (var i = 0; i < scripts.length; i++) {
+                var payload = parseNextPayload(scripts[i]);
+                if (payload) {
+                    var obj = extractData(payload, 'initialCurrentEpisodeInfo');
+                    if (obj) { epInfo = obj; break; }
+                }
+            }
+        }
+
+        // 1. TÌM NGUỒN LINK PHIM TRỰC TIẾP
+        if (epInfo) {
+            if (epInfo.playVoucher) {
+                // TẬP MIỄN PHÍ HOẶC ĐÃ MỞ KHÓA -> BẮT THẲNG LINK MP4 GỐC
+                streamUrl = epInfo.playVoucher;
+                isEmbed = false; 
+            }
+            if (epInfo.subtitleList && Array.isArray(epInfo.subtitleList)) {
+                epInfo.subtitleList.forEach(sub => {
+                    subs.push({
+                        lang: sub.subtitleLanguage || sub.format,
+                        url: sub.url,
+                        isAutoTranslated: false
+                    });
+                });
+            }
+        }
+
+        // Phát Native siêu mượt nếu bắt được link MP4/M3U8
+        if (!isEmbed && streamUrl && (streamUrl.indexOf('.m3u8') > -1 || streamUrl.indexOf('.mp4') > -1 || streamUrl.indexOf('mime_type=video_mp4') > -1)) {
+            return JSON.stringify({
+                url: streamUrl,
+                isEmbed: false,
+                mimeType: streamUrl.indexOf('.m3u8') > -1 ? "application/x-mpegURL" : "video/mp4",
+                headers: {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Referer": BASEURL + "/"
+                },
+                subtitles: subs
+            });
+        }
+
+        // 2. NẾU TẬP BỊ KHÓA (playVoucher = null) -> ÉP MỞ WEBVIEW VÀ AUTO-LOGIN
+        var autoLoginJs = `
             (function() {
+                var EMAIL = "iamwilliamm6@gmail.com";
+                var PASS = "trung@123";
+
+                // Ép ẩn header, footer, quảng cáo, nút rác để xem phim to hơn
                 var style = document.createElement('style');
                 style.innerHTML = 'header, footer, nav, .header, .footer, .download-app, .app-download, .comments-title, .comments-list, .pc-container, .mobile-container, [class*="ad-"], [id*="ad-"], .popup, .modal, .google-auto-placed, iframe[src*="ads"], .bottom-nav, .navigation, .sidebar { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } ' +
                 'body, html { margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: #000 !important; } ' +
                 '.episode-page-container, .detail-container, .flex-contatiner, .video-container, .video-content, .video-ref { width: 100vw !important; height: 100vh !important; max-width: 100% !important; max-height: 100% !important; margin: 0 !important; padding: 0 !important; border-radius: 0 !important; } ' +
-                '.video-info-container { display: none !important; }'; // Ẩn cột thông tin bên phải đi để Full màn hình video
+                '.video-info-container { display: none !important; }';
                 document.head.appendChild(style);
 
                 setInterval(function() {
@@ -366,22 +386,68 @@ function parseDetailResponse(html, url) {
                         try { closeBtns[j].click(); } catch(e){}
                     }
                 }, 500);
+
+                // ROBOT TỰ ĐỘNG ĐĂNG NHẬP VƯỢT REACT
+                if (sessionStorage.getItem('vax_autologin_done')) return;
+
+                function doLogin() {
+                    var loginBtn = document.querySelector('a[href*="/login"]');
+                    if (loginBtn) {
+                        sessionStorage.setItem('vax_redirect_back', window.location.href);
+                        window.location.href = loginBtn.href; 
+                    } else {
+                        sessionStorage.setItem('vax_autologin_done', 'true');
+                    }
+                }
+
+                if (window.location.href.indexOf('/login') > -1) {
+                    var checkForm = setInterval(function() {
+                        var emailInput = document.querySelector('input[type="email"], input[name="email"], input[placeholder*="mail"]');
+                        var passInput = document.querySelector('input[type="password"], input[name="password"]');
+                        var submitBtn = document.querySelector('button[type="submit"]');
+
+                        if (emailInput && passInput && submitBtn) {
+                            clearInterval(checkForm);
+                            var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                            
+                            nativeInputValueSetter.call(emailInput, EMAIL);
+                            emailInput.dispatchEvent(new Event('input', { bubbles: true }));
+                            
+                            nativeInputValueSetter.call(passInput, PASS);
+                            passInput.dispatchEvent(new Event('input', { bubbles: true }));
+                            
+                            setTimeout(function() {
+                                submitBtn.click();
+                                sessionStorage.setItem('vax_autologin_done', 'true');
+                                setTimeout(function() {
+                                    var backUrl = sessionStorage.getItem('vax_redirect_back');
+                                    if (backUrl) window.location.href = backUrl;
+                                    else window.location.href = '/';
+                                }, 2000);
+                            }, 500);
+                        }
+                    }, 500);
+                } else {
+                    setTimeout(doLogin, 1500);
+                }
             })();
         `;
         
-        var fixedScript = killAdsJs.replace(/\r/g, "").replace(/\n/g, " ").replace(/\t/g, "  ").trim();
+        var fixedScript = autoLoginJs.replace(/\r/g, "").replace(/\n/g, " ").replace(/\t/g, "  ").trim();
 
         return JSON.stringify({
-            "url": url,
-            "isEmbed": true, // Ép Webview để sử dụng thao tác Vuốt màn hình
-            "headers": {
-                "Referer": BASEURL,
-                "User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.162 Mobile Safari/537.36", // Ép Mobile User Agent để giao diện video hiển thị to ra
+            url: url,
+            isEmbed: true, 
+            headers: {
+                "Referer": BASEURL + "/",
+                "User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.162 Mobile Safari/537.36",
                 "Custom-Js": fixedScript
-            }
+            },
+            subtitles: []
         });
+
     } catch (e) {
-        return JSON.stringify({ "url": url, "headers": {} });
+        return JSON.stringify({ "url": url, "isEmbed": true, "headers": {} });
     }
 }
 
