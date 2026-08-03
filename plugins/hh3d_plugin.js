@@ -6,7 +6,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "yanhh3d",
         "name": "YanHH3D",
-        "version": "4.1.0", // Đã tối ưu tốc độ bắt link & đổi vị trí Server
+        "version": "4.0.0", // Bản Độc Quyền dựa trên mã HTML chuẩn của web
         "baseUrl": "https://yanhh3d.ac", 
         "iconUrl": "https://yanhh3d.ac/storage/settings/August2024/YOoAwtlobLbwKhiFwRZv.png",
         "isEnabled": true,
@@ -297,12 +297,11 @@ function parseMovieDetail(html) {
         } 
 
         var servers = [];
-        // ĐÃ TỐI ƯU: Đẩy Vietsub vào mảng trước (sẽ hiện bên trái), Thuyết minh vào sau (sẽ hiện bên phải)
-        if (vietsubEpisodes.length > 0) {
-            servers.push({ name: "Vietsub", episodes: vietsubEpisodes });
-        }
         if (thuyetMinhEpisodes.length > 0) {
             servers.push({ name: "Thuyết Minh", episodes: thuyetMinhEpisodes });
+        }
+        if (vietsubEpisodes.length > 0) {
+            servers.push({ name: "Vietsub", episodes: vietsubEpisodes });
         }
         
         if (servers.length === 0) {
@@ -330,14 +329,34 @@ function parseMovieDetail(html) {
 
 function parseDetailResponse(html) {
     try {
-        // ĐÃ TỐI ƯU TỐC ĐỘ BẮT LINK: Early Return (Trúng phát trả về luôn) & Gắn cứng mimeType
+        var streamUrl = "";
         
-        // 1. Tìm m3u8 trước, nếu có thì trả về ngay lập tức
         var m3u8Match = html.match(/(https?:\/\/[^"'\s<>]*\.m3u8[^"'\s<>]*)/i);
         if (m3u8Match) {
+            streamUrl = m3u8Match[1].replace(/\\/g, "");
+        }
+        
+        if (!streamUrl) {
+            var mp4Match = html.match(/(https?:\/\/[^"'\s<>]*\.mp4[^"'\s<>]*)/i);
+            if (mp4Match) streamUrl = mp4Match[1].replace(/\\/g, "");
+        }
+
+        if (!streamUrl) {
+            var iframeMatch = html.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+            if (iframeMatch) {
+                streamUrl = iframeMatch[1];
+                if (streamUrl.indexOf("//") === 0) streamUrl = "https:" + streamUrl;
+                return JSON.stringify({
+                    url: streamUrl,
+                    headers: { "Referer": "https://yanhh3d.ac/" },
+                    isEmbed: true
+                });
+            }
+        }
+
+        if (streamUrl) {
             return JSON.stringify({
-                url: m3u8Match[1].replace(/\\/g, ""),
-                mimeType: "application/x-mpegURL", // Giúp app phát thẳng, ko tốn tgian dò loại luồng
+                url: streamUrl,
                 headers: { 
                     "Referer": "https://yanhh3d.ac/",
                     "Origin": "https://yanhh3d.ac",
@@ -347,33 +366,6 @@ function parseDetailResponse(html) {
             });
         }
         
-        // 2. Nếu không có m3u8, tìm tiếp mp4
-        var mp4Match = html.match(/(https?:\/\/[^"'\s<>]*\.mp4[^"'\s<>]*)/i);
-        if (mp4Match) {
-            return JSON.stringify({
-                url: mp4Match[1].replace(/\\/g, ""),
-                mimeType: "video/mp4",
-                headers: { 
-                    "Referer": "https://yanhh3d.ac/",
-                    "Origin": "https://yanhh3d.ac",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                },
-                isEmbed: false 
-            });
-        }
-
-        // 3. Nếu đều không có, mới tìm đến Iframe (Luồng Embed)
-        var iframeMatch = html.match(/<iframe[^>]+src=["']([^"']+)["']/i);
-        if (iframeMatch) {
-            var streamUrl = iframeMatch[1];
-            if (streamUrl.indexOf("//") === 0) streamUrl = "https:" + streamUrl;
-            return JSON.stringify({
-                url: streamUrl,
-                headers: { "Referer": "https://yanhh3d.ac/" },
-                isEmbed: true
-            });
-        }
-
         return JSON.stringify({});
     } catch (e) {
         return JSON.stringify({});
@@ -382,13 +374,20 @@ function parseDetailResponse(html) {
 
 function parseEmbedResponse(html, sourceUrl) {
     try {
-        // Tương tự, áp dụng luồng chạy tối ưu tốc độ bằng Early Return
+        var streamUrl = "";
         var m3u8Match = html.match(/(https?:\/\/[^"'\s<>]*\.m3u8[^"'\s<>]*)/i);
-        if (m3u8Match) {
+        if (m3u8Match) streamUrl = m3u8Match[1].replace(/\\/g, "");
+
+        if (!streamUrl) {
+            var mp4Match = html.match(/(https?:\/\/[^"'\s<>]*\.mp4[^"'\s<>]*)/i);
+            if (mp4Match) streamUrl = mp4Match[1].replace(/\\/g, "");
+        }
+
+        if (streamUrl) {
             return JSON.stringify({
-                url: m3u8Match[1].replace(/\\/g, ""),
+                url: streamUrl,
                 isEmbed: false,
-                mimeType: "application/x-mpegURL",
+                mimeType: streamUrl.indexOf(".m3u8") !== -1 ? "application/x-mpegURL" : "video/mp4",
                 headers: {
                     "Referer": sourceUrl,
                     "Origin": sourceUrl.split('/').slice(0, 3).join('/'),
@@ -396,21 +395,6 @@ function parseEmbedResponse(html, sourceUrl) {
                 }
             });
         }
-
-        var mp4Match = html.match(/(https?:\/\/[^"'\s<>]*\.mp4[^"'\s<>]*)/i);
-        if (mp4Match) {
-            return JSON.stringify({
-                url: mp4Match[1].replace(/\\/g, ""),
-                isEmbed: false,
-                mimeType: "video/mp4",
-                headers: {
-                    "Referer": sourceUrl,
-                    "Origin": sourceUrl.split('/').slice(0, 3).join('/'),
-                    "User-Agent": "Mozilla/5.0"
-                }
-            });
-        }
-
         return JSON.stringify({ url: "", isEmbed: false });
     } catch (e) {
         return JSON.stringify({ url: "", isEmbed: false });
