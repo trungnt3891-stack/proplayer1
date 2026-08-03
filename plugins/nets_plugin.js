@@ -7,8 +7,8 @@ function getManifest() {
     return JSON.stringify({
         "id": "netshort",
         "name": "NetShort VN",
-        "description": "Bắt thẳng link MP4 gốc cho tập miễn phí. Các tập khóa dùng Webview sạch rác.",
-        "version": "1.1.0",
+        "description": "Bắt link MP4 gốc. Quét 100% danh sách tập. Webview sạch rác cho tập VIP.",
+        "version": "1.2.0",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/favicon.ico",
         "isEnabled": true,
@@ -77,7 +77,6 @@ function getUrlList(slug, filtersJson) {
 }
 
 function getUrlSearch(keyword, filtersJson) {
-    // API Tìm kiếm của NetShort
     return BASEURL + "/vi/search?q=" + encodeURIComponent(keyword.trim());
 }
 
@@ -129,6 +128,21 @@ function extractData(node, key) {
     }
     traverse(node);
     return result;
+}
+
+// LẤY TẤT CẢ CÁC KẾT QUẢ KHỚP KEY (Dùng để gom các Chunk tập bị xé lẻ)
+function extractAllData(node, key, resultsArray) {
+    if (!node) return;
+    if (typeof node === 'object' && !Array.isArray(node)) {
+        if (node[key] !== undefined) {
+            resultsArray.push(node[key]);
+        }
+        for (var k in node) {
+            if (node.hasOwnProperty(k)) extractAllData(node[k], key, resultsArray);
+        }
+    } else if (Array.isArray(node)) {
+        for (var i = 0; i < node.length; i++) extractAllData(node[i], key, resultsArray);
+    }
 }
 
 function extractListData(data) {
@@ -255,58 +269,111 @@ function parseMovieDetail(html, url) {
         var title = "";
         var posterUrl = "";
         var description = "";
-        var totalEpisodes = 0;
         var categories = [];
         var eps = [];
         
         var scripts = html.match(/self\.__next_f\.push\([^>]+/gi);
-        
+        var detailObj = null;
+
         if (scripts) {
-            for(var i = 0; i < scripts.length; i++){
+            for (var i = 0; i < scripts.length; i++) {
                 var payload = parseNextPayload(scripts[i]);
                 if (payload) {
-                    var detailData = extractData(payload, 'shortPlayDetailVo');
-                    if (detailData) {
-                        title = detailData.shortPlayName || "";
-                        posterUrl = detailData.shortPlayCover || "";
-                        description = detailData.shotIntroduce || "";
-                        
-                        if(detailData.labelList) {
-                            for(var j=0; j<detailData.labelList.length; j++){
-                                categories.push(detailData.labelList[j].labelName);
-                            }
-                        }
-                        
-                        // Lấy danh sách toàn bộ các tập (Gom từ các Chunk nếu phim dài)
-                        if (detailData.episodeChunkList) {
-                            detailData.episodeChunkList.forEach(chunk => {
-                                if (chunk.data && Array.isArray(chunk.data)) {
-                                    chunk.data.forEach(ep => {
-                                        var epName = "Tập " + ep.episodeNo;
-                                        if (ep.isLock) epName += " 🔒"; // Báo hiệu tập VIP
-                                        eps.push({
-                                            id: ep.url,
-                                            name: epName,
-                                            slug: "tap-" + ep.episodeNo
+                    if (!detailObj) detailObj = extractData(payload, 'shortPlayDetailVo');
+                    
+                    // Quét toàn bộ khối EpisodeChunks để bắt sạch sẽ dù có hàng nghìn tập
+                    var chunkLists = [];
+                    extractAllData(payload, 'episodeChunkList', chunkLists);
+                    
+                    if (chunkLists.length > 0) {
+                        chunkLists.forEach(function(chunkList) {
+                            if (Array.isArray(chunkList)) {
+                                chunkList.forEach(function(chunk) {
+                                    if (chunk.data && Array.isArray(chunk.data)) {
+                                        chunk.data.forEach(function(ep) {
+                                            var epName = "Tập " + ep.episodeNo;
+                                            if (ep.isLock) epName += " 🔒"; // Báo hiệu tập VIP
+                                            var epUrl = ep.url;
+                                            if (epUrl && epUrl.indexOf('http') === -1) {
+                                                epUrl = BASEURL + (epUrl.startsWith('/') ? '' : '/') + epUrl;
+                                            }
+                                            if (epUrl) {
+                                                var exists = false;
+                                                for(var e=0; e<eps.length; e++) { if(eps[e].id === epUrl) { exists = true; break; } }
+                                                if (!exists) eps.push({ id: epUrl, name: epName, slug: "tap-" + ep.episodeNo });
+                                            }
                                         });
-                                    });
-                                }
-                            });
-                        } else if (detailData.videoEpisodeInfos) {
-                            detailData.videoEpisodeInfos.forEach(ep => {
-                                var epName = "Tập " + ep.episodeNo;
-                                if (ep.isLock) epName += " 🔒";
-                                // Giả lập link tập nếu ko có sẵn
-                                var epUrl = url + "-ep-" + ep.episodeNo; 
-                                eps.push({ id: epUrl, name: epName, slug: "tap-" + ep.episodeNo });
-                            });
-                        }
-                        break;
+                                    }
+                                });
+                            }
+                        });
                     }
                 }
             }
         }
-        
+
+        // Nếu ChunkList rỗng, tìm trong videoEpisodeInfos (cấu trúc cũ hơn)
+        if (eps.length === 0 && detailObj && detailObj.videoEpisodeInfos) {
+            var baseSlug = url.replace(/-ep-\d+$/, '');
+            detailObj.videoEpisodeInfos.forEach(function(ep) {
+                var epName = "Tập " + ep.episodeNo;
+                if (ep.isLock) epName += " 🔒";
+                var epUrl = baseSlug;
+                if (ep.episodeNo > 1) epUrl += "-ep-" + ep.episodeNo; 
+                
+                var exists = false;
+                for(var e=0; e<eps.length; e++) { if(eps[e].id === epUrl) { exists = true; break; } }
+                if (!exists) eps.push({ id: epUrl, name: epName, slug: "tap-" + ep.episodeNo });
+            });
+        }
+
+        // FALLBACK: Quét trực tiếp các thẻ HTML nếu JSON bị thay đổi (Bắt vét 100%)
+        if (eps.length === 0) {
+            var epNodes = html.match(/<a[^>]*href=["']([^"']+\/episode\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi);
+            if (epNodes) {
+                epNodes.forEach(function(node) {
+                    var mHref = node.match(/href=["']([^"']+)["']/);
+                    if (mHref) {
+                        var link = mHref[1];
+                        if (link.indexOf('http') === -1) link = BASEURL + link;
+                        
+                        var epNum = "1";
+                        var numMatch = node.match(/<span[^>]*class=["'][^"']*z-10[^"']*["'][^>]*>(\d+)<\/span>/i);
+                        if (numMatch) {
+                            epNum = numMatch[1];
+                        } else {
+                            var urlEpMatch = link.match(/-ep-(\d+)$/);
+                            if (urlEpMatch) epNum = urlEpMatch[1];
+                        }
+
+                        var isLock = node.indexOf('alt="Lock"') > -1 || node.indexOf('locked@') > -1;
+                        var epName = "Tập " + epNum;
+                        if (isLock) epName += " 🔒";
+
+                        var exists = false;
+                        for(var e = 0; e < eps.length; e++) { if (eps[e].id === link) { exists = true; break; } }
+                        if(!exists && link.indexOf('/episode/') > -1) {
+                            eps.push({ id: link, name: epName, slug: "tap-" + epNum });
+                        }
+                    }
+                });
+            }
+        }
+
+        // Sắp xếp lại danh sách tập cho chuẩn (Tập 1 -> Tập N)
+        eps.sort(function(a, b) {
+            var numA = parseInt(a.slug.replace("tap-", "")) || 0;
+            var numB = parseInt(b.slug.replace("tap-", "")) || 0;
+            return numA - numB;
+        });
+
+        if (detailObj) {
+            title = detailObj.shortPlayName || "";
+            posterUrl = detailObj.shortPlayCover || "";
+            description = detailObj.shotIntroduce || "";
+            if (detailObj.labelList) detailObj.labelList.forEach(c => categories.push(c.labelName));
+        }
+
         if (!title) {
             var mTitle = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i);
             if (mTitle) title = mTitle[1].replace(/Xem trực tuyến - NetShort/i, "").trim();
@@ -315,13 +382,16 @@ function parseMovieDetail(html, url) {
             var mImg = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i);
             if (mImg) posterUrl = mImg[1];
         }
+        if (!description) {
+            var mDesc = html.match(/<meta\s+property="og:description"\s+content="([^"]+)"/i);
+            if (mDesc) description = mDesc[1].trim();
+        }
 
         if (posterUrl && !posterUrl.startsWith("http")) posterUrl = BASEURL + posterUrl;
 
         var servers = [];
         if (eps.length > 0) {
             servers.push({ name: "NetShort VN", episodes: eps });
-            totalEpisodes = eps.length;
         } else {
             servers.push({
                 name: "NetShort VN",
@@ -337,7 +407,7 @@ function parseMovieDetail(html, url) {
             description: description,
             servers: servers,
             quality: "HD",
-            episode_current: totalEpisodes ? (totalEpisodes + " Tập") : "Full",
+            episode_current: eps.length > 0 ? (eps.length + " Tập") : "Full",
             year: 2026,
             category: categories.join(", ") || "Phim Ngắn",
             status: "Hoàn Thành"
@@ -348,12 +418,12 @@ function parseMovieDetail(html, url) {
 }
 
 // -----------------------------------------------------------------------------
-// [QUAN TRỌNG] BẮT LINK GỐC NẾU MIỄN PHÍ, MỞ WEBVIEW NẾU KHÓA
+// [BẮT LINK GỐC + WEBVIEW SẠCH RÁC]
 // -----------------------------------------------------------------------------
 function parseDetailResponse(html, url) {
     try {
         var streamUrl = "";
-        var isEmbed = true; // Mặc định là bật Webview (nếu bị khóa)
+        var isEmbed = true; // Mặc định là Webview nếu tập bị khóa
         var subs = [];
 
         var scripts = html.match(/self\.__next_f\.push\([^>]+/gi);
@@ -369,11 +439,11 @@ function parseDetailResponse(html, url) {
             }
         }
 
-        // --- CỐT LÕI YÊU CẦU CỦA BẠN: LẤY LINK DIRECT NẾU PHIM KHÔNG BỊ GIỚI HẠN ---
         if (epInfo) {
+            // NẾU LÀ TẬP FREE (CÓ VOUCHER) -> BẮT THẲNG LINK GỐC MP4/M3U8
             if (epInfo.playVoucher) {
-                streamUrl = epInfo.playVoucher; // ĐÃ CHỘP ĐƯỢC LINK GỐC MP4/M3U8
-                isEmbed = false; // Tắt Webview, bắt App chạy bằng ExoPlayer (Nhanh, nhẹ, tua mượt)
+                streamUrl = epInfo.playVoucher; 
+                isEmbed = false; 
             }
             if (epInfo.subtitleList && Array.isArray(epInfo.subtitleList)) {
                 epInfo.subtitleList.forEach(sub => {
@@ -386,7 +456,7 @@ function parseDetailResponse(html, url) {
             }
         }
 
-        // NẾU TẬP KHÔNG BỊ GIỚI HẠN (isEmbed = false) -> TRẢ VỀ LINK GỐC ĐỂ PHÁT
+        // PHÁT NATIVE PLAYER NẾU BẮT ĐƯỢC LINK GỐC
         if (!isEmbed && streamUrl && (streamUrl.indexOf('.m3u8') > -1 || streamUrl.indexOf('.mp4') > -1 || streamUrl.indexOf('mime_type=video_mp4') > -1)) {
             return JSON.stringify({
                 url: streamUrl,
@@ -400,7 +470,7 @@ function parseDetailResponse(html, url) {
             });
         }
 
-        // NẾU TẬP BỊ GIỚI HẠN (playVoucher = null) -> TRẢ VỀ WEBVIEW SẠCH ĐỂ USER THẤY KHÓA
+        // NẾU TẬP BỊ KHÓA VIP -> MỞ WEBVIEW SẠCH RÁC
         var killAdsCssJs = `
             (function() {
                 var style = document.createElement('style');
@@ -428,7 +498,8 @@ function parseDetailResponse(html, url) {
                 "Referer": BASEURL + "/",
                 "User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.162 Mobile Safari/537.36",
                 "Custom-Js": fixedScript
-            }
+            },
+            "subtitles": []
         });
     } catch (e) {
         return JSON.stringify({ "url": url, "isEmbed": true, "headers": {} });
