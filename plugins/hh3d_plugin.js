@@ -8,7 +8,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "yanhh3d",
         "name": "YanHH3D",
-        "version": "4.4.0",
+        "version": "4.5.0",
         "baseUrl": BASEURL, 
         "iconUrl": BASEURL + "/storage/settings/August2024/YOoAwtlobLbwKhiFwRZv.png",
         "isEnabled": true,
@@ -244,60 +244,41 @@ function parseMovieDetail(html) {
             baseSlug = urlObj.substring(urlObj.lastIndexOf("/") + 1);
         }
 
-        // QUÉT TẬP THỰC TẾ: Chỉ lấy các link tập thực sự tồn tại trong HTML của web để loại bỏ tập ảo hoàn toàn
         var realEpisodes = [];
-        var episodeLinkRegex = /href=["']([^"']*\/[^\/]+\/tap-\d+)["'][^>]*>([^<]*)<\/a>/gi;
-        var matchEp;
         var addedEpisodes = {};
 
-        while ((matchEp = episodeLinkRegex.exec(html)) !== null) {
-            var epHref = matchEp[1];
-            var epText = PluginUtils.cleanText(matchEp[2]) || "Tập phim";
-            
-            var epSlug = epHref.replace(/https?:\/\/[^\/]+\//i, "").replace(/^\//, "");
-            
-            if (epSlug && !addedEpisodes[epSlug]) {
-                // Kiểm tra xem có phải định dạng tập hợp lệ không
-                if (epSlug.indexOf('tap-') !== -1) {
+        // Quét tất cả các liên kết có chứa "tap-" trong toàn bộ trang HTML bằng cách dùng Global match an toàn
+        var linkGlobalRegex = /href=["']([^"']+)["']/gi;
+        var matchLink;
+        while ((matchLink = linkGlobalRegex.exec(html)) !== null) {
+            var href = matchLink[1];
+            if (href.indexOf('tap-') !== -1) {
+                var cleanSlug = href.replace(/https?:\/\/[^\/]+\//i, "").replace(/^\//, "").replace(/\/$/, "");
+                if (cleanSlug && !addedEpisodes[cleanSlug]) {
+                    var epNumberMatch = cleanSlug.match(/tap-(\d+)/i);
+                    var epNumText = epNumberMatch ? epNumberMatch[1] : (realEpisodes.length + 1);
+                    
                     realEpisodes.push({
-                        id: epSlug,
-                        name: epText.indexOf("Tập") !== -1 ? epText : ("Tập " + realEpisodes.length + 1),
-                        slug: epSlug
+                        id: cleanSlug,
+                        name: "Tập " + epNumText,
+                        slug: cleanSlug
                     });
-                    addedEpisodes[epSlug] = true;
+                    addedEpisodes[cleanSlug] = true;
                 }
             }
         }
 
-        // Nếu không quét được bằng regex trên, dùng cách quét danh sách liên kết tập thông thường trên web
-        if (realEpisodes.length === 0) {
-            var allLinks = html.match(/href=["']([^"']+)["']/gi);
-            if (allLinks) {
-                for (var k = 0; k < allLinks.length; k++) {
-                    var lMatch = allLinks[k].match(/href=["']([^"']+)["']/i);
-                    if (lMatch) {
-                        var href = lMatch[1];
-                        if (href.indexOf('tap-') !== -1 && href.indexOf(baseSlug) !== -1) {
-                            var cleanSlug = href.replace(/https?:\/\/[^\/]+\//i, "").replace(/^\//, "");
-                            if (!addedEpisodes[cleanSlug]) {
-                                realEpisodes.push({
-                                    id: cleanSlug,
-                                    name: "Tập phim",
-                                    slug: cleanSlug
-                                });
-                                addedEpisodes[cleanSlug] = true;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // Sắp xếp danh sách tập theo số thứ tự từ bé đến lớn
+        realEpisodes.sort(function(a, b) {
+            var numA = parseInt(a.slug.match(/tap-(\d+)/i) ? a.slug.match(/tap-(\d+)/i)[1] : 0, 10);
+            var numB = parseInt(b.slug.match(/tap-(\d+)/i) ? b.slug.match(/tap-(\d+)/i)[1] : 0, 10);
+            return numA - numB;
+        });
 
         var servers = [];
         if (realEpisodes.length > 0) {
             servers.push({ name: "Vietsub / Bản Chính Chức", episodes: realEpisodes });
         } else {
-            // Trường hợp phim lẻ hoặc chỉ có 1 link duy nhất
             servers.push({ name: "Hệ Thống", episodes: [{ id: baseSlug, name: "Xem Phim", slug: baseSlug }] });
         }
 
