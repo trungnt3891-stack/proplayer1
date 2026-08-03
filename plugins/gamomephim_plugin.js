@@ -8,10 +8,10 @@ function getManifest() {
     return JSON.stringify({
         "id": "gamomephim",
         "name": "Gà Mờ Mê Phim",
-        "description": "Phim Ngắn Hay. Tốc độ bắt link siêu tốc 0s, Sửa lỗi tua phim (VOD).",
-        "version": "1.3.0",
+        "description": "Phim Mới dạng lưới ở trang chủ. Cập nhật danh mục mới nhất 2026. Tốc độ bắt link 0s.",
+        "version": "1.4.0",
         "baseUrl": BASEURL,
-        "iconUrl": "https://cdn.gamomephim.com/site/logo-1784305321242.png",
+        "iconUrl": "https://r2.gamomephim.com/site/logo-1784305321242.png",
         "isEnabled": true,
         "type": "MOVIE",
         "playerType": "exoplayer"
@@ -26,10 +26,16 @@ function log(msg) {
     }
 }
 
+// ĐÃ SỬA: Đưa "Phim Mới" lên làm thư mục chính (Grid), thêm các thể loại lướt ngang
 function getHomeSections() {
-    var listurl = "[{\"link\":\"/phim-moi\",\"name\":\"Hàng Mới\"}]";
-    var menulist = buildMenu(listurl, true);
-    return JSON.stringify(menulist);
+    return JSON.stringify([
+        { "slug": "/phim-moi", "title": "Phim Mới", "type": "Grid" },
+        { "slug": "/the-loai/hien-dai", "title": "Hiện Đại", "type": "Horizontal" },
+        { "slug": "/the-loai/co-trang", "title": "Cổ Trang", "type": "Horizontal" },
+        { "slug": "/the-loai/hai-huoc", "title": "Hài Hước", "type": "Horizontal" },
+        { "slug": "/the-loai/tra-xanh-nam", "title": "Trà Xanh Nam", "type": "Horizontal" },
+        { "slug": "/the-loai/xuyen-khong", "title": "Xuyên Không", "type": "Horizontal" }
+    ]);
 }
 
 function getPrimaryCategories() {
@@ -109,7 +115,7 @@ function getUrlList(slug, filtersJson) {
 }
 
 function getUrlSearch(keyword, filtersJson) {
-    return BASEURL + "/tim-kiem/" + encodeURIComponent(keyword);
+    return BASEURL + "/tim-kiem?q=" + encodeURIComponent(keyword);
 }
 
 function getUrlDetail(slug) {
@@ -118,13 +124,13 @@ function getUrlDetail(slug) {
     return BASEURL + "/" + slug;
 }
 
-// 🚀 SIÊU TỐC ĐỘ: Hàm đặc quyền giúp bỏ qua bước Fetch HTML lãng phí 3-5 giây
+// 🚀 SIÊU TỐC ĐỘ: Bỏ qua bước Fetch HTML giúp video tải ngay lập tức và cho phép tua
 function getStreamLink(slug) {
     if (slug && slug.indexOf("http") === 0) {
         return JSON.stringify({
             "url": slug,
             "isEmbed": false,
-            "mimeType": "", // CHÌA KHÓA: Để trống để ExoPlayer tự nhận diện (Mở khóa thanh tua VOD)
+            "mimeType": "", 
             "headers": {
                 "Referer": BASEURL + "/",
                 "Origin": BASEURL,
@@ -151,26 +157,31 @@ function parseListResponse(html, $url) {
             if (matchPage) calculatedPage = parseInt(matchPage[1]) || 1;
         }
 
-        _$(html).find(".grid").find(".relative").find("a").each(function() {
-            var href = this.attr("href").replace("/phim", "");
+        // ĐÃ SỬA: Cập nhật CSS Selector dựa theo HTML mới của web (Thẻ a bọc bên ngoài)
+        _$(html).find(".grid").find("a").each(function() {
+            var href = this.attr("href");
+            if (!href) return;
+            
+            href = href.replace("/phim", "");
             if (href.indexOf("http") == -1) {
                 href = BASEURL + href;
             }
-            var title = this.attr("title");
+            
+            var title = this.attr("title") || this.find("h3").text() || "";
             var src = this.find("img").attr("src");
-            if (src.indexOf("http") == -1) {
+            if (src && src.indexOf("http") == -1) {
                 src = BASEURL + src;
             }
             
-            if (href && href.indexOf("http") > -1) {
+            if (href && href.indexOf("http") > -1 && src) {
                 var cleanThumb = src.replace(/&amp;/g, '&');
                 items.push({
                     "id": href,
                     "title": title.trim(),
                     "posterUrl": cleanThumb,
                     "backdropUrl": cleanThumb,
-                    "quality": "",
-                    "lang": "",
+                    "quality": "HD",
+                    "lang": "Vietsub",
                     "episode_current": ""
                 });
             }
@@ -192,10 +203,7 @@ function parseListResponse(html, $url) {
                 "posterUrl": "",
                 "backdropUrl": ""
             }],
-            "pagination": {
-                "currentPage": 1,
-                "totalPages": 1
-            }
+            "pagination": { "currentPage": 1, "totalPages": 1 }
         });
     }
 }
@@ -256,7 +264,7 @@ function parseMovieDetail(html, url) {
         var ldes = "Không có mô tả.";
         var category = "";
         var episode_current = "";
-        var quality = "";
+        var quality = "HD";
         var year = 2026;
         var rating = 0;
         var servers = [];
@@ -264,7 +272,7 @@ function parseMovieDetail(html, url) {
         var lactor = "";
         var ldirec = "";
         var lduran = "";
-        var status = "";
+        var status = "Đang cập nhật";
         
         var script = _$(html).find("script:content('m3u8Url')").text();
         if (!script) {
@@ -290,15 +298,12 @@ function parseMovieDetail(html, url) {
         var vietsubEps = [];
         var thuyetMinhEps = [];
         var defaultEps = [];
-        
         var vsCount = 1, tmCount = 1, dfCount = 1;
 
         for (var $j = 0; $j < listepi.length; $j++) {
             var ep = listepi[$j];
             var audio = (ep.audioType || "").toUpperCase();
-            
-            // Lấy trực tiếp đường dẫn sạch nguyên bản
-            var epId = ep.m3u8Url || "";
+            var epId = ep.m3u8Url || ""; // Lấy link nguyên bản, không thêm #m3u8
 
             if (audio.indexOf("VIETSUB") > -1) {
                 var num = ep.episodeNumber || vsCount++;
@@ -344,17 +349,18 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// Giữ dự phòng nếu hàm getStreamLink không bắt kịp trên điện thoại Android cũ
+// Hàm dự phòng nếu getStreamLink không hoạt động
 function parseDetailResponse(html, url) {
     try {
+        var cleanUrl = url.replace(/#\.m3u8$/, "");
         return JSON.stringify({
-            "url": url,
+            "url": cleanUrl,
             "isEmbed": false,
-            "mimeType": "", // CHÌA KHÓA: Giúp giải quyết lỗi không cho phép tua trên HLS
+            "mimeType": "",
             "headers": {
                 "Referer": BASEURL + "/",
                 "Origin": BASEURL,
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             },
             "subtitles": []
         });
@@ -387,8 +393,25 @@ function parseCategoriesResponse(apiResponseJson) {
 function parseCountriesResponse(html) { return "[]"; }
 function parseYearsResponse(html) { return "[]"; }
 
+// ĐÃ SỬA: Cập nhật Danh bạ menu chuẩn khớp 100% với Web
 function getLISTmenu() {
-    return "[{\"link\":\"/phim-moi\",\"name\":\"Phim Mới\"},{\"link\":\"/the-loai/co-trang\",\"name\":\"Cổ Trang\"},{\"link\":\"/the-loai/dan-quoc\",\"name\":\"Dân Quốc\"},{\"link\":\"/the-loai/hien-dai\",\"name\":\"Hiện Đại\"}]";
+    return `[
+        {"link":"/phim-moi","name":"Phim Mới"},
+        {"link":"/ban-xep-hang","name":"Bảng Xếp Hạng"},
+        {"link":"/the-loai/chua-lanh","name":"Chữa Lành"},
+        {"link":"/the-loai/co-trang","name":"Cổ Trang"},
+        {"link":"/the-loai/cuoi-truoc-yeu-sau","name":"Cưới Trước Yêu Sau"},
+        {"link":"/the-loai/dan-quoc","name":"Dân Quốc"},
+        {"link":"/the-loai/guong-vo-lai-lanh","name":"Gương Vỡ Lại Lành"},
+        {"link":"/the-loai/hai-huoc","name":"Hài Hước"},
+        {"link":"/the-loai/hien-dai","name":"Hiện Đại"},
+        {"link":"/the-loai/nien-dai","name":"Niên Đại"},
+        {"link":"/the-loai/thanh-xuan","name":"Thanh Xuân"},
+        {"link":"/the-loai/tra-xanh-nam","name":"Trà Xanh Nam"},
+        {"link":"/the-loai/trong-sinh","name":"Trọng Sinh"},
+        {"link":"/the-loai/xuyen-khong","name":"Xuyên Không"},
+        {"link":"/the-loai/yeu-tham","name":"Yêu Thầm"}
+    ]`;
 }
 
 function buildMenu(menuStr, type) { 
