@@ -1,15 +1,14 @@
 // =============================================================================
 // CONFIGURATION & METADATA
 // =============================================================================
-var BASEURL = "https://phimhdcss.com";
 
 function getManifest() {
     return JSON.stringify({
         "id": "phimhdcs",
         "name": "PhimHDCS",
-        "version": "1.1.5", // Đã fix lỗi không load được ảnh bìa và chi tiết phim
-        "baseUrl": BASEURL,
-        "iconUrl": BASEURL + "/favicon.ico",
+        "version": "1.1.6", // Đã fix lỗi không load được danh sách và bìa phim bằng Regex 100%
+        "baseUrl": "https://phimhdcss.com",
+        "iconUrl": "https://phimhdcss.com/favicon.ico",
         "isEnabled": true,
         "playerType": "exoplayer",
         "type": "MOVIE"
@@ -105,6 +104,7 @@ function getUrlList(slug, filtersJson) {
     try {
         var filters = JSON.parse(filtersJson || "{}");
         var page = filters.page || 1;
+        var baseUrl = "https://phimhdcss.com";
 
         var hasFilter = filters.sort || filters.category || filters.country || filters.year || filters.type || filters.language;
 
@@ -118,7 +118,7 @@ function getUrlList(slug, filtersJson) {
             if (filters.language) params.push("filter[language]=" + encodeURIComponent(filters.language));
             if (page > 1) params.push("page=" + page);
 
-            return BASEURL + "/?" + params.join("&");
+            return baseUrl + "/?" + params.join("&");
         }
 
         var path = "";
@@ -130,21 +130,21 @@ function getUrlList(slug, filtersJson) {
             path = "/the-loai/" + slug;
         }
 
-        var url = BASEURL + path;
+        var url = baseUrl + path;
         if (page > 1) {
             url += "?page=" + page;
         }
 
         return url;
     } catch (e) {
-        return BASEURL + "/danh-sach/phim-moi";
+        return "https://phimhdcss.com/danh-sach/phim-moi";
     }
 }
 
 function getUrlSearch(keyword, filtersJson) {
     var filters = JSON.parse(filtersJson || "{}");
     var page = filters.page || 1;
-    var url = BASEURL + "/?search=" + encodeURIComponent(keyword).replace(/%20/g, "+");
+    var url = "https://phimhdcss.com/?search=" + encodeURIComponent(keyword).replace(/%20/g, "+");
     if (page > 1) {
         url += "&page=" + page;
     }
@@ -154,15 +154,23 @@ function getUrlSearch(keyword, filtersJson) {
 function getUrlDetail(slug) {
     if (slug.indexOf("http") === 0) return slug;
     var path = slug.startsWith("/") ? slug.substring(1) : slug;
-    return BASEURL + "/" + path;
+    return "https://phimhdcss.com/" + path;
 }
 
-function getUrlCategories() { return BASEURL + "/the-loai"; }
-function getUrlCountries() { return BASEURL + "/quoc-gia"; }
-function getUrlYears() { return BASEURL + "/nam"; }
+function getUrlCategories() {
+    return "https://phimhdcss.com/the-loai";
+}
+
+function getUrlCountries() {
+    return "https://phimhdcss.com/quoc-gia";
+}
+
+function getUrlYears() {
+    return "https://phimhdcss.com/nam";
+}
 
 // =============================================================================
-// HTML PARSERS (ĐÃ SỬA: SỬ DỤNG DOM _$ ĐỂ KHÔNG BỊ LỖI KHI XUỐNG DÒNG)
+// HTML PARSERS (ĐÃ SỬA: SỬ DỤNG REGEX CHUẨN ĐỂ VƯỢT LỖI XUỐNG DÒNG)
 // =============================================================================
 
 function parseDynamicFilters(html) {
@@ -170,20 +178,26 @@ function parseDynamicFilters(html) {
     try {
         var parseSelect = function (namePattern) {
             var list = [];
-            _$(html).find('select[name="' + namePattern + '"]').find('option').each(function() {
-                var val = this.attr('value');
-                var name = this.text().trim();
-                if (val && name) list.push({ name: name, value: val });
-            });
+            var selectMatch = new RegExp('<select[^>]+name="' + namePattern + '"[\\s\\S]*?>([\\s\\S]*?)<\\/select>', 'i').exec(html);
+            if (selectMatch) {
+                var optionsHtml = selectMatch[1];
+                var optionPattern = /<option\s+value="([^"]*)"[^>]*>\s*([\s\S]*?)\s*<\/option>/gi;
+                var optMatch;
+                while ((optMatch = optionPattern.exec(optionsHtml)) !== null) {
+                    var val = optMatch[1];
+                    var name = optMatch[2].replace(/<[^>]*>/g, "").trim();
+                    if (val && name) list.push({ name: name, value: val });
+                }
+            }
             return list;
         };
 
-        result.category = parseSelect('filter[category]');
-        result.country = parseSelect('filter[region]');
-        result.language = parseSelect('filter[language]');
-        result.year = parseSelect('filter[year]');
-        result.sort = parseSelect('filter[sort]');
-        result.type = parseSelect('filter[type]');
+        result.category = parseSelect('filter\\[category\\]');
+        result.country = parseSelect('filter\\[region\\]');
+        result.language = parseSelect('filter\\[language\\]');
+        result.year = parseSelect('filter\\[year\\]');
+        result.sort = parseSelect('filter\\[sort\\]');
+        result.type = parseSelect('filter\\[type\\]');
     } catch (e) { }
     return result;
 }
@@ -192,58 +206,57 @@ function parseListResponse(htmlContent) {
     try {
         var movies = [];
         
-        // Quét cấu trúc DOM an toàn thay vì dùng Regex thô
-        _$(htmlContent).find("li.item").each(function() {
-            var aTag = this.find("a").eq(0);
-            if (!aTag.elements.length) return;
-            
-            var href = aTag.attr("href");
-            var title = aTag.attr("title") || this.find(".name").find("a").text();
-            var imgTag = aTag.find("img");
-            var src = imgTag.attr("src") || imgTag.attr("data-src") || "";
-            var label = this.find(".label").text().trim();
+        // Regex siêu chuẩn để bóc khối <li> chứa phim
+        var itemPattern = /<li[^>]*class=["'][^"']*item[^"']*["'][^>]*>[\s\S]*?<span[^>]*class=["']label["'][^>]*>([^<]*)<\/span>[\s\S]*?<a[^>]*href=["']([^"']+)["'][^>]*title=["']([^"']+)["'][^>]*>[\s\S]*?<img[^>]*src=["']([^"']+)["']/gi;
+        var match;
 
-            if (href && title && src) {
-                if (href.indexOf("http") === -1) href = BASEURL + (href.startsWith("/") ? "" : "/") + href;
-                if (src.indexOf("http") === -1) src = BASEURL + (src.startsWith("/") ? "" : "/") + src;
+        while ((match = itemPattern.exec(htmlContent)) !== null) {
+            var label = match[1].trim();
+            var slug = match[2];
+            var title = match[3];
+            var posterUrl = match[4];
 
-                var cleanThumb = src.replace(/&amp;/g, '&');
-                
-                var year = 0;
-                var yearMatch = /(\d{4})/.exec(title);
-                if (yearMatch) year = parseInt(yearMatch[1]);
-                
-                var episode_current = "";
-                var epMatch = /(Tập \d+|Hoàn [tT]ất \(\d+\/\d+\)|Hoàn Tất \(\d+\/\d+\)|Full)/i.exec(label);
-                if (epMatch) episode_current = epMatch[1];
-                
-                var lang = label.replace(episode_current, "").trim();
-                if (lang.indexOf("+") === 0) lang = lang.substring(1).trim();
+            if (slug.indexOf("http") === -1) slug = 'https://phimhdcss.com' + (slug.startsWith('/') ? '' : '/') + slug;
+            if (posterUrl.indexOf("http") === -1) posterUrl = 'https://phimhdcss.com' + (posterUrl.startsWith('/') ? '' : '/') + posterUrl;
 
-                movies.push({
-                    "id": href,
-                    "title": title.trim(),
-                    "posterUrl": cleanThumb,
-                    "backdropUrl": cleanThumb,
-                    "quality": label.indexOf("HD") > -1 ? "HD" : (label.indexOf("Full") > -1 ? "Full" : ""),
-                    "episode_current": episode_current || label,
-                    "lang": lang,
-                    "year": year
-                });
-            }
-        });
+            var year = 0;
+            var yearMatch = /(\d{4})/.exec(title);
+            if (yearMatch) year = parseInt(yearMatch[1]);
+
+            var episode_current = "";
+            var epMatch = /(Tập \d+|Hoàn [tT]ất.*|Full)/i.exec(label);
+            if (epMatch) episode_current = epMatch[1];
+
+            var lang = label.replace(episode_current, "").trim();
+            if (lang.indexOf("+") === 0) lang = lang.substring(1).trim();
+
+            var quality = "";
+            if (label.indexOf('Full') > -1) quality = "Full";
+            else if (label.indexOf('HD') > -1) quality = "HD";
+
+            movies.push({
+                id: slug,
+                title: title.trim(),
+                posterUrl: posterUrl,
+                backdropUrl: posterUrl,
+                year: year,
+                quality: quality,
+                episode_current: episode_current || label,
+                lang: lang
+            });
+        }
 
         var totalPages = 1;
-        var pageRegex = /page=(\d+)"/gi;
-        var pMatch;
-        while ((pMatch = pageRegex.exec(htmlContent)) !== null) {
-            var pNum = parseInt(pMatch[1]);
-            if (pNum > totalPages) totalPages = pNum;
+        var pagePattern = /<a[^>]*href=["'][^"']*page=(\d+)["'][^>]*>/gi;
+        var match2;
+        while ((match2 = pagePattern.exec(htmlContent)) !== null) {
+            var pageNum = parseInt(match2[1]);
+            if (pageNum > totalPages) totalPages = pageNum;
         }
 
         var currentPage = 1;
-        var currentMatch = htmlContent.match(/class="current"[^>]*>(\d+)</i);
-        if (currentMatch) currentPage = parseInt(currentMatch[1]);
+        var currentPageMatch = /<a[^>]*class=["'][^"']*current[^"']*["'][^>]*>(\d+)<\/a>/i.exec(htmlContent);
+        if (currentPageMatch) currentPage = parseInt(currentPageMatch[1]);
 
         var filterOptions = parseDynamicFilters(htmlContent);
 
@@ -268,29 +281,38 @@ function parseSearchResponse(htmlContent) {
 
 function parseMovieDetail(htmlContent, url) {
     try {
-        var title = _$(htmlContent).find("h1").text() || _$(htmlContent).find('meta[property="og:title"]').attr("content") || "";
-        title = title.replace(/Phim /gi, "").trim();
+        var title = "";
+        var titleMatch = /<h1[^>]*class=["'][^"']*title[^"']*["'][^>]*>([^<]+)<\/h1>/i.exec(htmlContent) || /<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i.exec(htmlContent);
+        if (titleMatch) title = titleMatch[1].replace(/Phim /gi, "").trim();
 
-        var originalTitle = _$(htmlContent).find(".real-name").text().trim();
+        var originalTitle = "";
+        var origMatch = /<span[^>]*class=["'][^"']*real-name[^"']*["'][^>]*>([^<]+)<\/span>/i.exec(htmlContent);
+        if (origMatch) originalTitle = origMatch[1].trim();
 
-        var posterUrl = _$(htmlContent).find('meta[property="og:image"]').attr("content") || "";
-        if (!posterUrl) {
-            var posterMatch = /<img\s+itemprop="image"\s+src="([^"]+)"/i.exec(htmlContent);
-            if (posterMatch) posterUrl = posterMatch[1];
+        var posterUrl = "";
+        var posterMatch = /<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i.exec(htmlContent);
+        if (posterMatch) posterUrl = posterMatch[1];
+        if (posterUrl && posterUrl.indexOf('http') === -1) posterUrl = 'https://phimhdcss.com' + (posterUrl.startsWith('/') ? '' : '/') + posterUrl;
+
+        var description = "";
+        var descMatch = /<div[^>]*class=["'][^"']*tab[^"']*["'][^>]*>[\s\S]*?<div[^>]*style=["'][^"']*text-align:\s*justify;[^"']*["'][^>]*>([\s\S]*?)<\/div>/i.exec(htmlContent);
+        if (!descMatch) descMatch = /<div[^>]*class=["'][^"']*tab[^"']*["'][^>]*>[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/i.exec(htmlContent);
+        if (descMatch) description = descMatch[1].replace(/<[^>]*>/g, "").trim();
+
+        function extractInfo(label) {
+            var regex = new RegExp('<dt[^>]*>\\s*' + label + ':?\\s*<\\/dt>\\s*<dd[^>]*>([\\s\\S]*?)<\\/dd>', 'i');
+            var match = regex.exec(htmlContent);
+            if (match) return match[1].replace(/<[^>]*>/g, "").trim();
+            return "";
         }
-        if (posterUrl && posterUrl.indexOf('http') === -1) posterUrl = BASEURL + (posterUrl.startsWith('/') ? '' : '/') + posterUrl;
 
-        var description = _$(htmlContent).find(".tab").text() || _$(htmlContent).find('meta[property="og:description"]').attr("content") || "";
-        description = description.replace(/<[^>]*>/g, "").trim();
-
-        var director = _$(htmlContent).find("dt:content('Đạo diễn')").next().text().trim();
-        var duration = _$(htmlContent).find("dt:content('Thời lượng')").next().text().trim();
-        var totalEpisodes = _$(htmlContent).find("dt:content('Số tập')").next().text().trim();
-        var statusInfo = _$(htmlContent).find("dt:content('Tình trạng')").next().text().trim();
-        var language = _$(htmlContent).find("dt:content('Ngôn ngữ')").next().text().trim();
-        var prodYear = _$(htmlContent).find("dt:content('Năm sản xuất')").next().text().trim();
-        var country = _$(htmlContent).find("dt:content('Quốc gia')").next().text().trim();
-        var category = _$(htmlContent).find("dt:content('Thể loại')").next().text().trim();
+        var director = extractInfo("Đạo diễn");
+        var duration = extractInfo("Thời lượng");
+        var totalEpisodes = extractInfo("Số tập");
+        var statusInfo = extractInfo("Tình trạng");
+        var language = extractInfo("Ngôn ngữ");
+        var prodYear = extractInfo("Năm sản xuất");
+        var countryTag = extractInfo("Quốc gia");
 
         var year = parseInt(prodYear) || 2026;
         if (!year && originalTitle) {
@@ -299,33 +321,40 @@ function parseMovieDetail(htmlContent, url) {
         }
 
         var rating = 0;
-        var ratingMatch = htmlContent.match(/ratingValue[^>]*>([^<]+)</i);
+        var ratingMatch = /ratingValue[^>]*>([^<]+)</i.exec(htmlContent);
         if (ratingMatch) rating = parseFloat(ratingMatch[1]);
 
         var episode_current = statusInfo;
-        var statusMatch = htmlContent.match(/class="film-status"[^>]*>[\s\S]*?<span[^>]*>([^<]+)<\/span>/i);
-        if (statusMatch) episode_current = statusMatch[1].trim();
+        var statusMatch = /class=["'][^"']*film-status[^"']*["'][^>]*>[\s\S]*?<span[^>]*>([^<]+)<\/span>/i.exec(htmlContent);
+        if (statusMatch) episode_current = statusMatch[1].replace(/<[^>]*>/g, "").trim();
+
+        var categories = [];
+        var catPattern = /<a[^>]*href=["'][^"']*\/the-loai\/[^"']*["'][^>]*>([^<]+)<\/a>/gi;
+        var match;
+        while ((match = catPattern.exec(htmlContent)) !== null) categories.push(match[1].trim());
+
+        var countries = [];
+        var countryPattern = /<a[^>]*href=["'][^"']*\/quoc-gia\/[^"']*["'][^>]*>([^<]+)<\/a>/gi;
+        while ((match = countryPattern.exec(htmlContent)) !== null) countries.push(match[1].trim());
+        if (countries.length === 0 && countryTag) countries.push(countryTag);
+
+        var actors = [];
+        var actorPattern = /<a[^>]*href=["'][^"']*\/dien-vien\/[^"']*["'][^>]*>([^<]+)<\/a>/gi;
+        while ((match = actorPattern.exec(htmlContent)) !== null) actors.push(match[1].trim());
 
         var servers = [];
-        var serverPattern = /<div[^>]*class="server-episode-block"[^>]*>[\s\S]*?Danh sách\s*(?:Sever)?\s*([^:]+):[\s\S]*?<div[^>]*class="list-episode[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
-        var match;
+        var serverPattern = /<div[^>]*class=["'][^"']*server-episode-block[^"']*["'][^>]*>[\s\S]*?Danh sách\s*(?:Sever)?\s*([^:]+):[\s\S]*?<div[^>]*class=["'][^"']*list-episode[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi;
 
         while ((match = serverPattern.exec(htmlContent)) !== null) {
-            var serverName = match[1].trim()
-                .replace(/^Server\s+/i, '')
-                .replace(/^z/i, '')
-                .replace(/\s*#\d+$/, '')
-                .trim();
-
+            var serverName = match[1].trim().replace(/^Server\s+/i, '').replace(/^z/i, '').replace(/\s*#\d+$/, '').trim();
             var episodesHtml = match[2];
             var episodes = [];
             
-            // Tìm tất cả các thẻ <a> bên trong danh sách tập
-            var epPattern = /<a\s+href="([^"]+)"[^>]*title="([^"]+)"/gi;
+            var epPattern = /<a[^>]*href=["']([^"']+)["'][^>]*title=["']([^"']+)["']/gi;
             var epMatch;
             while ((epMatch = epPattern.exec(episodesHtml)) !== null) {
                 var epUrl = epMatch[1];
-                if (epUrl.indexOf('http') !== 0) epUrl = BASEURL + (epUrl.startsWith('/') ? '' : '/') + epUrl;
+                if (epUrl.indexOf('http') !== 0) epUrl = 'https://phimhdcss.com' + (epUrl.startsWith('/') ? '' : '/') + epUrl;
 
                 episodes.push({
                     id: epUrl,
@@ -345,15 +374,14 @@ function parseMovieDetail(htmlContent, url) {
                 } else {
                     episodes.reverse();
                 }
-
                 servers.push({ name: serverName, episodes: episodes });
             }
         }
 
         var extraUrl = "";
-        var btnPlayMatch = htmlContent.match(/class="btn-see[^"]*"\s+href="([^"]+)"/i);
+        var btnPlayMatch = /class=["'][^"']*btn-see[^"']*["'][^>]*href=["']([^"']+)["']/i.exec(htmlContent);
         if (btnPlayMatch) extraUrl = btnPlayMatch[1];
-        if (extraUrl && extraUrl.indexOf('http') !== 0) extraUrl = BASEURL + (extraUrl.startsWith('/') ? '' : '/') + extraUrl;
+        if (extraUrl && extraUrl.indexOf('http') !== 0) extraUrl = 'https://phimhdcss.com' + (extraUrl.startsWith('/') ? '' : '/') + extraUrl;
 
         var fullDesc = description;
         if (duration) fullDesc += "\nThời lượng: " + duration;
@@ -361,7 +389,7 @@ function parseMovieDetail(htmlContent, url) {
         if (statusInfo) fullDesc += "\nTình trạng: " + statusInfo;
 
         return JSON.stringify({
-            id: url || BASEURL,
+            id: url || 'https://phimhdcss.com',
             title: title,
             posterUrl: posterUrl,
             backdropUrl: posterUrl,
@@ -372,10 +400,10 @@ function parseMovieDetail(htmlContent, url) {
             servers: servers,
             episode_current: episode_current,
             lang: language,
-            category: category,
-            country: country,
+            category: categories.join(", "),
+            country: countries.join(", "),
             director: director,
-            casts: "",
+            casts: actors.join(", "),
             extra: extraUrl
         });
     } catch (error) {
@@ -408,17 +436,6 @@ function parseDetailResponse(htmlContent, pageUrl) {
             } catch (e) { return null; }
         };
 
-        var makeResult = function (playerUrl) {
-            return JSON.stringify({
-                url: playerUrl,
-                headers: {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    "Referer": BASEURL + "/"
-                },
-                subtitles: []
-            });
-        };
-
         var decodeChunksWithSalt = function (chunks, saltString) {
             var revBase64 = chunks.join('');
             var base64 = revBase64.split('').reverse().join('');
@@ -437,11 +454,8 @@ function parseDetailResponse(htmlContent, pageUrl) {
                 var decodedRealObj = decodeBase64(realObjMatch[1]);
                 if (decodedRealObj) {
                     oxData = JSON.parse(decodedRealObj);
-                    log('PHIMHDCS_DEBUG Found realObj in JS code successfully');
                 }
-            } catch (e) {
-                log('PHIMHDCS_DEBUG realObj parse error: ' + e);
-            }
+            } catch (e) {}
         }
 
         if (!oxData) {
@@ -461,11 +475,8 @@ function parseDetailResponse(htmlContent, pageUrl) {
                     if (jsonEnd > 0) {
                         var jsonStr = htmlContent.substring(startIdx, jsonEnd);
                         oxData = JSON.parse(jsonStr);
-                        log('PHIMHDCS_DEBUG Found fallback _0xData successfully');
                     }
-                } catch (e) {
-                    log('PHIMHDCS_DEBUG _0xData parse error: ' + e);
-                }
+                } catch (e) {}
             }
         }
 
@@ -502,16 +513,12 @@ function parseDetailResponse(htmlContent, pageUrl) {
 
             if (targetId && oxData[targetId] && Array.isArray(oxData[targetId])) {
                 var chunks = oxData[targetId];
-                log('PHIMHDCS_DEBUG decoding targetId=' + targetId + ', chunks=' + chunks.length + ', salt=' + saltString);
                 var playerUrl = decodeChunksWithSalt(chunks, saltString);
-                log('PHIMHDCS_DEBUG decoded playerUrl: ' + playerUrl);
 
                 if (playerUrl && playerUrl.indexOf("player.php?") !== -1) {
                     var matchLink = /[?&](?:link|url)=([^&]+)/.exec(playerUrl);
                     if (matchLink) {
-                        var decodedLink = decodeURIComponent(matchLink[1]);
-                        log('PHIMHDCS_DEBUG extracted direct link from player.php: ' + decodedLink);
-                        playerUrl = decodedLink;
+                        playerUrl = decodeURIComponent(matchLink[1]);
                     }
                 }
                 
@@ -524,7 +531,7 @@ function parseDetailResponse(htmlContent, pageUrl) {
                             mimeType: "application/x-mpegURL",
                             headers: {
                                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                                "Referer": BASEURL + "/"
+                                "Referer": "https://phimhdcss.com/"
                             },
                             subtitles: []
                         });
@@ -534,7 +541,7 @@ function parseDetailResponse(htmlContent, pageUrl) {
                             isEmbed: true,
                             headers: {
                                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                                "Referer": BASEURL + "/"
+                                "Referer": "https://phimhdcss.com/"
                             },
                             subtitles: []
                         });
@@ -550,11 +557,7 @@ function parseDetailResponse(htmlContent, pageUrl) {
             
             if (embedUrl.indexOf("player.php?") !== -1) {
                 var matchLink = /[?&](?:link|url)=([^&]+)/.exec(embedUrl);
-                if (matchLink) {
-                    var decodedLink = decodeURIComponent(matchLink[1]);
-                    log('PHIMHDCS_DEBUG extracted direct link from player.php in iframe: ' + decodedLink);
-                    embedUrl = decodedLink;
-                }
+                if (matchLink) embedUrl = decodeURIComponent(matchLink[1]);
             }
 
             if (embedUrl && embedUrl !== pageUrl && embedUrl.length > 5) {
@@ -565,7 +568,7 @@ function parseDetailResponse(htmlContent, pageUrl) {
                     mimeType: isDirect ? "application/x-mpegURL" : undefined,
                     headers: {
                         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                        "Referer": BASEURL + "/"
+                        "Referer": "https://phimhdcss.com/"
                     },
                     subtitles: []
                 });
@@ -581,32 +584,20 @@ function parseDetailResponse(htmlContent, pageUrl) {
 
 function parseEmbedResponse(htmlContent, url) {
     try {
-        log("parseEmbedResponse input url: " + url);
-        
         if (url.indexOf("do=getVideo") !== -1 || (htmlContent.indexOf("securedLink") !== -1 && htmlContent.indexOf("hls") !== -1)) {
-            log("parseEmbedResponse processing getVideo JSON response");
             var jData = JSON.parse(htmlContent);
             var streamUrl = "";
-            if (jData.securedLink) {
-                streamUrl = jData.securedLink;
-            } else if (jData.videoSource) {
-                streamUrl = jData.videoSource;
-            } else if (jData.videoSources && jData.videoSources.length > 0) {
-                streamUrl = jData.videoSources[0].file;
-            }
+            if (jData.securedLink) streamUrl = jData.securedLink;
+            else if (jData.videoSource) streamUrl = jData.videoSource;
+            else if (jData.videoSources && jData.videoSources.length > 0) streamUrl = jData.videoSources[0].file;
             
             var subtitles = [];
             var subMatch = /[?&]subs=([^&]+)/.exec(url);
             if (subMatch) {
-                try {
-                    subtitles = JSON.parse(decodeURIComponent(subMatch[1]));
-                } catch(e) {
-                    log("parseEmbedResponse parse subs query parameter error: " + e);
-                }
+                try { subtitles = JSON.parse(decodeURIComponent(subMatch[1])); } catch(e) {}
             }
             
             if (streamUrl) {
-                log("parseEmbedResponse found streamUrl: " + streamUrl);
                 return JSON.stringify({
                     url: streamUrl,
                     isEmbed: false, 
@@ -618,18 +609,13 @@ function parseEmbedResponse(htmlContent, url) {
                     subtitles: subtitles
                 });
             } else {
-                log("parseEmbedResponse no streamUrl found in JSON");
                 return JSON.stringify({ url: "", isEmbed: false, headers: {}, subtitles: [] });
             }
         }
 
-        log("parseEmbedResponse processing HTML embed page");
-        
         var embedId = null;
         var idMatch = /\/video\/([a-zA-Z0-9]+)/.exec(url);
-        if (idMatch) {
-            embedId = idMatch[1];
-        }
+        if (idMatch) embedId = idMatch[1];
         
         var subtitles = [];
         var match = htmlContent.match(/eval\((function\(p,a,c,k,e,d\)[\s\S]+?split\('\|'\),0,\{\}\))\)/);
@@ -637,12 +623,8 @@ function parseEmbedResponse(htmlContent, url) {
             var innerCode = match[1];
             try {
                 var unpacked = eval("(" + innerCode + ")");
-                log("parseEmbedResponse unpacked packer successfully");
-                
                 var firePlayerIdMatch = /FirePlayer\(\s*["']([^"']+)["']/.exec(unpacked);
-                if (firePlayerIdMatch) {
-                    embedId = firePlayerIdMatch[1];
-                }
+                if (firePlayerIdMatch) embedId = firePlayerIdMatch[1];
                 
                 var tracksMatch = /"tracks"\s*:\s*(\[[\s\S]*?\])/.exec(unpacked);
                 if (tracksMatch) {
@@ -657,15 +639,11 @@ function parseEmbedResponse(htmlContent, url) {
                             });
                         }
                     }
-                    log("parseEmbedResponse found subtitles: " + subtitles.length);
                 }
-            } catch (e) {
-                log("parseEmbedResponse eval packer error: " + e);
-            }
+            } catch (e) {}
         }
         
         if (!embedId) {
-            log("parseEmbedResponse cannot find embedId, aborting");
             return JSON.stringify({ url: "", isEmbed: false, headers: {}, subtitles: [] });
         }
         
@@ -680,7 +658,6 @@ function parseEmbedResponse(htmlContent, url) {
             "X-Requested-With": "XMLHttpRequest"
         };
         
-        log("parseEmbedResponse returning POST request to getVideo API");
         return JSON.stringify({
             url: postUrl,
             isEmbed: true, 
@@ -690,7 +667,6 @@ function parseEmbedResponse(htmlContent, url) {
         });
         
     } catch (e) {
-        log("parseEmbedResponse error: " + e);
         return JSON.stringify({ url: "", isEmbed: false, headers: {}, subtitles: [] });
     }
 }
@@ -747,8 +723,3 @@ function parseYearsResponse(htmlContent) {
         return JSON.stringify(years);
     } catch (e) { return "[]"; }
 }
-
-// =============================================================================
-// THƯ VIỆN DOM ẢO CHUYÊN DỤNG (_$) - KHÔI PHỤC ĐỂ ĐẢM BẢO KHÔNG LỖI HTML
-// =============================================================================
-function _$(htmlOrBlock){if (htmlOrBlock&&typeof htmlOrBlock==='object'&&htmlOrBlock.elements){return htmlOrBlock;}var instance={sourceHtml:typeof htmlOrBlock==='string'?htmlOrBlock:'',elements:Array.isArray(htmlOrBlock)?htmlOrBlock:(htmlOrBlock?[htmlOrBlock]:[]),find:function(selector){var results=[];var contentFilter="";if (selector.indexOf(":content(")!==-1){var contentMatch=selector.match(/:content\((?:"([^"]*)"|'([^']*)'|([^)]*))\)/);if (contentMatch){contentFilter=contentMatch[1]||contentMatch[2]||contentMatch[3]||"";selector=selector.replace(/:content\((?:"[^"]*"|'[^']*'|[^)]*)\)/,"");}}var attrNameFilter="";var attrValueFilter="";var hasAttrFilter=false;var attrMatch=selector.match(/\[([a-zA-Z0-9_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\]"']*))\]/);if (attrMatch){hasAttrFilter=true;attrNameFilter=attrMatch[1];attrValueFilter=attrMatch[2]||attrMatch[3]||attrMatch[4]||"";selector=selector.replace(/\[.*?\]/,"");}var notSelector="";if (selector.indexOf(":not(")!==-1){var notMatch=selector.match(/:not\(([^)]+)\)/);if (notMatch){notSelector=notMatch[1];selector=selector.replace(/:not\([^)]+\)/,"");}}var isFirstFilter=selector.indexOf(":first")!==-1;var isLastFilter=selector.indexOf(":last")!==-1;selector=selector.replace(/:first|:last/g,"");var isClass=selector.indexOf('.')===0;var isId=selector.indexOf('#')===0;var isAttrOnly=(selector===""&&hasAttrFilter);var targetClasses=[];var targetId="";var targetTagName="";if (isClass){targetClasses=selector.split('.').filter(function(c){return c.length > 0;});}else if (isId){targetId=selector.substring(1);}else if (!isAttrOnly){targetTagName=selector.toLowerCase();}for (var i=0;i < this.elements.length;i++){var currentHtml=this.elements[i];var pos=0;var subResults=[];while ((pos=currentHtml.indexOf('<',pos))!==-1){if (currentHtml.charAt(pos+1)==='/'||currentHtml.charAt(pos+1)==='!'){pos++;continue;}var endOpenTag=currentHtml.indexOf('>',pos);if (endOpenTag===-1)break;var fullOpenTag=currentHtml.substring(pos,endOpenTag+1);var spacePos=fullOpenTag.indexOf(' ');var currentTagName="";if (spacePos===-1){currentTagName=fullOpenTag.substring(1,fullOpenTag.length-1).toLowerCase();}else{currentTagName=fullOpenTag.substring(1,spacePos).toLowerCase();}var isMatched=false;if (isClass){var classMatchStr="";var classPos=fullOpenTag.indexOf('class="');if (classPos!==-1){var startQuote=classPos+7;classMatchStr=fullOpenTag.substring(startQuote,fullOpenTag.indexOf('"',startQuote));}else{classPos=fullOpenTag.indexOf("class='");if (classPos!==-1){var startQuote=classPos+7;classMatchStr=fullOpenTag.substring(startQuote,fullOpenTag.indexOf("'",startQuote));}}if (classMatchStr){var currentClasses=classMatchStr.split(/\s+/);var matchCount=0;for (var c=0;c < targetClasses.length;c++){if (currentClasses.indexOf(targetClasses[c])!==-1)matchCount++;}if (matchCount===targetClasses.length)isMatched=true;}}else if (isId){var idMatchStr="";var idPos=fullOpenTag.indexOf('id="');if (idPos!==-1){var startQuote=idPos+4;idMatchStr=fullOpenTag.substring(startQuote,fullOpenTag.indexOf('"',startQuote));}else{idPos=fullOpenTag.indexOf("id='");if (idPos!==-1){var startQuote=idPos+4;idMatchStr=fullOpenTag.substring(startQuote,fullOpenTag.indexOf("'",startQuote));}}if (idMatchStr===targetId)isMatched=true;}else if (isAttrOnly){isMatched=true;}else{if (currentTagName===targetTagName)isMatched=true;}if (isMatched&&hasAttrFilter){var searchStr1=attrNameFilter+'="'+attrValueFilter+'"';var searchStr2=attrNameFilter+"='"+attrValueFilter+"'";if (fullOpenTag.indexOf(searchStr1)===-1&&fullOpenTag.indexOf(searchStr2)===-1){isMatched=false;}}if (isMatched){var startTagPos=pos;var endTagPos=endOpenTag+1;var selfClosingTags=['img','source','input','br','hr','link','meta'];if (selfClosingTags.indexOf(currentTagName)===-1&&fullOpenTag.indexOf('/>')===-1){var depth=1;var scanPos=endOpenTag+1;var openStr='<'+currentTagName;var closeStr='</'+currentTagName+'>';while (depth > 0&&scanPos < currentHtml.length){var nextOpen=currentHtml.indexOf(openStr,scanPos);var nextClose=currentHtml.indexOf(closeStr,scanPos);if (nextClose===-1){scanPos=currentHtml.length;break;}if (nextOpen!==-1&&nextOpen < nextClose){depth++;scanPos=nextOpen+openStr.length;}else{depth--;scanPos=nextClose+closeStr.length;if (depth===0)endTagPos=nextClose+closeStr.length;}}}var foundBlock=currentHtml.substring(startTagPos,endTagPos);if (contentFilter){var pureText=foundBlock.replace(/<[^>]+>/g,"").trim();if (pureText.indexOf(contentFilter)===-1){pos=endTagPos;continue;}}if (notSelector){var isNotClass=notSelector.indexOf('.')===0;var isNotId=notSelector.indexOf('#')===0;var notValue=notSelector.substring(1);var hasNot=false;if (isNotClass&&fullOpenTag.indexOf('class="')!==-1&&fullOpenTag.indexOf(notValue)!==-1)hasNot=true;if (isNotId&&fullOpenTag.indexOf('id="')!==-1&&fullOpenTag.indexOf(notValue)!==-1)hasNot=true;if (!hasNot)subResults.push(foundBlock);}else{subResults.push(foundBlock);}pos=endTagPos;}else{pos++;}}if (isFirstFilter&&subResults.length > 0)subResults=[subResults[0]];if (isLastFilter&&subResults.length > 0)subResults=[subResults[subResults.length-1]];results=results.concat(subResults);}var newInstance=_$(results);newInstance.sourceHtml=this.sourceHtml||currentHtml;return newInstance;},each:function(callback){for (var i=0;i < this.elements.length;i++){var childInstance=_$(this.elements[i]);childInstance.sourceHtml=this.sourceHtml;callback.call(childInstance,i,this.elements[i]);}return this;},eq:function(index){if (index < 0)index=this.elements.length+index;var matchedElement=this.elements[index];this.elements=matchedElement?[matchedElement]:[];return this;},attr:function(attrName){if (this.elements.length===0)return "";var elem=this.elements[0];var searchStr=attrName+'="';var pos=elem.indexOf(searchStr);if (pos===-1){searchStr=attrName+"='";pos=elem.indexOf(searchStr);}if (pos===-1)return "";var start=pos+searchStr.length;var quoteType=elem.charAt(start-1);var end=elem.indexOf(quoteType,start);return end===-1?"":elem.substring(start,end);},html:function(){if (this.elements.length===0)return "";var elem=this.elements[0];var start=elem.indexOf('>')+1;var end=elem.lastIndexOf('</');if (start > 0&&end > start)return elem.substring(start,end);return "";},text:function(){if (this.elements.length===0)return "";var elem=this.elements[0];var start=elem.indexOf('>')+1;var end=elem.lastIndexOf('</');if (start > 0&&end > start){var content=elem.substring(start,end);return content.replace(/<\/?[^>]+(>|$)/g,"").trim();}return "";},next:function(){var results=[];if (!this.sourceHtml)return this;for (var i=0;i < this.elements.length;i++){var elem=this.elements[i];var idx=this.sourceHtml.indexOf(elem);if (idx===-1)continue;var scanPos=idx+elem.length;var nextOpen=this.sourceHtml.indexOf('<',scanPos);if (nextOpen!==-1){if (this.sourceHtml.charAt(nextOpen+1)==='/') continue;var endOpenTag=this.sourceHtml.indexOf('>',nextOpen);if (endOpenTag===-1)continue;var fullOpenTag=this.sourceHtml.substring(nextOpen,endOpenTag+1);var spacePos=fullOpenTag.indexOf(' ');var currentTagName=(spacePos===-1)?fullOpenTag.substring(1,fullOpenTag.length-1).toLowerCase():fullOpenTag.substring(1,spacePos).toLowerCase();var startTagPos=nextOpen;var endTagPos=endOpenTag+1;var selfClosingTags=['img','source','input','br','hr','link','meta'];if (selfClosingTags.indexOf(currentTagName)===-1&&fullOpenTag.indexOf('/>')===-1){var depth=1;var sPos=endOpenTag+1;var openStr='<'+currentTagName;var closeStr='</'+currentTagName+'>';while (depth > 0&&sPos < this.sourceHtml.length){var nOpen=this.sourceHtml.indexOf(openStr,sPos);var nClose=this.sourceHtml.indexOf(closeStr,sPos);if (nClose===-1)break;if (nOpen!==-1&&nOpen < nClose){depth++;sPos=nOpen+openStr.length;}else{depth--;sPos=nClose+closeStr.length;if (depth===0)endTagPos=nClose+closeStr.length;}}}results.push(this.sourceHtml.substring(startTagPos,endTagPos));}}var nextInstance=_$(results);nextInstance.sourceHtml=this.sourceHtml;this.elements=results;return this;},parent:function(){var results=[];if (!this.sourceHtml)return this;for (var i=0;i < this.elements.length;i++){var elem=this.elements[i];var idx=this.sourceHtml.indexOf(elem);if (idx <=0)continue;var scanPos=idx-1;while (scanPos >=0){var openTagPos=this.sourceHtml.lastIndexOf('<',scanPos);if (openTagPos===-1)break;if (this.sourceHtml.charAt(openTagPos+1)!=='/'&&this.sourceHtml.charAt(openTagPos+1)!=='!'){var endOpenTag=this.sourceHtml.indexOf('>',openTagPos);if (endOpenTag!==-1&&endOpenTag > openTagPos){var fullOpenTag=this.sourceHtml.substring(openTagPos,endOpenTag+1);var spacePos=fullOpenTag.indexOf(' ');var currentTagName=(spacePos===-1)?fullOpenTag.substring(1,fullOpenTag.length-1).toLowerCase():fullOpenTag.substring(1,spacePos).toLowerCase();var endTagPos=endOpenTag+1;var selfClosingTags=['img','source','input','br','hr','link','meta'];if (selfClosingTags.indexOf(currentTagName)===-1&&fullOpenTag.indexOf('/>')===-1){var depth=1;var sPos=endOpenTag+1;var openStr='<'+currentTagName;var closeStr='</'+currentTagName+'>';while (depth > 0&&sPos < this.sourceHtml.length){var nOpen=this.sourceHtml.indexOf(openStr,sPos);var nClose=this.sourceHtml.indexOf(closeStr,sPos);if (nClose===-1)break;if (nOpen!==-1&&nOpen < nClose){depth++;sPos=nOpen+openStr.length;}else{depth--;sPos=nClose+closeStr.length;if (depth===0)endTagPos=nClose+closeStr.length;}}}if (endTagPos >=idx+elem.length){var parentBlock=this.sourceHtml.substring(openTagPos,endTagPos);if (results.indexOf(parentBlock)===-1)results.push(parentBlock);break;}}}scanPos=openTagPos-1;}}var parentInstance=_$(results);parentInstance.sourceHtml=this.sourceHtml;this.elements=results;return this;}};return instance;};
