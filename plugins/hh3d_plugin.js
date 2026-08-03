@@ -1,14 +1,16 @@
 // =============================================================================
-// CONFIGURATION & METADATA
+// CẤU HÌNH DOMAIN & METADATA (CHỈ CẦN SỬA TÊN MIỀN Ở ĐÂY KHI WEB CÓ UPDATE)
 // =============================================================================
+var BASE_DOMAIN = "yanhh3d.ac";
+var BASEURL = "https://" + BASE_DOMAIN;
 
 function getManifest() {
     return JSON.stringify({
         "id": "yanhh3d",
         "name": "YanHH3D",
-        "version": "4.2.0", // Bản cập nhật: Giữ nguyên cấu trúc, bỏ Thuyết Minh, giữ chất lượng cao
-        "baseUrl": "https://yanhh3d.ac", 
-        "iconUrl": "https://yanhh3d.ac/storage/settings/August2024/YOoAwtlobLbwKhiFwRZv.png",
+        "version": "4.3.0",
+        "baseUrl": BASEURL, 
+        "iconUrl": BASEURL + "/storage/settings/August2024/YOoAwtlobLbwKhiFwRZv.png",
         "isEnabled": true,
         "isAdult": false,
         "type": "MOVIE",
@@ -47,24 +49,23 @@ function getPrimaryCategories() {
 function getFilterConfig() { return JSON.stringify({}); }
 
 // =============================================================================
-// URL GENERATION
+// URL GENERATION (SỬ DỤNG BIẾN DOMAIN ĐỘNG)
 // =============================================================================
 
 function getUrlList(slug, filtersJson) {
     var filters = JSON.parse(filtersJson || "{}");
     var page = filters.page || 1;
-    var baseUrl = "https://yanhh3d.ac";
     
     if (!slug || slug === 'home') {
-        if (page === 1) return baseUrl + "/";
-        return baseUrl + "/page/" + page;
+        if (page === 1) return BASEURL + "/";
+        return BASEURL + "/page/" + page;
     }
     
     slug = slug.replace(/\.html$/i, "");
     if (page === 1) {
-        return baseUrl + "/" + slug;
+        return BASEURL + "/" + slug;
     } else {
-        return baseUrl + "/" + slug + "/page/" + page;
+        return BASEURL + "/" + slug + "/page/" + page;
     }
 }
 
@@ -74,16 +75,16 @@ function getUrlSearch(keyword, filtersJson) {
     var cleanKeyword = encodeURIComponent(keyword.trim());
     
     if (page === 1) {
-        return "https://yanhh3d.ac/search?keysearch=" + cleanKeyword;
+        return BASEURL + "/search?keysearch=" + cleanKeyword;
     } else {
-        return "https://yanhh3d.ac/search?keysearch=" + cleanKeyword + "&page=" + page;
+        return BASEURL + "/search?keysearch=" + cleanKeyword + "&page=" + page;
     }
 }
 
 function getUrlDetail(slug) {
     if (!slug) return "";
     if (slug.indexOf("http") === 0) return slug;
-    return "https://yanhh3d.ac/" + slug.replace(/^\//, "");
+    return BASEURL + "/" + slug.replace(/^\//, "");
 }
 
 function getUrlCategories() { return ""; }
@@ -261,7 +262,7 @@ function parseMovieDetail(html) {
         }
 
         var vietsubEpisodes = [];
-        var highQualityEpisodes = []; // Giữ lại cấu trúc chất lượng cao (4K/HD)
+        var highQualityEpisodes = []; 
 
         if (baseSlug && maxEp > 0) {
             for (var i = 1; i <= maxEp; i++) {
@@ -280,7 +281,6 @@ function parseMovieDetail(html) {
         } 
 
         var servers = [];
-        // Ưu tiên server chất lượng cao lên đầu, sau đó đến Vietsub chuẩn, loại bỏ hoàn toàn Thuyết minh
         if (highQualityEpisodes.length > 0) {
             servers.push({ name: "Bản 4K / Chất Lượng Cao", episodes: highQualityEpisodes });
         }
@@ -332,7 +332,7 @@ function parseDetailResponse(html) {
                 if (streamUrl.indexOf("//") === 0) streamUrl = "https:" + streamUrl;
                 return JSON.stringify({
                     url: streamUrl,
-                    headers: { "Referer": "https://yanhh3d.ac/" },
+                    headers: { "Referer": BASEURL + "/" },
                     isEmbed: true
                 });
             }
@@ -342,8 +342,8 @@ function parseDetailResponse(html) {
             return JSON.stringify({
                 url: streamUrl,
                 headers: { 
-                    "Referer": "https://yanhh3d.ac/",
-                    "Origin": "https://yanhh3d.ac",
+                    "Referer": BASEURL + "/",
+                    "Origin": BASEURL,
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
                 },
                 isEmbed: false 
