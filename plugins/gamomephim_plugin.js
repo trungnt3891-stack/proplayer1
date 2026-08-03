@@ -8,8 +8,8 @@ function getManifest() {
     return JSON.stringify({
         "id": "gamomephim",
         "name": "Gà Mờ Mê Phim",
-        "description": "Phim Ngắn Hay. Tốc độ bắt link siêu tốc, chia luồng Vietsub/Thuyết Minh.",
-        "version": "1.2.0",
+        "description": "Phim Ngắn Hay. Tốc độ bắt link siêu tốc 0s, Sửa lỗi tua phim (VOD).",
+        "version": "1.3.0",
         "baseUrl": BASEURL,
         "iconUrl": "https://cdn.gamomephim.com/site/logo-1784305321242.png",
         "isEnabled": true,
@@ -116,6 +116,23 @@ function getUrlDetail(slug) {
     if (!slug) return "";
     if (slug.indexOf('http') === 0) return slug;
     return BASEURL + "/" + slug;
+}
+
+// 🚀 SIÊU TỐC ĐỘ: Hàm đặc quyền giúp bỏ qua bước Fetch HTML lãng phí 3-5 giây
+function getStreamLink(slug) {
+    if (slug && slug.indexOf("http") === 0) {
+        return JSON.stringify({
+            "url": slug,
+            "isEmbed": false,
+            "mimeType": "", // CHÌA KHÓA: Để trống để ExoPlayer tự nhận diện (Mở khóa thanh tua VOD)
+            "headers": {
+                "Referer": BASEURL + "/",
+                "Origin": BASEURL,
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+        });
+    }
+    return "";
 }
 
 function getUrlCategories() { return BASEURL; }
@@ -276,17 +293,12 @@ function parseMovieDetail(html, url) {
         
         var vsCount = 1, tmCount = 1, dfCount = 1;
 
-        // 1. Phân loại và tạo danh sách tập (Đã fix lỗi trùng slug)
         for (var $j = 0; $j < listepi.length; $j++) {
             var ep = listepi[$j];
             var audio = (ep.audioType || "").toUpperCase();
-            var link = ep.m3u8Url || "";
             
-            // Hack thêm "#.m3u8" để kích hoạt cơ chế phát trực tiếp bỏ qua bước parseDetailResponse
-            var epId = link;
-            if (epId && epId.indexOf(".m3u8") === -1 && epId.indexOf(".mp4") === -1) {
-                epId += "#.m3u8";
-            }
+            // Lấy trực tiếp đường dẫn sạch nguyên bản
+            var epId = ep.m3u8Url || "";
 
             if (audio.indexOf("VIETSUB") > -1) {
                 var num = ep.episodeNumber || vsCount++;
@@ -300,7 +312,6 @@ function parseMovieDetail(html, url) {
             }
         }
         
-        // 2. Ép cứng thứ tự hiển thị: Vietsub (Bên trái) -> Thuyết Minh (Bên phải)
         if (vietsubEps.length > 0) servers.push({ "name": "Vietsub", "episodes": vietsubEps });
         if (thuyetMinhEps.length > 0) servers.push({ "name": "Thuyết Minh", "episodes": thuyetMinhEps });
         if (defaultEps.length > 0) servers.push({ "name": "Server Gà Mờ", "episodes": defaultEps });
@@ -333,16 +344,13 @@ function parseMovieDetail(html, url) {
     }
 }
 
+// Giữ dự phòng nếu hàm getStreamLink không bắt kịp trên điện thoại Android cũ
 function parseDetailResponse(html, url) {
     try {
-        // Tốc độ siêu tốc: Xóa bỏ thẻ Hack #.m3u8 và bắn thẳng link vào ExoPlayer
-        var cleanUrl = url.replace(/#\.m3u8$/, "");
-        var isM3u8 = cleanUrl.indexOf(".m3u8") > -1;
-        
         return JSON.stringify({
-            "url": cleanUrl,
+            "url": url,
             "isEmbed": false,
-            "mimeType": isM3u8 ? "application/x-mpegURL" : "video/mp4",
+            "mimeType": "", // CHÌA KHÓA: Giúp giải quyết lỗi không cho phép tua trên HLS
             "headers": {
                 "Referer": BASEURL + "/",
                 "Origin": BASEURL,
