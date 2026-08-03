@@ -12,15 +12,19 @@ NGƯỜI DÙNG bấm vào mục "Hành Động" trên Trang chủ
         ▼
 ┌─ APP gọi: getUrlList("hanh-dong", '{"page":1}') ─────────────────┐
 │  Plugin trả: "https://phim.com/the-loai/hanh-dong?page=1"        │
+│  (có thể kèm data riêng: ".../hanh-dong?page=1|data:token")      │
 └───────────────────────────────────────────────────────────────────┘
         │
         ▼
-┌─ APP tự fetch HTTP GET url đó ────────────────────────────────────┐
+┌─ APP tách phần |… rồi fetch HTTP GET URL SẠCH ────────────────────┐
+│  • |data:…  → giữ lại cho plugin, KHÔNG gửi lên server            │
+│  • |Key=Val → gắn thành HTTP header                               │
 │  Nhận toàn bộ HTML/JSON thô từ server                             │
 └───────────────────────────────────────────────────────────────────┘
         │
         ▼
-┌─ APP gọi: parseListResponse(html) ────────────────────────────────┐
+┌─ APP gọi: parseListResponse(html, apiUrl) ────────────────────────┐
+│  apiUrl = URL GỐC (còn nguyên |data:…) do plugin sinh ra          │
 │  Plugin parse HTML → trả JSON: { items: [{id, title, poster}...]} │
 └───────────────────────────────────────────────────────────────────┘
         │
@@ -29,6 +33,8 @@ NGƯỜI DÙNG bấm vào mục "Hành Động" trên Trang chủ
 │  Người dùng bấm vào 1 phim → Lặp lại chu trình với Detail/Play   │
 └───────────────────────────────────────────────────────────────────┘
 ```
+
+> 🔑 **Ghi nhớ 1 câu**: App **luôn fetch URL đã cắt bỏ phần `|`**, nhưng **luôn truyền lại URL đầy đủ (có `|`)** cho hàm `parseXxx` ở tham số thứ 2. Chi tiết ở chương [⚡ Quy Ước Dấu `|`](#-quy-ước-dấu--pipe--header-hay-data-của-plugin).
 
 ### Luồng Xem Phim & Truyền Hình IPTV (Chi Tiết → Player)
 
@@ -42,14 +48,15 @@ NẾU type = "IPTV" HOẶC "VIDEO":
       4. ExoPlayer tự động nạp User-Agent/DRM Key và phát video
 
 NẾU type = "MOVIE" / "shortfilm":
-   Bước 1: parseMovieDetail(html)
+   Bước 1: parseMovieDetail(html, apiUrl)
       → Trả servers + episodes (mỗi episode có id = URL hoặc slug, bắt buộc slug phải duy nhất cho từng tập)
 
    Bước 2: Người dùng chọn tập
       → App gọi getUrlDetail(episode.id) để lấy URL fetch
-      → App fetch URL → gọi parseDetailResponse(html, apiUrl)
+      → App tách phần |… → fetch URL sạch → gọi parseDetailResponse(html, apiUrl)
 
    Bước 3: parseDetailResponse(html, apiUrl)
+      → apiUrl còn nguyên phần |data:… nếu plugin có gắn
       → Trả { url, headers, mimeType, subtitles, drmType, drmKid, drmKey, drmLicenseKey }
 
    Bước 4:
@@ -129,6 +136,102 @@ App hỗ trợ cú pháp Kodi Pipe Header tại mọi điểm truyền URL:
 
 App sẽ tự động loại bỏ cú pháp `|` để lấy URL sạch và trích xuất đúng các tham số Header nạp vào Request!
 
+👉 Dấu `|` còn dùng để **mang dữ liệu riêng của plugin** (token, key, encodeData…) — xem chương [⚡ Quy Ước Dấu `|`](#-quy-ước-dấu--pipe--header-hay-data-của-plugin) ngay dưới đây.
+
+---
+
+## ⚡ Quy Ước Dấu `|` (Pipe) — Header Hay Data Của Plugin?
+
+> 🆕 **CẬP NHẬT QUAN TRỌNG (bản mới nhất)** — Nếu plugin của bạn đang nhét dữ liệu riêng sau dấu `|`, hãy đọc kỹ mục này.
+
+Mọi URL do plugin trả về (`getUrlList`, `getUrlSearch`, `getUrlDetail`, `episode.id`, `item.id`…) đều có thể mang thêm một phần phụ sau dấu `|`:
+
+```
+<url thật>|<phần thêm>
+```
+
+App **luôn cắt bỏ toàn bộ phần sau dấu `|` trước khi gửi HTTP request**. Phần `|…` không bao giờ đi lên server. Nhưng nó vẫn được **truyền nguyên vẹn trở lại cho hàm `parseXxx(html, apiUrl)`** ở tham số thứ 2.
+
+### 3 dạng của phần sau dấu `|`
+
+| # | Dạng | Ví dụ | App xử lý |
+|---|------|-------|-----------|
+| 1 | **`data:` tường minh** ⭐ Khuyến nghị | `.../slug\|data:encodeData`<br>`.../slug\|data:type=movie&ep=3` | Luôn coi là **DATA của plugin**. Không gắn header. Không bao giờ bị hiểu nhầm. |
+| 2 | **Headers** (cặp `key=value`) | `.../slug\|Referer=https://x&User-Agent=Dalvik/2.1.0` | Gắn vào **HTTP request headers** |
+| 3 | **Data kiểu cũ** (không có dấu `=`) | `.../slug\|encodeData`<br>`.../slug\|ABC123XYZ` | Coi là **DATA của plugin** (tương thích ngược) |
+
+**Thứ tự ưu tiên**: App kiểm tra dạng 1 trước → dạng 2 → dạng 3.
+
+### ⚠️ Cạm bẫy lớn nhất: data của bạn chứa dấu `=`
+
+```javascript
+// ❌ SAI — "type=movie" trông y hệt một cặp header key=value
+//    → App gắn header "type: movie" và MẤT dữ liệu của bạn
+"id": "https://site.com/phim/abc|type=movie&quality=1080p"
+
+// ✅ ĐÚNG — thêm tiền tố "data:" là hết đoán mò
+"id": "https://site.com/phim/abc|data:type=movie&quality=1080p"
+```
+
+### Bảng so sánh nhanh
+
+| URL plugin trả về | App fetch URL | Header gắn thêm | `apiUrl` mà parseXxx nhận |
+|-------------------|---------------|-----------------|---------------------------|
+| `https://s.com/a\|data:xyz` | `https://s.com/a` | *(không)* | `https://s.com/a\|data:xyz` |
+| `https://s.com/a\|data:k=v` | `https://s.com/a` | *(không)* | `https://s.com/a\|data:k=v` |
+| `https://s.com/a\|Referer=https://s.com` | `https://s.com/a` | `Referer: https://s.com` | `https://s.com/a\|Referer=...` |
+| `https://s.com/a\|xyz` | `https://s.com/a` | *(không)* | `https://s.com/a\|xyz` |
+| `https://s.com/a?ids=1\|2\|3` | `https://s.com/a?ids=1\|2\|3` | *(không)* | URL nguyên vẹn |
+
+### 🔓 Ngoại lệ: dấu `|` nằm trong query string
+
+Nếu dấu `|` xuất hiện **sau dấu `?`** và **không** thuộc dạng 1 hoặc dạng 2, App coi đó là **ký tự dữ liệu hợp lệ của URL** và giữ nguyên khi fetch:
+
+```javascript
+// | là dữ liệu thật của API → App fetch nguyên URL, KHÔNG cắt
+return "https://api.site.com/movies?ids=101|102|103";
+```
+
+Nhưng nếu bạn muốn phần đó là data của plugin (không gửi lên server) kể cả khi nằm sau `?`, **bắt buộc dùng tiền tố `data:`**:
+
+```javascript
+// data: thắng mọi quy tắc khác → App fetch "https://api.site.com/m?page=1"
+return "https://api.site.com/m?page=1|data:secretToken";
+```
+
+### Cách bóc data trong hàm parse
+
+```javascript
+// Helper nhỏ gọn — dùng chung cho mọi plugin
+function getPipeData(apiUrl) {
+    if (!apiUrl) return "";
+    var i = apiUrl.indexOf("|");
+    if (i < 0) return "";
+    var s = apiUrl.substring(i + 1).replace(/^\s+/, "");
+    // Bỏ tiền tố "data:" nếu có (không phân biệt hoa thường)
+    if (s.toLowerCase().indexOf("data:") === 0) {
+        s = s.substring(5);
+    }
+    return s;
+}
+
+function parseMovieDetail(html, apiUrl) {
+    var token = getPipeData(apiUrl);   // "encodeData"
+    var cleanUrl = apiUrl.split("|")[0];
+    console.log("token =", token);
+    // ...
+}
+```
+
+> 💡 Hàm tương ứng bên App là `extractPluginPipeData()` trong `PluginExecutor.kt` — logic giống hệt helper trên.
+
+### ✅ Checklist khi dùng dấu `|`
+
+- [ ] Dữ liệu riêng của plugin → **luôn** viết `|data:...`
+- [ ] Header HTTP thật → viết `|Key=Value&Key2=Value2` (KHÔNG có `data:`)
+- [ ] Không trộn lẫn: một URL chỉ nên có **một** dấu `|` đầu tiên mang ý nghĩa; ký tự `|` sau đó thuộc về phần data
+- [ ] Muốn truyền Object lớn → `encodeURIComponent(JSON.stringify(obj))` rồi ghép: `"|data:" + encoded`
+
 ---
 
 ## 🚀 Bắt Đầu Nhanh (3 Bước)
@@ -163,107 +266,14 @@ Khi đăng ký plugin trên file JSON hoặc thêm nguồn tùy chỉnh, đườ
     *   **Cơ chế bảo vệ từ App**: Nếu `getUrlDetail` trả về URL video trực tiếp (plain string), App sẽ tự động phát hiện và bỏ qua bước fetch HTML (tránh sập bộ nhớ OOM) đồng thời tự động nhận diện `mimeType`.
 
 ---
-
-## 📋 Danh Sách Tất Cả Các Hàm
-
-### Nhóm 1: Config (Khai báo)
-
-| Hàm | Trả về | Bắt buộc |
-|-----|--------|----------|
-| `getManifest()` | Thông tin plugin | ✅ |
-| `getHomeSections()` | Các mục trang chủ | ✅ |
-| `getPrimaryCategories()` | Menu thể loại | Tùy chọn |
-| `getFilterConfig()` | Bộ lọc | Tùy chọn |
-
-### Nhóm 2: URL (Sinh đường dẫn)
-# 🛠️ VAAPP Plugin Developer Kit
-
-## App Hoạt Động Như Nào?
-
-VAAPP là một **trình vỏ (Shell)** — nó chỉ lo UI và Player. Toàn bộ nội dung phim/truyện được cung cấp qua **Plugin JS** do bạn viết.
-
-### Luồng Dữ Liệu Chi Tiết
-
-```
-NGƯỜI DÙNG bấm vào mục "Hành Động" trên Trang chủ
-        │
-        ▼
-┌─ APP gọi: getUrlList("hanh-dong", '{"page":1}') ─────────────────┐
-│  Plugin trả: "https://phim.com/the-loai/hanh-dong?page=1"        │
-└───────────────────────────────────────────────────────────────────┘
-        │
-        ▼
-┌─ APP tự fetch HTTP GET url đó ────────────────────────────────────┐
-│  Nhận toàn bộ HTML/JSON thô từ server                             │
-└───────────────────────────────────────────────────────────────────┘
-        │
-        ▼
-┌─ APP gọi: parseListResponse(html) ────────────────────────────────┐
-│  Plugin parse HTML → trả JSON: { items: [{id, title, poster}...]} │
-└───────────────────────────────────────────────────────────────────┘
-        │
-        ▼
-┌─ APP render danh sách phim lên UI ────────────────────────────────┐
-│  Người dùng bấm vào 1 phim → Lặp lại chu trình với Detail/Play   │
-└───────────────────────────────────────────────────────────────────┘
-```
-
-### Luồng Xem Phim (Chi Tiết → Player)
-
-```
-Bước 1: parseMovieDetail(html)
-   → Trả servers + episodes (mỗi episode có id = URL hoặc slug)
-
-Bước 2: Người dùng chọn tập
-   → App gọi getUrlDetail(episode.id) để lấy URL fetch
-   → App fetch URL → gọi parseDetailResponse(html)
-
-Bước 3: parseDetailResponse(html)
-   → Trả { url, headers, mimeType, subtitles }
-
-Bước 4:
-   ├─ Nếu isEmbed = false → ExoPlayer phát url trực tiếp
-   ├─ Nếu isEmbed = true  → App fetch tiếp → gọi parseEmbedResponse()
-   │                        (lặp tối đa 3 lần cho đến khi isEmbed = false)
-   └─ Nếu playerType = "embed" → WebView load url
-```
-
----
-
-## 🚀 Bắt Đầu Nhanh (3 Bước)
-
-### Bước 1: Tạo Plugin
-Copy file `plugin_template.js` → đổi tên `ten_web_plugin.js`, bắt đầu viết code.
-
-### Bước 2: Test Trên Máy Tính
-Mở file **`tester.html`** bằng Chrome:
-1. **Nạp JS**: Bấm "Nạp file JS" → chọn file plugin của bạn
-2. **Dán HTML**: Mở trang phim → Ctrl+U (View Source) → copy dán vào ô input
-3. **Chạy thử**: Bấm các nút `parseListResponse()`, `parseMovieDetail()`...
-4. **Xem kết quả**: Xanh = JSON chuẩn ✅ | Đỏ = lỗi cần sửa ❌
-
-### Bước 3: Đăng Ký
-Upload file `.js` lên GitHub Raw → thêm vào `plugins.json` → App tự cập nhật.
-
-### ⚠️ Lưu Ý Quan Trọng Khi Phát Hành Plugin (Mới)
-
-#### 1. Bắt Buộc Sử Dụng Link RAW
-Khi đăng ký plugin trên file JSON hoặc thêm nguồn tùy chỉnh, đường dẫn file JS **bắt buộc phải là đường dẫn RAW** trả về code JavaScript thô.
-*   **Sai:** `https://github.com/user/repo/blob/main/plugin.js` (Trả về giao diện web HTML của GitHub).
-*   **Từ phiên bản App 1.7.5+**: Hỗ trợ thêm link gist/custom domain nhưng nên dùng link RAW.
-
-#### 2. Dung Thứ Dấu Phẩy Thừa & Cấu Trúc Bỏ Ngỏ (Trailing Comma & Loose Schema)
-*   Từ phiên bản ứng dụng **1.7.5+**, bộ phân tích cú pháp JSON của App đã hỗ trợ `allowTrailingComma = true`.
-*   **`FilterOption`**: Trường `value` giờ đây có giá trị mặc định. Nếu plugin khai báo `{ "slug": "/cat-1", "name": "Tên" }` thay vì `value`, App vẫn tự chuyển đổi slug thành `value` mà không crash `MissingFieldException`.
-
-#### 3. Tối Ưu `getUrlDetail` & Tránh OOM (Out Of Memory)
-*   Nếu `getUrlDetail(slug)` nhận được link stream trực tiếp (`.mp4`, `.m3u8`, `.mpd`,...):
-    *   **Khuyến nghị**: Hãy `return JSON.stringify({ "url": directUrl, "isEmbed": false, "mimeType": "..." })` ngay lập tức!
-    *   **Cơ chế bảo vệ từ App**: Nếu `getUrlDetail` trả về URL video trực tiếp (plain string), App sẽ tự động phát hiện và bỏ qua bước fetch HTML (tránh sập bộ nhớ OOM) đồng thời tự động nhận diện `mimeType`.
 
 #### 4. Cơ Chế Phòng Lỗi Khi `parseEmbedResponse` Trả Về URL Rỗng
 *   Nếu plugin dùng `isEmbed: true` nhưng hàm `parseEmbedResponse` lỡ trả về `url: ""` (rỗng):
     *   **Từ bản 1.7.8+**: App sẽ tự động phát hiện và **giữ lại URL embed trước đó**, tiếp tục mở WebView và bật Sniffer thay vì bị lỗi rỗng luồng phát.
+
+#### 5. Không Nhét Dữ Liệu Plugin Vào URL Mà Không Có Tiền Tố `data:`
+*   Xem chi tiết ở chương [⚡ Quy Ước Dấu `|`](#-quy-ước-dấu--pipe--header-hay-data-của-plugin).
+*   Tóm tắt: dữ liệu riêng của plugin phải viết `url|data:<dữ liệu>`. Nếu không có tiền tố `data:` mà dữ liệu lại chứa dấu `=`, App sẽ hiểu nhầm thành HTTP header và dữ liệu của bạn bị mất.
 
 ---
 
@@ -292,16 +302,22 @@ Khi đăng ký plugin trên file JSON hoặc thêm nguồn tùy chỉnh, đườ
 
 ### Nhóm 3: Parser (Xử lý dữ liệu) ⭐
 
+> ⚠️ **Tất cả hàm parse đều nhận 2 tham số**: `(html, apiUrl)`.
+> `apiUrl` là **URL gốc do plugin sinh ra, còn nguyên phần `|data:...`** (nếu có) — không phải URL sạch mà App đã fetch.
+> Nếu URL không có dấu `|`, `apiUrl` là **URL cuối cùng sau khi redirect** (`response.request.url`), tiện để ghép link tương đối.
+
 | Hàm | Nhận vào | Trả về |
 |-----|----------|--------|
-| `parseListResponse(html)` | HTML/JSON thô | `{ items: [...], pagination: {...} }` |
-| `parseSearchResponse(html)` | HTML/JSON thô | Giống parseListResponse |
-| `parseMovieDetail(html)` | HTML chi tiết | `{ id, title, servers: [...], ... }` |
-| `parseDetailResponse(html)` | HTML trang xem | `{ url, headers, mimeType, ... }` |
-| `parseEmbedResponse(html, url)` | HTML embed page | `{ url, isEmbed, mimeType, ... }` |
-| `parseCategoriesResponse(html)` | HTML thể loại | Mảng `Category` hoặc `FilterOption` |
+| `parseListResponse(html, apiUrl)` | HTML/JSON thô + URL đã gọi | `{ items: [...], pagination: {...} }` |
+| `parseSearchResponse(html, apiUrl)` | HTML/JSON thô + URL đã gọi | Giống parseListResponse |
+| `parseMovieDetail(html, apiUrl)` | HTML chi tiết + URL đã gọi | `{ id, title, servers: [...], ... }` |
+| `parseDetailResponse(html, apiUrl)` | HTML trang xem + URL đã gọi | `{ url, headers, mimeType, ... }` |
+| `parseEmbedResponse(html, url)` | HTML embed page + URL embed | `{ url, isEmbed, mimeType, ... }` |
+| `parseCategoriesResponse(html, apiUrl)` | HTML thể loại | Mảng `Category` hoặc `FilterOption` |
 | `parseCountriesResponse(html)` | HTML quốc gia | Mảng `FilterOption` |
 | `parseYearsResponse(html)` | HTML năm | Mảng `FilterOption` |
+
+> 💡 Tham số thứ 2 là **tùy chọn** — plugin cũ chỉ khai báo `function parseListResponse(html)` vẫn chạy bình thường. Chỉ khai thêm khi bạn cần đọc `|data:` hoặc cần biết domain thật sau redirect.
 
 ---
 
@@ -314,17 +330,46 @@ Khi đăng ký plugin trên file JSON hoặc thêm nguồn tùy chỉnh, đườ
     "id": "unique_id",
     "name": "Tên Hiển Thị",
     "version": "1.0.0",
+    "description": "Mô tả ngắn về plugin",
+    "author": "Tên tác giả",
     "baseUrl": "https://phim.example.com",
+    "fallbackUrls": ["https://phim2.example.com", "https://phim3.example.com"],
     "iconUrl": "https://icon.png",
+    "referrer": "https://phim.example.com/",
+    "info": "Ghi chú hiện trong màn hình Quản lý Plugin",
     "isEnabled": true,
     "isAdult": false,
     "type": "MOVIE",
     "layoutType": "VERTICAL",
     "playerType": "exoplayer",
+    "subtitleCat": false,
     "adblock": true,
     "debug": false
 }
 ```
+
+**Bảng đầy đủ các trường:**
+
+| Trường | Kiểu | Mặc định | Ý nghĩa |
+|--------|------|----------|---------|
+| `id` | String | *(bắt buộc)* | ID duy nhất của plugin |
+| `name` | String | *(bắt buộc)* | Tên hiển thị |
+| `version` | String | *(bắt buộc)* | Phiên bản, dùng để so sánh khi cập nhật |
+| `description` | String | `""` | Mô tả ngắn |
+| `author` | String | `""` | Tác giả |
+| `baseUrl` | String | `""` | Domain chính của web nguồn |
+| `fallbackUrls` | Array\<String\> | `[]` | Danh sách domain dự phòng khi `baseUrl` bị chặn — xem mục [🌐 Domain Fallback](#-domain-fallback--tự-đổi-domain-khi-bị-chặn) |
+| `iconUrl` | String | `""` | Link icon plugin |
+| `referrer` | String | `""` | `Referer` riêng khi tải **ảnh poster** (CDN ảnh chặn hotlink) |
+| `info` | String | `""` | Ghi chú/hướng dẫn riêng hiện trong màn Quản lý Plugin |
+| `isEnabled` | Boolean | `true` | Bật/tắt plugin |
+| `isAdult` | Boolean | `false` | Đánh dấu nội dung 18+ |
+| `type` | Enum | `MOVIE` | `MOVIE` / `VIDEO` / `MANGA` / `NOVEL` / `IPTV` / `SHORTFILM` |
+| `layoutType` | Enum | `VERTICAL` | `VERTICAL` (poster 2:3) / `HORIZONTAL` (thumb 16:9) |
+| `playerType` | Enum | `auto` | `exoplayer` / `embed` / `embedtoexoplay` / `auto` |
+| `subtitleCat` | Boolean | `false` | Bật tự tìm phụ đề từ subtitlecat.com |
+| `adblock` | Boolean | `true` | Bật/tắt bộ chặn quảng cáo nền |
+| `debug` | Boolean | `false` | Bật Console Toast nổi |
 
 **`debug` — Console Toast dành cho phát triển plugin:**
 - Không khai báo `debug`, hoặc đặt `"debug": false`: Console Toast **không hiển thị**.
@@ -347,13 +392,69 @@ function getManifest() {
     });
 }
 
-function parseListResponse(html) {
+function parseListResponse(html, apiUrl) {
+    console.log("URL đã fetch:", apiUrl);
     console.log("Parsing HTML list response length: " + html.length);
     // ...
 }
 ```
 
 > Biến riêng như `DEV = "true"` không bật Console Toast. Cờ phải nằm trong object do `getManifest()` trả về và có tên chính xác là `debug`.
+
+---
+
+### 🌐 Domain Fallback — Tự Đổi Domain Khi Bị Chặn
+
+Khai báo `fallbackUrls` trong `getManifest()` để App tự chuyển sang domain khác khi domain chính bị chặn:
+
+```javascript
+function getManifest() {
+    return JSON.stringify({
+        id: "my_plugin",
+        name: "My Plugin",
+        baseUrl: "https://phim.com",
+        fallbackUrls: [
+            "https://phim2.com",
+            "https://phim3.net"
+        ]
+    });
+}
+```
+
+#### App xử lý thế nào?
+
+1. **Có cache domain còn hạn (10 phút)** → thử domain đó trước, timeout 5 giây.
+2. **Không có cache / cache hỏng** → **đua song song (race)** toàn bộ `baseUrl` + `fallbackUrls`, timeout tổng 8 giây. Domain nào trả về **nội dung dùng được đầu tiên** thì thắng và được cache 10 phút.
+3. **Tất cả đều fail** → App báo lỗi `"Không thể kết nối đến <tên plugin>"`.
+
+#### ✅ Thế nào là "nội dung dùng được"?
+
+App **không** chấp nhận mọi response khác rỗng nữa. Response bị **loại** nếu:
+- Rỗng, hoặc **ngắn hơn 32 ký tự**
+- 2048 ký tự đầu chứa dấu hiệu trang chặn: `just a moment`, `checking your browser`, `cf-browser-verification`, `access denied`, `403 forbidden`, `404 not found`, `ddos-guard`, `enable javascript and cookies to continue`…
+
+> ⚠️ **Lưu ý cho dev**: Nếu API của bạn trả về JSON hợp lệ nhưng **rất ngắn** (ví dụ `[]` hay `{"ok":1}` dưới 32 ký tự), domain đó sẽ bị coi là fail trong lúc race. Hãy đảm bảo endpoint dùng để race trả về nội dung có độ dài thực tế.
+
+#### 🔒 Đổi domain giữ nguyên path
+
+Khi đổi domain, App **giữ nguyên toàn bộ path/query/fragment**, và tự bỏ phần path riêng của `baseUrl` cũ:
+
+| `baseUrl` | URL plugin trả | Đổi sang | Kết quả |
+|-----------|----------------|----------|---------|
+| `https://a.com` | `https://a.com/phim/x?p=2` | `https://b.com` | `https://b.com/phim/x?p=2` |
+| `https://a.com/wp` | `https://a.com/wp/phim/x` | `https://b.com` | `https://b.com/phim/x` |
+| `https://a.com` | `https://a.com/x\|data:tok` | `https://b.com` | `https://b.com/x\|data:tok` |
+
+Phần `|data:...` luôn được giữ nguyên sau khi đổi domain.
+
+#### 👤 Người dùng đặt Base URL tùy chỉnh
+
+Nếu người dùng tự nhập Base URL trong màn hình Quản lý Plugin:
+- App **BỎ QUA hoàn toàn** cơ chế race domain — tôn trọng lựa chọn của người dùng.
+- Mọi URL do plugin sinh ra sẽ được thay `baseUrl` → domain người dùng chọn.
+- Khi người dùng đổi/xóa Base URL tùy chỉnh, cache domain **bị xóa ngay lập tức** (không phải chờ hết 10 phút).
+
+---
 
 **`adblock` option (Bật/Tắt chặn quảng cáo nền):**
 - **Không khai báo** (hoặc `true`): Mặc định **BẬT** bộ chặn quảng cáo nền cho plugin này.
@@ -485,7 +586,10 @@ Lưu ý về header:
 
 **🔑 Về `episode.id`:**
 - Nếu là link `.m3u8`/`.mp4` trực tiếp → App phát luôn, KHÔNG gọi `parseDetailResponse`
-- Nếu là slug/URL khác → App gọi `getUrlDetail(episode.id)` → fetch → `parseDetailResponse(html)`
+- Nếu là slug/URL khác → App gọi `getUrlDetail(episode.id)` → fetch → `parseDetailResponse(html, apiUrl)`
+- Muốn mang thêm token/key sang bước sau → ghép `"|data:" + token` vào `id` (xem [⚡ Quy Ước Dấu `|`](#-quy-ước-dấu--pipe--header-hay-data-của-plugin))
+
+**🔑 Về `episode.slug`:** Bắt buộc **DUY NHẤT** cho từng tập (`tap-1`, `tap-2`, `720p`…). Cơ chế Preload của App dùng `slug` để xác định tập hiện tại — nếu mọi tập đều `"slug": "full"`, App luôn tưởng bạn đang ở Tập 1 và preload nhầm Tập 2.
 
 ---
 
@@ -981,17 +1085,29 @@ Do engine QuickJS trong App chạy độc lập từng phiên (stateless), các 
 
 #### **Giải pháp chuẩn:** Đính kèm dữ liệu/token/key vào thuộc tính `id` hoặc `slug`
 
-Muốn mang dữ liệu gì từ `parseListResponse()` sang `parseMovieDetail()` hay `parseDetailResponse()`, bạn nhúng thông tin đó vào `id` / `slug` của item.
+Muốn mang dữ liệu gì từ `parseListResponse()` sang `parseMovieDetail()` hay `parseDetailResponse()`, bạn nhúng thông tin đó vào `id` / `slug` của item, dùng cú pháp `|data:`.
 
-##### Ví dụ 1: Nối chuỗi bằng dấu `|` (Đơn giản, khuyến nghị)
+> ⚠️ **Luôn dùng tiền tố `data:`** — xem chương [⚡ Quy Ước Dấu `|`](#-quy-ước-dấu--pipe--header-hay-data-của-plugin). Không có tiền tố mà dữ liệu chứa dấu `=` thì App sẽ hiểu nhầm thành HTTP header và bạn mất dữ liệu.
+
+##### Ví dụ 1: Nối chuỗi bằng `|data:` (Đơn giản, khuyến nghị)
 ```javascript
+// Helper dùng chung: bóc phần data sau dấu |
+function getPipeData(raw) {
+    if (!raw) return "";
+    var i = raw.indexOf("|");
+    if (i < 0) return "";
+    var s = raw.substring(i + 1).replace(/^\s+/, "");
+    if (s.toLowerCase().indexOf("data:") === 0) s = s.substring(5);
+    return s;
+}
+
 // 1. Ở parseListResponse: Nối key vào id phim
-function parseListResponse(html) {
+function parseListResponse(html, apiUrl) {
     var secretKey = "ABC123XYZ";
     return JSON.stringify({
         "items": [
             {
-                "id": "phim-hanh-dong-1|" + secretKey, // Nối key vào id
+                "id": "phim-hanh-dong-1|data:" + secretKey, // ⭐ có tiền tố data:
                 "title": "Phim Hay 1"
             }
         ]
@@ -999,11 +1115,9 @@ function parseListResponse(html) {
 }
 
 // 2. Ở parseMovieDetail: Tách key ra dùng & truyền tiếp vào episode.id
-function parseMovieDetail(html) {
-    var rawId = "phim-hanh-dong-1|ABC123XYZ"; // slug/id nhận được
-    var parts = rawId.split("|");
-    var realSlug = parts[0];
-    var myKey = parts[1]; // => "ABC123XYZ"
+function parseMovieDetail(html, apiUrl) {
+    var myKey = getPipeData(apiUrl);        // => "ABC123XYZ"
+    var realSlug = apiUrl.split("|")[0];
 
     return JSON.stringify({
         "id": realSlug,
@@ -1012,7 +1126,8 @@ function parseMovieDetail(html) {
             "name": "Server 1",
             "episodes": [{
                 "name": "Tập 1",
-                "id": "tap-1|" + myKey // Truyền tiếp key vào id tập phim
+                "slug": "tap-1",                       // slug phải DUY NHẤT cho từng tập
+                "id": "tap-1|data:" + myKey            // Truyền tiếp key vào id tập phim
             }]
         }]
     });
@@ -1020,13 +1135,15 @@ function parseMovieDetail(html) {
 
 // 3. Ở parseDetailResponse: Lấy lại key dùng để bóc link stream
 function parseDetailResponse(html, episodeUrl) {
-    var myKey = episodeUrl.split("|")[1]; // => "ABC123XYZ"
+    var myKey = getPipeData(episodeUrl);    // => "ABC123XYZ"
     return JSON.stringify({
         "url": "https://server.com/stream?key=" + myKey,
         "isEmbed": false
     });
 }
 ```
+
+> 🔍 **App đã fetch URL nào?** Với `id = "https://site.com/tap-1|data:ABC123XYZ"`, App gửi request tới đúng `https://site.com/tap-1`. Phần `|data:ABC123XYZ` **không** đi lên server nhưng vẫn có trong `episodeUrl`.
 
 ##### Ví dụ 2: Mã hóa / Nén Dữ liệu LỚN hoặc Phức Tạp (Tránh vỡ cú pháp ID / URL)
 
@@ -1041,7 +1158,7 @@ Khi cần truyền Object chứa nhiều dữ liệu (Cookie, Token JWT, bối c
 
 ```javascript
 // 1. Ở parseListResponse: Mã hóa Object thành chuỗi URL safe đính vào ID
-function parseListResponse(html) {
+function parseListResponse(html, apiUrl) {
     var bigData = {
         token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
         session: "sess_9988776655",
@@ -1054,7 +1171,7 @@ function parseListResponse(html) {
     return JSON.stringify({
         "items": [
             {
-                "id": "phim-demo|" + encodedData,
+                "id": "phim-demo|data:" + encodedData,   // ⭐ tiền tố data:
                 "title": "Phim Demo"
             }
         ]
@@ -1064,10 +1181,10 @@ function parseListResponse(html) {
 // 2. Ở parseDetailResponse: Giải mã ngược lại thành Object
 function parseDetailResponse(html, episodeUrl) {
     var data = {};
-    if (episodeUrl && episodeUrl.indexOf("|") > -1) {
-        var encodedStr = episodeUrl.split("|")[1];
+    var raw = getPipeData(episodeUrl);   // helper ở Ví dụ 1, đã tự bỏ tiền tố "data:"
+    if (raw) {
         try {
-            data = JSON.parse(decodeURIComponent(encodedStr)); // Giải mã URL-encode lại thành Object
+            data = JSON.parse(decodeURIComponent(raw)); // Giải mã URL-encode lại thành Object
         } catch(e) {
             console.error("Lỗi parse data:", e);
         }
@@ -1163,6 +1280,52 @@ while ((match = regex.exec(html)) !== null) {
 ✅ `Array.map()`, `Array.filter()`, `Array.forEach()`
 ✅ `try {} catch(e) {}`
 ✅ `encodeURIComponent()`, `decodeURIComponent()`
+✅ `localStorage.getItem/setItem/removeItem`
+
+---
+
+## 🚑 Lỗi Thường Gặp & Cách Sửa
+
+### 1. `apiUrl` đúng nhưng `html` rỗng hoặc là `[]` / `{}`
+
+**Triệu chứng:**
+```
+[LOG] apiUrl: https://streamed.pk/api/stream/admin/abc|encodeData
+[LOG] html:   []
+```
+Nhưng mở `https://streamed.pk/api/stream/admin/abc` trên trình duyệt thì có dữ liệu.
+
+**Nguyên nhân:** phần sau `|` bị gửi lẫn lên server (bị mã hóa thành `%7C`), server trả về route không tồn tại.
+
+**Cách sửa:** thêm tiền tố `data:` → `.../abc|data:encodeData`. App sẽ fetch đúng `.../abc` và vẫn truyền `apiUrl` đầy đủ cho hàm parse.
+
+### 2. Dữ liệu sau `|` bị mất, App lại gắn thêm header lạ
+
+**Nguyên nhân:** data của bạn có dạng `key=value` (VD `|type=movie`) nên bị hiểu là HTTP header.
+
+**Cách sửa:** `|data:type=movie`.
+
+### 3. Đổi domain fallback xong bị 404
+
+**Nguyên nhân:** `baseUrl` có path (`https://a.com/wp`) còn domain fallback thì không.
+
+**Cách sửa:** App đã tự xử lý — chỉ cần khai `fallbackUrls` là các origin (`https://b.com`), App tự ghép lại path. Nếu vẫn sai, kiểm tra `baseUrl` có đúng phần path chung không.
+
+### 4. Domain tốt không bao giờ được dùng, App cứ bám domain hỏng
+
+**Nguyên nhân:** domain hỏng trả về trang Cloudflare/`Access denied` mà vẫn được coi là thắng cuộc đua rồi bị cache 10 phút.
+
+**Cách sửa:** App đã lọc các trang chặn phổ biến và response ngắn hơn 32 ký tự. Nếu API của bạn trả JSON ngắn (`[]`, `{"ok":1}`), hãy dùng endpoint có nội dung dài hơn để race. Người dùng có thể vào Quản lý Plugin đặt Base URL tùy chỉnh — lúc đó App bỏ qua race hoàn toàn.
+
+### 5. App vẫn dùng domain cũ sau khi đổi Base URL tùy chỉnh
+
+Đã được sửa: đổi/xóa Base URL tùy chỉnh sẽ **xóa cache domain ngay lập tức**, không phải chờ hết 10 phút.
+
+### 6. Preload chạy nhầm tập
+
+**Nguyên nhân:** mọi episode dùng chung một `slug` (VD `"full"`).
+
+**Cách sửa:** đặt `slug` duy nhất cho từng tập (`tap-1`, `tap-2`, `1080p`, `720p`…).
 
 ---
 
