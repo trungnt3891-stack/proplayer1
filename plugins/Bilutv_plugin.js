@@ -1,14 +1,17 @@
-// https://bilutv.asia
-BASEURL = "https://bilutv.asia";
+// =============================================================================
+// CONFIGURATION & METADATA
+// TỪ NAY VỀ SAU, NẾU WEB ĐỔI TÊN MIỀN, BẠN CHỈ CẦN SỬA DÒNG NÀY:
+// =============================================================================
+var BASEURL = "https://bilutv.asia"; // Sửa tên miền web tại đây
 
 function getManifest() {
     return JSON.stringify({
         "id": "bilutv",
         "name": "Nguồn Bilutv",
-        "description": "Trang xem phim siêu hay.",
-        "version": "1.4",
-        "BASEURL": "https://bilutv.asia",
-        "iconUrl": "https://bilutv.asia/img/bilutvlogo-ngang.jpg",
+        "description": "Trang xem phim siêu hay. Đổi tên miền dễ dàng.",
+        "version": "1.5",
+        "baseUrl": BASEURL,
+        "iconUrl": BASEURL + "/img/bilutvlogo-ngang.jpg",
         "isEnabled": true,
         "type": "MOVIE",
         "playerType": "auto"
@@ -23,13 +26,16 @@ function log(msg) {
     }
 }
 
-// https://bilutv.asia/danh-sach/phim-moi?page=2
+// =============================================================================
+// MENU & TRANG CHỦ
+// =============================================================================
 function getHomeSections() {
+    // ĐÃ SỬA: Đưa "Phim Mới" lên dòng đầu tiên để làm thư mục chính ngoài trang chủ
     var listurl = `
-/the-loai/phim-18@@Phim 18+@@false
+/danh-sach/phim-moi@@Phim Mới@@true
 /danh-sach/phim-bo@@Phim Bộ@@false
 /danh-sach/phim-le@@Phim Lẻ@@false
-/danh-sach/phim-moi@@Phim Mới@@true
+/the-loai/phim-18@@Phim 18+@@false
 `;
     var menulist = buildMenu(listurl);
     return JSON.stringify(menulist);
@@ -41,7 +47,6 @@ function getPrimaryCategories() {
     return JSON.stringify(menulist);
 }
 
-// ĐÃ SỬA: Lỗi cú pháp khai báo biến trong JSON.stringify
 function getFilterConfig() {
     var listurl = getLISTmenu();
     var menulist = buildMenu(listurl);
@@ -53,7 +58,6 @@ function getFilterConfig() {
 // =============================================================================
 // URL GENERATION
 // =============================================================================
-
 function getUrlList(slug, filtersJson) {
     try {
         // 1. Kiểm tra nếu slug là link tuyệt đối (chứa http) và không có bộ lọc thì trả về luôn
@@ -110,17 +114,7 @@ function getUrlList(slug, filtersJson) {
         return fallback.replace(/([^:]\/)\/+/g, "$1");
     }
 }
-// https://bilutv.asia/danh-sach/phim-moi?page=2
-// https://bilutv.asia/danh-sach/phim-le?page=7
-// https://bilutv.asia/?search=girl&page=2
 
-//var BASEURL = "https://bilutv.asia";
-//var BASEAPI = "https://k8s.onflixcdn.com/api";
-// JSON lỗi cú pháp (thiếu nháy kép) của bạn
-//var filtersJson = '{page:11,category:[{"slug":"/movies?sort=year_desc&limit=24&category=18-plus","name":"Thiếu niên"}]}'; 
-//var filtersJson = '{page:22}';
-//console.log(getUrlList("https://bilutv.asia/?search=girl", filtersJson));
-//getUrlSearch("naruto", filtersJson)
 function getUrlSearch(keyword, filtersJson) {
     return BASEURL + "/?search=" + encodeURIComponent(keyword);
 }
@@ -144,7 +138,7 @@ function getUrlYears() {
 }
 
 // =============================================================================
-// PARSERS
+// PARSERS (GIỮ NGUYÊN 100% LOGIC CỦA BẠN)
 // =============================================================================
 function parseListResponse(html, $url) {
     try {
@@ -197,10 +191,6 @@ function parseListResponse(html, $url) {
         });
     }
 }
-//var BASEURL = "https://onflix.lat";
-//var BASEAPI = "https://k8s.onflixcdn.com/api";
-//var htmlsource = $("#labHtmlEditorWrap #labHtmlTreeContainer .lab-dom-pure-text").html();
-//JSON.parse(parseListResponse(outerHTML, BASEURL));
 
 function parseSearchResponse(html) {
     return parseListResponse(html);
@@ -347,11 +337,6 @@ function parseMovieDetail(html, url) {
     }
 }
 
-//BASEURL = "https://phimnganhdc.com";
-//var html = outerHTML;
-//var $url = "https://phimnganhdc.com/hot-babe-remy-cheats-with-bbc/";
-//JSON.parse(parseMovieDetail(outerHTML,$url));
-
 function parseDetailResponse(html, url) {
     try {
         var activePage = "";
@@ -422,11 +407,6 @@ function parseDetailResponse(html, url) {
     }
 }
 
-//BASEURL = "https://phimnganhdc.com";
-//var html = outerHTML;
-//var $url = "https://phimnganhdc.com/hot-babe-remy-cheats-with-bbc/";
-//JSON.parse(parseDetailResponse(html, url))
-
 function parseEmbedResponse(html, url) {
     try {
         if (url.toLowerCase().includes(".m3u8")) {
@@ -470,7 +450,7 @@ function parseEmbedResponse(html, url) {
                 checkepi = titleText.trim() + " - Tập " + curent;
             }
             var customJs = textJS(typevideo, checkepi, url, streamUrl);
-            // "Custom-Js": customJs.trim()
+            
             if ($type == "m3u8") {
                 return JSON.stringify({
                     "url": streamUrl,
@@ -489,12 +469,9 @@ function parseEmbedResponse(html, url) {
                         "Referer": BASEURL,
                         "Origin": BASEURL,
                         "User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-                        // Đánh lừa thuật toán Client Hints của tường lửa
                         "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
                         "Sec-Ch-Ua-Mobile": "?1",
                         "Sec-Ch-Ua-Platform": '"Android"',
-
-                        // Khai báo kiểu dữ liệu được chấp nhận giống như trình duyệt thật
                         "Accept": "*/*",
                         "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
                         "X-Requested-With": "com.android.chrome",
@@ -515,17 +492,6 @@ function parseEmbedResponse(html, url) {
         });
     }
 }
-/*
-var html = outerHTML;
-var url = "https://bilutv.asia/phim/kinh-thanh-ky-tham/tap-tap-01-398150?tapplay=12&type=m3u8";
-JSON.parse(parseEmbedResponse(html, url))
-function textJS(typevideo, checkepi){
-    return `
-    typevideo = '${typevideo}';
-    checkepi = '${checkepi}';
-    `
-}
-*/
 
 function sortEpisodesByName(data) {
     data.forEach(server => {
@@ -548,7 +514,6 @@ function sortEpisodesByName(data) {
 }
 
 function textJS($links, checkepi, url, stream) {
-    // Sử dụng biến $url từ tham số truyền vào thay vì ghi cứng link
     return `
 LINKVIDEO = ${JSON.stringify($links)};
 CHECKEPI = ${JSON.stringify(checkepi)};
@@ -801,11 +766,9 @@ function runVideo(){
     };
 
     // ─── HÀM GIỮ LẠI THẺ VIDEO GỐC ĐỂ CHỐNG ĐEN MÀN HÌNH ───
-    // ─── ĐOẠN CODE ĐÃ ĐƯỢC CHỈNH SỬA ───
     function buildVideoWithOriginal(video, stream1, stream2, playlistData) {
         video.id = 'main-video';
         
-        // Đã thay object-fit: contain thành cover (hoặc fill tùy bạn) và thêm outline:none
         video.style.cssText = 'width:100%;height:100%;object-fit:contain;cursor:pointer;background:#000;outline:none;border:none;box-shadow:none;';
 
         video.controls = false;
@@ -813,7 +776,6 @@ function runVideo(){
         var container = document.createElement('div');
         container.id = 'custom-video-player';
         
-        // Thêm outline:none và box-shadow:none cho container để triệt tiêu hoàn toàn viền vàng
         container.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999999;font-family:Segoe UI,Roboto,sans-serif;user-select:none;-webkit-user-select:none;outline:none;border:none;box-shadow:none;';
 
         var spinner = document.createElement('div');
@@ -938,7 +900,6 @@ function runVideo(){
             }
         }
 
-        // CHÌA KHÓA: "Bốc" thẻ video cũ bỏ vào Container mới mà KHÔNG LÀM MẤT STREAM
         container.appendChild(video);
         container.appendChild(spinner);
         container.appendChild(bigPlayBtn);
@@ -946,7 +907,6 @@ function runVideo(){
         container.appendChild(controls);
         container.appendChild(playlistPanel);
 
-        // Clear toàn bộ HTML cũ của trang web phim để xóa sạch khung quảng cáo rác
         var htmlTAG = document.getElementsByTagName("html")[0];
         htmlTAG.innerHTML = '';
         document.body = document.createElement('body');
@@ -1049,7 +1009,6 @@ function runVideo(){
             seekOverlay._timer = setTimeout(function() { seekOverlay.style.opacity = '0'; }, 800);
         }
 
-        // Sửa lỗi hiển thị giây/phút bị NaN thời gian đầu load video
         function formatTime(sec) {
             if (!sec || isNaN(sec)) return '0:00';
             var m = Math.floor(sec / 60);
@@ -1144,18 +1103,16 @@ function runVideo(){
         video.addEventListener('ended', function() { btnPlay.textContent = '▶'; bigPlayBtn.style.display = 'flex'; isPlaying = false; clearSavedPosition(); });
         
         video.addEventListener('click', function(e) {
-			    e.stopPropagation();
-			    if (isDraggingVideo) { isDraggingVideo = false; return; }
-			    
-			    // Tính toán trực tiếp dựa trên độ rộng hiển thị của viewport để click chính xác hơn
-			    var width = window.innerWidth;
-			    var x = e.clientX;
-			    
-			    if (x < width * 0.3) seekVideo(-10);
-			    else if (x > width * 0.7) seekVideo(10);
-			    else togglePlay();
-			});
-
+            e.stopPropagation();
+            if (isDraggingVideo) { isDraggingVideo = false; return; }
+            
+            var width = window.innerWidth;
+            var x = e.clientX;
+            
+            if (x < width * 0.3) seekVideo(-10);
+            else if (x > width * 0.7) seekVideo(10);
+            else togglePlay();
+        });
 
         video.addEventListener('volumechange', function() { btnMute.textContent = video.muted || video.volume === 0 ? '🔇' : '🔊'; });
         btnPlay.addEventListener('click', function(e) { e.stopPropagation(); togglePlay(); });
@@ -1186,7 +1143,6 @@ function runVideo(){
         container.addEventListener('click', showControls);
         bigPlayBtn.addEventListener('click', function(e) { e.stopPropagation(); togglePlay(); });
 
-        // LẮP BỘ PHÍM TẮT ĐIỀU KHIỂN XỊN
         document.addEventListener('keydown', function(e) {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
             showControls();
@@ -1208,7 +1164,6 @@ function runVideo(){
             }
         });
 
-        // BỘ CẢM ỨNG ĐIỀU HƯỚNG SẠCH QUẢNG CÁO VUỐT CHẠY
         var touchStartX = 0, touchStartY = 0, isSwiping = false;
         container.addEventListener('touchstart', function(e) { touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY; isSwiping = false; }, { passive: true });
         container.addEventListener('touchmove', function(e) {
@@ -1231,7 +1186,6 @@ function runVideo(){
             }
         }, { passive: true });
 
-        // TUA VÙNG CHUỘT KÉO (REGION MOUSE SELECT) KHÔNG LO QUẢNG CÁO
         var regionStartX = 0, regionOverlay = null;
         video.addEventListener('mousedown', function(e) {
             if (e.button !== 0) return;
@@ -1262,7 +1216,6 @@ function runVideo(){
             regionOverlay = null;
         });
 
-        // BẮT ĐẦU PHÁT TRÊN THẺ GỐC (GIỮ NGUYÊN TRẠNG THÁI LUỒNG BLOB)
         if (video.paused) {
             video.play().then(function() {
                 isPlaying = true; btnPlay.textContent = '⏸';
@@ -1281,7 +1234,6 @@ function runVideo(){
         renderPlaylist();
         showControls();
 
-        // PHƠI BÀY API LÀM VIỆC (GIỮ NGUYÊN)
         window.VideoPlayerAPI = {
             addServer: function(item) { if (!item || !item.src) return; playlistState.servers.push(item); renderPlaylist(); },
             addServerAt: function(index, item) { if (!item || !item.src) return; playlistState.servers.splice(index, 0, item); renderPlaylist(); },
@@ -1305,11 +1257,7 @@ function runVideo(){
     }
 }
 function checkResume() {
-	// SỬA: Lấy động giá trị từ tham số $url truyền vào hàm textJS bên ngoài
-	// Thay thế đoạn checkAndClick cũ ở cuối script bằng logic này:
-	// Thay thế đoạn initVideoFlow cũ ở cuối script bằng logic tối ưu này:
 	(function initVideoFlow() {
-		// Bước 1: Kiểm tra nhanh lần đầu tiên xem có video luôn không
 		if (document.querySelector('video')) {
 			console.log("🎯 Tìm thấy thẻ video ngay lập tức. Khởi chạy luôn!");
 			runVideo();
@@ -1321,112 +1269,72 @@ function checkResume() {
 		const maxSeconds = 20;
 		const checkInterval = setInterval(function() {
 			secondsPassed++;
-			
-			// Truy vấn cả 2 phần tử ở mỗi chu kỳ quét
 			const videoElement = document.querySelector('video');
 			const skipButton = document.getElementById("resumeBtn");
-			
-			// ĐIỀU KIỆN 1: Nếu tự nhiên tìm thấy thẻ video xuất hiện
 			if (videoElement) {
-				clearInterval(
-					checkInterval); // Xóa lặp ngay lập tức để tránh lỗi click ngầm về sau
-				console.log(
-					"✓ Tìm thấy thẻ video xuất hiện trong vòng lặp! Khởi chạy ngay."
-				);
+				clearInterval(checkInterval); 
+				console.log("✓ Tìm thấy thẻ video xuất hiện trong vòng lặp! Khởi chạy ngay.");
 				runVideo();
 				return;
 			}
-			
-			// ĐIỀU KIỆN 2: Nếu tìm thấy nút resumeBtn trước
 			if (skipButton) {
-				// Kiểm tra ẩn/hiển thị bằng CSS thực tế
 				const style = window.getComputedStyle(skipButton);
 				if (style.display !== 'none' && style.visibility !== 'hidden') {
-					
-					clearInterval(
-						checkInterval); // Xóa lặp ngay lập tức để an toàn cho DOM mới
-					console.log(
-						"🎯 Đã tìm thấy nút resumeBtn hiển thị! Click và đợi 2s...");
-					
-					skipButton.click(); // Click vào nút
-					
+					clearInterval(checkInterval); 
+					console.log("🎯 Đã tìm thấy nút resumeBtn hiển thị! Click và đợi 2s...");
+					skipButton.click(); 
 					setTimeout(function() {
-						runVideo(); // Chạy runVideo sau khi click 2 giây
+						runVideo(); 
 					}, 2000);
 					return;
 				}
 			}
-			
-			// ĐIỀU KIỆN 3: Đã quét hết 20 giây mà cả video lẫn nút đều "bặt vô âm tín"
 			if (secondsPassed >= maxSeconds) {
-				clearInterval(checkInterval); // Dừng vòng lặp hẳn
+				clearInterval(checkInterval); 
 				console.log("⏱ Đã hết 20 giây quét mà không tìm thấy gì.");
-				
-				// Hiển thị Toast thông báo yêu cầu người dùng tương tác trong 20s
-				showToast(
-					"⚠️ Vui lòng nhấn vào màn hình hoặc nút Xem Tiếp để tiếp tục phát phim!",
-					20000,
-					true,
-					false
-				);
-				
-				// Ép chạy hàm runVideo() luôn sau đó để dựng giao diện player custom lên
+				showToast("⚠️ Vui lòng nhấn vào màn hình hoặc nút Xem Tiếp để tiếp tục phát phim!",20000,true,false);
 				runVideo();
 			}
-		}, 1000); // Quét lại sau mỗi 1 giây (1000ms)
+		}, 1000); 
 	})();
 }
 setTimeout(checkResume, 1000);
 
-
-
-
 function injectScriptAfterLoad(scriptUrl) {
     function doFetchAndInject() {
         console.log('⏳ Đang tiến hành fetch code từ:', scriptUrl);
-        
         fetch(SCRIPTURL)
             .then(response => {
                 if (!response.ok) {
                     throw new Error('Mã phản hồi từ Server không tốt: ' + response.status);
                 }
-                return response.text(); // Lấy toàn bộ mã nguồn dưới dạng chuỗi chữ
+                return response.text(); 
             })
             .then(codeText => {
-                // 1. Tạo một thẻ script trống mới hoàn toàn bằng JS
                 const scriptElement = document.createElement('script');
                 scriptElement.type = 'text/javascript';
-                
-                // 2. Đổ thẳng nội dung code dạng chữ vào trong thẻ script vừa tạo
                 scriptElement.textContent = codeText;
-                
-                // 3. Nhúng (Inject) thẻ script này vào vị trí cuối cùng của thẻ body
                 document.body.appendChild(scriptElement);
-               // showToast('🎯 Đã fetch và nhúng thành công script vào sau body,!',5000);
-								if (CHECKEPI == "true") {
-									showToast('Tập phim bạn chọn chưa có hoặc đã lỗi. Đã tự động đưa bạn về tập 1!', 60000, true);
-								}
-								else{
-									showToast(CHECKEPI, 30000, true,true);
-								}
+                if (CHECKEPI == "true") {
+                    showToast('Tập phim bạn chọn chưa có hoặc đã lỗi. Đã tự động đưa bạn về tập 1!', 60000, true);
+                }
+                else{
+                    showToast(CHECKEPI, 30000, true,true);
+                }
             })
             .catch(error => {
                 console.error('❌ Lỗi không thể fetch hoặc nhúng script:', error);
             });
     }
     
-    // Kiểm tra trạng thái tải của trang web
     if (document.readyState !== 'loading') {
-        // Nếu trang web đã tải xong cấu trúc DOM cơ bản, thực hiện ngay lập tức
         doFetchAndInject();
     } else {
-        // Nếu trang web vẫn đang load thô, đợi sự kiện DOMContentLoaded kích hoạt rồi chạy
         document.addEventListener('DOMContentLoaded', doFetchAndInject);
     }
 }
 
 function initCustomVideoFix() {
-    // SỬA: Lấy động giá trị từ tham số $url truyền vào hàm textJS bên ngoài
     if (SCRIPTURL && SCRIPTURL !== "undefined") {
         injectScriptAfterLoad(SCRIPTURL);
     }
@@ -1437,10 +1345,12 @@ if (document.readyState === 'loading') {
 } else {
 	initCustomVideoFix();
 }
-
 `;
 }
 
+// =============================================================================
+// THƯ VIỆN BỔ TRỢ (DOM & MENU)
+// =============================================================================
 function parseCategoriesResponse(apiResponseJson) {
     var listurl = getLISTmenu();
     var menulist = buildMenu(listurl);
@@ -1449,7 +1359,7 @@ function parseCategoriesResponse(apiResponseJson) {
 
 function parseCountriesResponse(html) { return "[]"; }
 function parseYearsResponse(html) { return "[]"; }
-// https://k8s.onflixcdn.com/api/movies?sort=year_desc&limit=24&category=chien-tranh
+
 function getLISTmenu() {
     return `
 /the-loai/short-drama@@Short Drama
