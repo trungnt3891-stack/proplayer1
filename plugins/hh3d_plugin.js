@@ -6,7 +6,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "yanhh3d",
         "name": "YanHH3D",
-        "version": "4.1.0", // Bản cập nhật: Chỉ giữ lại Vietsub, bỏ Thuyết Minh
+        "version": "4.2.0", // Bản cập nhật: Giữ nguyên cấu trúc, bỏ Thuyết Minh, giữ chất lượng cao
         "baseUrl": "https://yanhh3d.ac", 
         "iconUrl": "https://yanhh3d.ac/storage/settings/August2024/YOoAwtlobLbwKhiFwRZv.png",
         "isEnabled": true,
@@ -149,7 +149,7 @@ function parseListResponse(html) {
                         title: title,
                         posterUrl: img,
                         backdropUrl: img,
-                        quality: "HD",
+                        quality: "4K / HD",
                         episode_current: episode,
                         lang: "Vietsub",
                         year: 0
@@ -205,7 +205,7 @@ function parseSearchResponse(html) {
                         title: title,
                         posterUrl: img,
                         backdropUrl: img,
-                        quality: "HD",
+                        quality: "4K / HD",
                         episode_current: episode,
                         lang: "Vietsub",
                         year: 0
@@ -261,6 +261,7 @@ function parseMovieDetail(html) {
         }
 
         var vietsubEpisodes = [];
+        var highQualityEpisodes = []; // Giữ lại cấu trúc chất lượng cao (4K/HD)
 
         if (baseSlug && maxEp > 0) {
             for (var i = 1; i <= maxEp; i++) {
@@ -270,12 +271,21 @@ function parseMovieDetail(html) {
                     name: epName,
                     slug: "sever2/" + baseSlug + "/tap-" + i
                 });
+                highQualityEpisodes.push({
+                    id: baseSlug + "/tap-" + i,
+                    name: epName + " (4K Cao Cấp)",
+                    slug: baseSlug + "/tap-" + i
+                });
             }
         } 
 
         var servers = [];
+        // Ưu tiên server chất lượng cao lên đầu, sau đó đến Vietsub chuẩn, loại bỏ hoàn toàn Thuyết minh
+        if (highQualityEpisodes.length > 0) {
+            servers.push({ name: "Bản 4K / Chất Lượng Cao", episodes: highQualityEpisodes });
+        }
         if (vietsubEpisodes.length > 0) {
-            servers.push({ name: "Vietsub", episodes: vietsubEpisodes });
+            servers.push({ name: "Vietsub Tiêu Chuẩn", episodes: vietsubEpisodes });
         }
         
         if (servers.length === 0) {
@@ -289,7 +299,7 @@ function parseMovieDetail(html) {
             backdropUrl: poster,
             description: desc,
             servers: servers,
-            quality: "HD",
+            quality: "4K",
             lang: "Vietsub",
             year: 0,
             rating: 0,
