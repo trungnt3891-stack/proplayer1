@@ -8,7 +8,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "yanhh3d",
         "name": "YanHH3D",
-        "version": "4.3.0",
+        "version": "4.3.1",
         "baseUrl": BASEURL, 
         "iconUrl": BASEURL + "/storage/settings/August2024/YOoAwtlobLbwKhiFwRZv.png",
         "isEnabled": true,
@@ -272,9 +272,10 @@ function parseMovieDetail(html) {
                     name: epName,
                     slug: "sever2/" + baseSlug + "/tap-" + i
                 });
+                // Đã xóa chữ (4K Cao Cấp) ở tên tập theo yêu cầu của bạn
                 highQualityEpisodes.push({
                     id: baseSlug + "/tap-" + i,
-                    name: epName + " (4K Cao Cấp)",
+                    name: epName,
                     slug: baseSlug + "/tap-" + i
                 });
             }
@@ -282,7 +283,7 @@ function parseMovieDetail(html) {
 
         var servers = [];
         if (highQualityEpisodes.length > 0) {
-            servers.push({ name: "Bản 4K / Chất Lượng Cao", episodes: highQualityEpisodes });
+            servers.push({ name: "Bản 4K (Chất lượng cao)", episodes: highQualityEpisodes });
         }
         if (vietsubEpisodes.length > 0) {
             servers.push({ name: "Vietsub Tiêu Chuẩn", episodes: vietsubEpisodes });
