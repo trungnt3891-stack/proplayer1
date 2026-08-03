@@ -7,12 +7,12 @@ function getManifest() {
     return JSON.stringify({
         "id": "phimhdcs_short",
         "name": "PhimHDCS Ngắn",
-        "description": "Chuyên Phim Ngắn: Auto xoay dọc, Giao diện Webview sạch quảng cáo.",
-        "version": "2.0.0",
+        "description": "Chuyên Phim Ngắn: Chọn tập dễ dàng, Webview ẩn quảng cáo, Bìa siêu nét.",
+        "version": "2.1.0",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/favicon.ico",
         "isEnabled": true,
-        "type": "shortfilm",      // [KÍCH HOẠT CHẾ ĐỘ PHIM NGẮN]
+        "type": "shortfilm",      // [KÍCH HOẠT CHẾ ĐỘ PHIM NGẮN TIKTOK]
         "layoutType": "VERTICAL", // [ÉP AUTO XOAY DỌC MÀN HÌNH]
         "playerType": "webview"   // [CHUYỂN SANG WEBVIEW ĐỂ ẨN RÁC]
     });
@@ -95,7 +95,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// HTML PARSERS (GIỮ NGUYÊN DOM _$ CỦA BẠN ĐỂ LOAD BÌA NÉT CĂNG)
+// HTML PARSERS (GIỮ NGUYÊN BỘ LỌC DOM _$ CỦA BẠN ĐỂ LOAD BÌA NÉT CĂNG)
 // =============================================================================
 
 function parseListResponse(htmlContent) {
@@ -174,8 +174,7 @@ function parseSearchResponse(htmlContent) {
 }
 
 // -----------------------------------------------------------------------------
-// [MỚI] PARSE MOVIE DETAIL DÀNH RIÊNG CHO WEBVIEW
-// Chỉ trả về 1 nút duy nhất, Webview sẽ đảm nhận phần lướt và hiển thị tập
+// [ĐÃ SỬA] KHÔI PHỤC TÍNH NĂNG BÓC TÁCH DANH SÁCH TẬP 
 // -----------------------------------------------------------------------------
 function parseMovieDetail(htmlContent, url) {
     try {
@@ -195,20 +194,52 @@ function parseMovieDetail(htmlContent, url) {
         var totalEpisodes = _$(htmlContent).find("dt:content('Số tập')").next().text().trim();
         var statusInfo = _$(htmlContent).find("dt:content('Tình trạng')").next().text().trim();
 
-        // TÌM LINK XEM PHIM THẬT SỰ (NÚT XEM NGAY)
-        var watchLink = url;
-        var btnPlayMatch = htmlContent.match(/class=["'][^"']*btn-see[^"']*["'][^>]*href=["']([^"']+)["']/i);
-        if (btnPlayMatch) watchLink = btnPlayMatch[1];
-        if (watchLink.indexOf('http') === -1) watchLink = BASEURL + (watchLink.startsWith('/') ? '' : '/') + watchLink;
+        var servers = [];
+        var serverPattern = /<div[^>]*class="server-episode-block"[^>]*>[\s\S]*?Danh sách\s*(?:Sever)?\s*([^:]+):[\s\S]*?<div[^>]*class="list-episode[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
+        var match;
 
-        var servers = [{
-            name: "Lướt Chuyển Tập Tự Động",
-            episodes: [{
-                id: watchLink,
-                name: "Bấm Vào Đây Để Xem Phim",
-                slug: "webview-player"
-            }]
-        }];
+        // BÓC TÁCH TOÀN BỘ DANH SÁCH TẬP PHIM TỪ WEB ĐỂ ĐƯA VÀO APP
+        while ((match = serverPattern.exec(htmlContent)) !== null) {
+            var serverName = match[1].trim().replace(/^Server\s+/i, '').replace(/^z/i, '').replace(/\s*#\d+$/, '').trim();
+            var episodesHtml = match[2];
+            var episodes = [];
+            
+            var epPattern = /<a\s+href="([^"]+)"[\s\S]*?title="([^"]+)"/gi;
+            var epMatch;
+            while ((epMatch = epPattern.exec(episodesHtml)) !== null) {
+                var epUrl = epMatch[1];
+                if (epUrl.indexOf('http') === -1) epUrl = BASEURL + (epUrl.startsWith('/') ? '' : '/') + epUrl;
+
+                episodes.push({
+                    id: epUrl, // ID tập phim sẽ truyền sang parseDetailResponse khi user nhấn chọn
+                    name: epMatch[2].trim().replace(/Phim /i, ""),
+                    slug: epUrl
+                });
+            }
+            if (episodes.length > 0) {
+                var firstMatch = /Tập\s+(\d+)/i.exec(episodes[0].name);
+                var lastMatch = /Tập\s+(\d+)/i.exec(episodes[episodes.length - 1].name);
+                if (firstMatch && lastMatch && parseInt(firstMatch[1]) > parseInt(lastMatch[1])) {
+                    episodes.reverse();
+                } else if (!firstMatch) {
+                    episodes.reverse(); 
+                }
+                servers.push({ name: serverName, episodes: episodes });
+            }
+        }
+        
+        // Cứu cánh nếu web không hiện tập
+        if (servers.length === 0) {
+            var watchLink = url;
+            var btnPlayMatch = htmlContent.match(/class=["'][^"']*btn-see[^"']*["'][^>]*href=["']([^"']+)["']/i);
+            if (btnPlayMatch) watchLink = btnPlayMatch[1];
+            if (watchLink.indexOf('http') === -1) watchLink = BASEURL + (watchLink.startsWith('/') ? '' : '/') + watchLink;
+
+            servers.push({
+                name: "Server Mặc Định",
+                episodes: [{ id: watchLink, name: "Tập 1", slug: "tap-1" }]
+            });
+        }
 
         var fullDesc = description;
         if (totalEpisodes) fullDesc += "\nSố tập: " + totalEpisodes;
@@ -223,7 +254,7 @@ function parseMovieDetail(htmlContent, url) {
             year: 2026,
             rating: 8.5,
             quality: "HD",
-            servers: servers,
+            servers: servers, // Trả về danh sách tập cho App
             episode_current: statusInfo || "Full",
             lang: "Vietsub / TM",
             category: "Phim Ngắn"
@@ -241,13 +272,12 @@ function parseDetailResponse(htmlContent, pageUrl) {
         var killAdsCssJs = `
             (function() {
                 var style = document.createElement('style');
-                // Ép ẩn header, footer, sidebar, ads, comment, rác...
-                style.innerHTML = 'header, #header, nav, footer, #footer, .right-content, .sidebar, .comments, .box-rating, .box-comment, .film-info, .breadcrumb, .tags, [class*="ad-"], [id*="ad-"], .popup, .modal, .google-auto-placed, iframe[src*="ads"], .bottom-nav, .navigation, #catfish, #catfish_content, #hide_catfish, .alert { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } ' +
+                // Ép ẩn header, footer, sidebar, ads, comment, rác
+                // ẨN LUÔN LIST TẬP TRONG WEB (vì App đã tự hiển thị để chọn)
+                style.innerHTML = 'header, #header, nav, footer, #footer, .right-content, .sidebar, .comments, .box-rating, .box-comment, .film-info, .breadcrumb, .tags, [class*="ad-"], [id*="ad-"], .popup, .modal, .google-auto-placed, iframe[src*="ads"], .bottom-nav, .navigation, #catfish, #catfish_content, #hide_catfish, .alert, .server-episode-block, .list-episode { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } ' +
                 'body, html { margin: 0 !important; padding: 0 !important; background: #000 !important; } ' +
                 '.main-content, #content, .container, .left-content, .block-wrapper { width: 100% !important; max-width: 100% !important; padding: 0 !important; margin: 0 !important; border: none !important; box-shadow: none !important; background: #000 !important; } ' +
-                '.player-wrapper, #player { width: 100vw !important; margin-top: 0 !important; }' +
-                '.server-episode-block { margin-top: 10px !important; padding: 10px !important; }' +
-                '.list-episode { max-height: 40vh !important; overflow-y: auto !important; }';
+                '.player-wrapper, #player { width: 100vw !important; margin-top: 0 !important; }';
                 document.head.appendChild(style);
 
                 // Tự động tắt nút Đóng quảng cáo hoặc Popup bay lơ lửng
@@ -262,6 +292,7 @@ function parseDetailResponse(htmlContent, pageUrl) {
 
         var fixedScript = killAdsCssJs.replace(/\r/g, "").replace(/\n/g, " ").replace(/\t/g, "  ").trim();
 
+        // Trả về url của tập phim mà user chọn. Webview sẽ load trang đó với CSS ẩn rác.
         return JSON.stringify({
             "url": pageUrl,
             "isEmbed": true, // BẮT BUỘC: Ép App mở Webview để tự do lướt tập
