@@ -65,13 +65,6 @@
       "iconUrl": "https://phimhdcss.com/favicon.ico"
     },
     {
-      "id": "Netshort",
-      "name": "Netshort Phim",
-      "version": "1.7.6",
-      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/nets_plugin.js",
-      "iconUrl": "https://netshort.com/_next/static/media/logo-text.11ea32da.png"
-    },
-    {
       "id": "otruyen",
       "name": "OTruyen",
       "version": "1.0.2",
