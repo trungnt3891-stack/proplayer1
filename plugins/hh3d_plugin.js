@@ -1,16 +1,17 @@
 // =============================================================================
-// CẤU HÌNH DOMAIN & METADATA (CHỈ CẦN SỬA TÊN MIỀN Ở ĐÂY KHI WEB CÓ UPDATE)
+// CONFIGURATION & METADATA
 // =============================================================================
-var BASE_DOMAIN = "yanhh3d.love";
-var BASEURL = "https://" + BASE_DOMAIN;
+
+// CHỈ CẦN THAY ĐỔI TÊN MIỀN Ở ĐÂY NẾU WEB ĐỔI ĐỊA CHỈ MỚI
+var DOMAIN = "https://yanhh3d.love"; 
 
 function getManifest() {
     return JSON.stringify({
         "id": "yanhh3d",
         "name": "YanHH3D",
-        "version": "4.3.1",
-        "baseUrl": BASEURL, 
-        "iconUrl": BASEURL + "/storage/settings/August2024/YOoAwtlobLbwKhiFwRZv.png",
+        "version": "4.0.1", // Bản cập nhật quy chuẩn hóa thay đổi Domain
+        "baseUrl": DOMAIN, 
+        "iconUrl": DOMAIN + "/storage/settings/August2024/YOoAwtlobLbwKhiFwRZv.png",
         "isEnabled": true,
         "isAdult": false,
         "type": "MOVIE",
@@ -49,42 +50,44 @@ function getPrimaryCategories() {
 function getFilterConfig() { return JSON.stringify({}); }
 
 // =============================================================================
-// URL GENERATION (SỬ DỤNG BIẾN DOMAIN ĐỘNG)
+// URL GENERATION
 // =============================================================================
 
 function getUrlList(slug, filtersJson) {
     var filters = JSON.parse(filtersJson || "{}");
     var page = filters.page || 1;
+    var baseUrl = DOMAIN;
     
     if (!slug || slug === 'home') {
-        if (page === 1) return BASEURL + "/";
-        return BASEURL + "/page/" + page;
+        if (page === 1) return baseUrl + "/";
+        return baseUrl + "/page/" + page;
     }
     
     slug = slug.replace(/\.html$/i, "");
     if (page === 1) {
-        return BASEURL + "/" + slug;
+        return baseUrl + "/" + slug;
     } else {
-        return BASEURL + "/" + slug + "/page/" + page;
+        return baseUrl + "/" + slug + "/page/" + page;
     }
 }
 
+// ĐÃ FIX 100% DỰA TRÊN HTML: Web sử dụng /search?keysearch=...
 function getUrlSearch(keyword, filtersJson) {
     var filters = JSON.parse(filtersJson || "{}");
     var page = filters.page || 1;
     var cleanKeyword = encodeURIComponent(keyword.trim());
     
     if (page === 1) {
-        return BASEURL + "/search?keysearch=" + cleanKeyword;
+        return DOMAIN + "/search?keysearch=" + cleanKeyword;
     } else {
-        return BASEURL + "/search?keysearch=" + cleanKeyword + "&page=" + page;
+        return DOMAIN + "/search?keysearch=" + cleanKeyword + "&page=" + page;
     }
 }
 
 function getUrlDetail(slug) {
     if (!slug) return "";
     if (slug.indexOf("http") === 0) return slug;
-    return BASEURL + "/" + slug.replace(/^\//, "");
+    return DOMAIN + "/" + slug.replace(/^\//, "");
 }
 
 function getUrlCategories() { return ""; }
@@ -107,18 +110,22 @@ var PluginUtils = {
     }
 };
 
+// ĐÃ CẬP NHẬT: Quét chính xác class hiển thị của YanHH3D (flw-item, item-top, swiper-slide)
 function parseListResponse(html) {
     try {
         var movies = [];
         var seen = {};
         var allBlocks = [];
 
+        // 1. Cắt lấy Phim ở Slider ngang trên cùng (nếu có)
         var swiperBlocks = html.split('class="swiper-slide');
         for (var i = 1; i < swiperBlocks.length; i++) allBlocks.push(swiperBlocks[i]);
 
+        // 2. Cắt lấy Phim ở phần Danh sách chính (flw-item)
         var flwBlocks = html.split('class="flw-item');
         for (var i = 1; i < flwBlocks.length; i++) allBlocks.push(flwBlocks[i]);
 
+        // 3. Cắt lấy Phim ở Bảng Xếp Hạng cột phải (item-top)
         var topBlocks = html.split('class="item-top');
         for (var i = 1; i < topBlocks.length; i++) allBlocks.push(topBlocks[i]);
 
@@ -130,6 +137,7 @@ function parseListResponse(html) {
             var imgMatch = block.match(/data-src=["']([^"']+)["']/i) || block.match(/src=["']([^"']+)["']/i);
             var titleMatch = block.match(/title=["']([^"']+)["']/i) || block.match(/alt=["']([^"']+)["']/i) || block.match(/<h[234][^>]*>([^<]+)<\/h[234]>/i);
             
+            // Dựa vào HTML bạn gửi, số tập nằm ở class "tick-rate"
             var epMatch = block.match(/class=["'][^"']*(tick-rate|ep|episode|label|status)[^"']*["'][^>]*>([^<]+)</i);
 
             if (urlMatch && imgMatch && titleMatch) {
@@ -144,15 +152,16 @@ function parseListResponse(html) {
 
                 var slug = url.replace(/https?:\/\/[^\/]+\//i, "").replace(/^\//, "").replace(/\/$/, "");
                 
+                // Lọc chống trùng lặp
                 if (title && slug && !seen[slug]) {
                     movies.push({
                         id: slug,
                         title: title,
                         posterUrl: img,
                         backdropUrl: img,
-                        quality: "4K / HD",
+                        quality: "HD",
                         episode_current: episode,
-                        lang: "Vietsub",
+                        lang: "Vietsub / TM",
                         year: 0
                     });
                     seen[slug] = true; 
@@ -178,6 +187,7 @@ function parseListResponse(html) {
     }
 }
 
+// ĐÃ FIX: Chỉ quét phim chuẩn từ kết quả (flw-item), BỎ QUA Bảng xếp hạng để tránh loãng kết quả
 function parseSearchResponse(html) {
     try {
         var movies = [];
@@ -206,9 +216,9 @@ function parseSearchResponse(html) {
                         title: title,
                         posterUrl: img,
                         backdropUrl: img,
-                        quality: "4K / HD",
+                        quality: "HD",
                         episode_current: episode,
-                        lang: "Vietsub",
+                        lang: "Vietsub / TM",
                         year: 0
                     });
                     seen[slug] = true; 
@@ -261,32 +271,40 @@ function parseMovieDetail(html) {
             }
         }
 
+        var lowerHtml = html.toLowerCase();
+        var hasTM = lowerHtml.indexOf('xem thuyết minh') !== -1;
+        var hasSub = lowerHtml.indexOf('xem vietsub') !== -1 || lowerHtml.indexOf('/sever2/') !== -1;
+        if (!hasTM && !hasSub) hasTM = true;
+
         var vietsubEpisodes = [];
-        var highQualityEpisodes = []; 
+        var thuyetMinhEpisodes = [];
 
         if (baseSlug && maxEp > 0) {
             for (var i = 1; i <= maxEp; i++) {
                 var epName = "Tập " + i;
-                vietsubEpisodes.push({
-                    id: "sever2/" + baseSlug + "/tap-" + i,
-                    name: epName,
-                    slug: "sever2/" + baseSlug + "/tap-" + i
-                });
-                // Đã xóa chữ (4K Cao Cấp) ở tên tập theo yêu cầu của bạn
-                highQualityEpisodes.push({
-                    id: baseSlug + "/tap-" + i,
-                    name: epName,
-                    slug: baseSlug + "/tap-" + i
-                });
+                if (hasTM) {
+                    thuyetMinhEpisodes.push({
+                        id: baseSlug + "/tap-" + i,
+                        name: epName,
+                        slug: baseSlug + "/tap-" + i
+                    });
+                }
+                if (hasSub) {
+                    vietsubEpisodes.push({
+                        id: "sever2/" + baseSlug + "/tap-" + i,
+                        name: epName,
+                        slug: "sever2/" + baseSlug + "/tap-" + i
+                    });
+                }
             }
         } 
 
         var servers = [];
-        if (highQualityEpisodes.length > 0) {
-            servers.push({ name: "Bản 4K (Chất lượng cao)", episodes: highQualityEpisodes });
+        if (thuyetMinhEpisodes.length > 0) {
+            servers.push({ name: "Thuyết Minh", episodes: thuyetMinhEpisodes });
         }
         if (vietsubEpisodes.length > 0) {
-            servers.push({ name: "Vietsub Tiêu Chuẩn", episodes: vietsubEpisodes });
+            servers.push({ name: "Vietsub", episodes: vietsubEpisodes });
         }
         
         if (servers.length === 0) {
@@ -300,8 +318,8 @@ function parseMovieDetail(html) {
             backdropUrl: poster,
             description: desc,
             servers: servers,
-            quality: "4K",
-            lang: "Vietsub",
+            quality: "HD",
+            lang: "Vietsub / Thuyết Minh",
             year: 0,
             rating: 0,
             category: "Hoạt Hình 3D",
@@ -333,7 +351,7 @@ function parseDetailResponse(html) {
                 if (streamUrl.indexOf("//") === 0) streamUrl = "https:" + streamUrl;
                 return JSON.stringify({
                     url: streamUrl,
-                    headers: { "Referer": BASEURL + "/" },
+                    headers: { "Referer": DOMAIN + "/" },
                     isEmbed: true
                 });
             }
@@ -343,8 +361,8 @@ function parseDetailResponse(html) {
             return JSON.stringify({
                 url: streamUrl,
                 headers: { 
-                    "Referer": BASEURL + "/",
-                    "Origin": BASEURL,
+                    "Referer": DOMAIN + "/",
+                    "Origin": DOMAIN,
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
                 },
                 isEmbed: false 
