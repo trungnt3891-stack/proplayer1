@@ -1,14 +1,14 @@
 // =============================================================================
 // CẤU HÌNH DOMAIN & METADATA (CHỈ CẦN SỬA TÊN MIỀN Ở ĐÂY KHI WEB CÓ UPDATE)
 // =============================================================================
-var BASE_DOMAIN = "yanhh3d.love";
+var BASE_DOMAIN = "yanhh3d.ac";
 var BASEURL = "https://" + BASE_DOMAIN;
 
 function getManifest() {
     return JSON.stringify({
         "id": "yanhh3d",
         "name": "YanHH3D",
-        "version": "4.3.0",
+        "version": "4.4.0",
         "baseUrl": BASEURL, 
         "iconUrl": BASEURL + "/storage/settings/August2024/YOoAwtlobLbwKhiFwRZv.png",
         "isEnabled": true,
@@ -49,7 +49,7 @@ function getPrimaryCategories() {
 function getFilterConfig() { return JSON.stringify({}); }
 
 // =============================================================================
-// URL GENERATION (SỬ DỤNG BIẾN DOMAIN ĐỘNG)
+// URL GENERATION
 // =============================================================================
 
 function getUrlList(slug, filtersJson) {
@@ -244,52 +244,61 @@ function parseMovieDetail(html) {
             baseSlug = urlObj.substring(urlObj.lastIndexOf("/") + 1);
         }
 
-        var maxEp = 1;
-        var epMatch1 = html.match(/Tập mới nhất:.*?Tập\s*(\d+)/i);
-        var epMatch2 = html.match(/Thời lượng:.*?(\d+)\//i);
-        
-        if (epMatch1) {
-            maxEp = parseInt(epMatch1[1], 10);
-        } else if (epMatch2) {
-            maxEp = parseInt(epMatch2[1], 10);
-        } else {
-            var linkRegex = /tap-(\d+)/gi;
-            var lM;
-            while ((lM = linkRegex.exec(html)) !== null) {
-                var n = parseInt(lM[1], 10);
-                if (n > maxEp) maxEp = n;
+        // QUÉT TẬP THỰC TẾ: Chỉ lấy các link tập thực sự tồn tại trong HTML của web để loại bỏ tập ảo hoàn toàn
+        var realEpisodes = [];
+        var episodeLinkRegex = /href=["']([^"']*\/[^\/]+\/tap-\d+)["'][^>]*>([^<]*)<\/a>/gi;
+        var matchEp;
+        var addedEpisodes = {};
+
+        while ((matchEp = episodeLinkRegex.exec(html)) !== null) {
+            var epHref = matchEp[1];
+            var epText = PluginUtils.cleanText(matchEp[2]) || "Tập phim";
+            
+            var epSlug = epHref.replace(/https?:\/\/[^\/]+\//i, "").replace(/^\//, "");
+            
+            if (epSlug && !addedEpisodes[epSlug]) {
+                // Kiểm tra xem có phải định dạng tập hợp lệ không
+                if (epSlug.indexOf('tap-') !== -1) {
+                    realEpisodes.push({
+                        id: epSlug,
+                        name: epText.indexOf("Tập") !== -1 ? epText : ("Tập " + realEpisodes.length + 1),
+                        slug: epSlug
+                    });
+                    addedEpisodes[epSlug] = true;
+                }
             }
         }
 
-        var vietsubEpisodes = [];
-        var highQualityEpisodes = []; 
-
-        if (baseSlug && maxEp > 0) {
-            for (var i = 1; i <= maxEp; i++) {
-                var epName = "Tập " + i;
-                vietsubEpisodes.push({
-                    id: "sever2/" + baseSlug + "/tap-" + i,
-                    name: epName,
-                    slug: "sever2/" + baseSlug + "/tap-" + i
-                });
-                highQualityEpisodes.push({
-                    id: baseSlug + "/tap-" + i,
-                    name: epName + " (4K Cao Cấp)",
-                    slug: baseSlug + "/tap-" + i
-                });
+        // Nếu không quét được bằng regex trên, dùng cách quét danh sách liên kết tập thông thường trên web
+        if (realEpisodes.length === 0) {
+            var allLinks = html.match(/href=["']([^"']+)["']/gi);
+            if (allLinks) {
+                for (var k = 0; k < allLinks.length; k++) {
+                    var lMatch = allLinks[k].match(/href=["']([^"']+)["']/i);
+                    if (lMatch) {
+                        var href = lMatch[1];
+                        if (href.indexOf('tap-') !== -1 && href.indexOf(baseSlug) !== -1) {
+                            var cleanSlug = href.replace(/https?:\/\/[^\/]+\//i, "").replace(/^\//, "");
+                            if (!addedEpisodes[cleanSlug]) {
+                                realEpisodes.push({
+                                    id: cleanSlug,
+                                    name: "Tập phim",
+                                    slug: cleanSlug
+                                });
+                                addedEpisodes[cleanSlug] = true;
+                            }
+                        }
+                    }
+                }
             }
-        } 
+        }
 
         var servers = [];
-        if (highQualityEpisodes.length > 0) {
-            servers.push({ name: "Bản 4K / Chất Lượng Cao", episodes: highQualityEpisodes });
-        }
-        if (vietsubEpisodes.length > 0) {
-            servers.push({ name: "Vietsub Tiêu Chuẩn", episodes: vietsubEpisodes });
-        }
-        
-        if (servers.length === 0) {
-             servers.push({ name: "Hệ Thống", episodes: [{ id: baseSlug + "/tap-1", name: "Đang Cập Nhật / Full", slug: baseSlug + "/tap-1" }] });
+        if (realEpisodes.length > 0) {
+            servers.push({ name: "Vietsub / Bản Chính Chức", episodes: realEpisodes });
+        } else {
+            // Trường hợp phim lẻ hoặc chỉ có 1 link duy nhất
+            servers.push({ name: "Hệ Thống", episodes: [{ id: baseSlug, name: "Xem Phim", slug: baseSlug }] });
         }
 
         return JSON.stringify({
@@ -304,7 +313,7 @@ function parseMovieDetail(html) {
             year: 0,
             rating: 0,
             category: "Hoạt Hình 3D",
-            status: maxEp + " Tập"
+            status: realEpisodes.length > 0 ? (realEpisodes.length + " Tập") : "Full"
         });
     } catch (e) {
         return JSON.stringify({});
