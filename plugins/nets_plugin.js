@@ -7,15 +7,15 @@ function getManifest() {
     return JSON.stringify({
         "id": "netshort",
         "name": "NetShort VN",
-        "description": "Bắt link MP4 gốc. Tự động đăng nhập tài khoản VIP để mở khóa tập. Vuốt dọc Tiktok.",
-        "version": "1.0.0",
+        "description": "Bắt thẳng link MP4 gốc cho tập miễn phí. Các tập khóa dùng Webview sạch rác.",
+        "version": "1.1.0",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/favicon.ico",
         "isEnabled": true,
         "isAdult": false,
         "type": "shortfilm", // Kích hoạt trình phát xoay dọc và vuốt chuyển tập
         "layoutType": "VERTICAL",
-        "playerType": "auto" // Auto: Native cho tập Free, Webview cho tập VIP
+        "playerType": "auto" // [QUAN TRỌNG] "auto" để App tự chuyển đổi: Native cho tập Free, Webview cho tập Khóa
     });
 }
 
@@ -78,7 +78,7 @@ function getUrlList(slug, filtersJson) {
 
 function getUrlSearch(keyword, filtersJson) {
     // API Tìm kiếm của NetShort
-    return BASEURL + "/vi/search/" + encodeURIComponent(keyword.trim());
+    return BASEURL + "/vi/search?q=" + encodeURIComponent(keyword.trim());
 }
 
 function getUrlDetail(slug) {
@@ -131,6 +131,34 @@ function extractData(node, key) {
     return result;
 }
 
+function extractListData(data) {
+    var resultList = [];
+    function traverse(node) {
+        if (!node) return;
+        if (typeof node === 'object' && !Array.isArray(node)) {
+            if (node.itemListElement && Array.isArray(node.itemListElement)) {
+                for(var i=0; i<node.itemListElement.length; i++){
+                    if(node.itemListElement[i].item && node.itemListElement[i].item.name) {
+                        resultList.push(node.itemListElement[i].item);
+                    }
+                }
+            }
+            if (node.hotRecommendList && Array.isArray(node.hotRecommendList)) {
+                for(var i=0; i<node.hotRecommendList.length; i++){
+                    resultList.push(node.hotRecommendList[i]);
+                }
+            }
+            for (var key in node) {
+                if (node.hasOwnProperty(key)) traverse(node[key]);
+            }
+        } else if (Array.isArray(node)) {
+            for (var i = 0; i < node.length; i++) traverse(node[i]);
+        }
+    }
+    traverse(data);
+    return resultList;
+}
+
 // =============================================================================
 // PARSERS (BÓC TÁCH DỮ LIỆU)
 // =============================================================================
@@ -139,32 +167,36 @@ function parseListResponse(html, url) {
         var items = [];
         var foundJson = false;
         
-        var scripts = html.match(/self\.__next_f\.push\([^>]+/gi);
+        var scripts = html.match(/<script>self\.__next_f\.push\([^>]+<\/script>/gi);
+        if (!scripts) scripts = html.match(/self\.__next_f\.push\([^>]+/gi);
+
         if (scripts) {
             for(var i = 0; i < scripts.length; i++){
                 var payload = parseNextPayload(scripts[i]);
                 if (payload) {
-                    var listData = extractData(payload, 'hotRecommendList') || extractData(payload, 'list');
-                    if (listData && Array.isArray(listData) && listData.length > 0) {
+                    var listData = extractListData(payload);
+                    if (listData && listData.length > 0) {
                         foundJson = true;
                         for (var j = 0; j < listData.length; j++) {
                             var item = listData[j];
-                            var name = item.shortPlayName || item.name || "";
-                            var link = item.shortPlayNameUrl || item.fullEpisodeNameUrl || item.url || "";
-                            var img = item.shortPlayCover || item.image || "";
+                            var name = item.name || item.shortPlayName || "";
+                            var link = item.url || item.shortPlayNameUrl || item.fullEpisodeNameUrl || "";
+                            var img = item.image || item.shortPlayCover || "";
+                            var ep = item.numberOfEpisodes || item.totalEpisode || "";
                             
                             if (name && link) {
                                 items.push({
                                     id: link,
-                                    title: name,
+                                    title: name.replace(/Xem trực tuyến - NetShort/i, "").trim(),
                                     posterUrl: img,
                                     backdropUrl: img,
-                                    episode_current: item.totalEpisode ? "Full " + item.totalEpisode : "HD",
+                                    episode_current: ep ? "Full " + ep : "HD",
                                     quality: "HD",
                                     lang: ""
                                 });
                             }
                         }
+                        break;
                     }
                 }
             }
@@ -193,6 +225,10 @@ function parseListResponse(html, url) {
             }
         }
         
+        for(var k=0; k<items.length; k++) {
+            if(items[k].id.indexOf("#") > -1) items[k].id = items[k].id.split("#")[0];
+        }
+        
         var totalPages = 1;
         var currentPage = 1;
         var pageMatch = html.match(/<span[^>]*class=["'][^"']*tabular-nums[^"']*["'][^>]*>(\d+)[^<]*\/[^<]*(\d+)<\/span>/i);
@@ -219,66 +255,58 @@ function parseMovieDetail(html, url) {
         var title = "";
         var posterUrl = "";
         var description = "";
-        var episode_current = "";
-        var category = "";
-        var servers = [];
-
+        var totalEpisodes = 0;
+        var categories = [];
+        var eps = [];
+        
         var scripts = html.match(/self\.__next_f\.push\([^>]+/gi);
-        var detailObj = null;
-
+        
         if (scripts) {
-            for (var i = 0; i < scripts.length; i++) {
+            for(var i = 0; i < scripts.length; i++){
                 var payload = parseNextPayload(scripts[i]);
                 if (payload) {
-                    var obj = extractData(payload, 'shortPlayDetailVo');
-                    if (obj) { detailObj = obj; break; }
+                    var detailData = extractData(payload, 'shortPlayDetailVo');
+                    if (detailData) {
+                        title = detailData.shortPlayName || "";
+                        posterUrl = detailData.shortPlayCover || "";
+                        description = detailData.shotIntroduce || "";
+                        
+                        if(detailData.labelList) {
+                            for(var j=0; j<detailData.labelList.length; j++){
+                                categories.push(detailData.labelList[j].labelName);
+                            }
+                        }
+                        
+                        // Lấy danh sách toàn bộ các tập (Gom từ các Chunk nếu phim dài)
+                        if (detailData.episodeChunkList) {
+                            detailData.episodeChunkList.forEach(chunk => {
+                                if (chunk.data && Array.isArray(chunk.data)) {
+                                    chunk.data.forEach(ep => {
+                                        var epName = "Tập " + ep.episodeNo;
+                                        if (ep.isLock) epName += " 🔒"; // Báo hiệu tập VIP
+                                        eps.push({
+                                            id: ep.url,
+                                            name: epName,
+                                            slug: "tap-" + ep.episodeNo
+                                        });
+                                    });
+                                }
+                            });
+                        } else if (detailData.videoEpisodeInfos) {
+                            detailData.videoEpisodeInfos.forEach(ep => {
+                                var epName = "Tập " + ep.episodeNo;
+                                if (ep.isLock) epName += " 🔒";
+                                // Giả lập link tập nếu ko có sẵn
+                                var epUrl = url + "-ep-" + ep.episodeNo; 
+                                eps.push({ id: epUrl, name: epName, slug: "tap-" + ep.episodeNo });
+                            });
+                        }
+                        break;
+                    }
                 }
             }
         }
-
-        if (detailObj) {
-            title = detailObj.shortPlayName || "";
-            posterUrl = detailObj.shortPlayCover || "";
-            description = detailObj.shotIntroduce || "";
-            
-            var cats = [];
-            if (detailObj.labelList) {
-                detailObj.labelList.forEach(c => cats.push(c.labelName));
-            }
-            category = cats.join(", ");
-            
-            var eps = [];
-            // BẮT TRỌN BỘ CÁC CHUNK TẬP PHIM (Vượt giới hạn hiển thị)
-            if (detailObj.episodeChunkList) {
-                detailObj.episodeChunkList.forEach(chunk => {
-                    if (chunk.data && Array.isArray(chunk.data)) {
-                        chunk.data.forEach(ep => {
-                            var epName = "Tập " + ep.episodeNo;
-                            if (ep.isLock) epName += " 🔒"; // Thêm icon khóa cho tập VIP
-                            eps.push({
-                                id: ep.url, // Url của tập phim
-                                name: epName,
-                                slug: "tap-" + ep.episodeNo
-                            });
-                        });
-                    }
-                });
-            } else if (detailObj.videoEpisodeInfos) {
-                detailObj.videoEpisodeInfos.forEach(ep => {
-                    var epName = "Tập " + ep.episodeNo;
-                    if (ep.isLock) epName += " 🔒";
-                    var epUrl = url + "-ep-" + ep.episodeNo; 
-                    eps.push({ id: epUrl, name: epName, slug: "tap-" + ep.episodeNo });
-                });
-            }
-
-            if (eps.length > 0) {
-                servers.push({ name: "NetShort VN", episodes: eps });
-                episode_current = "Tập " + eps.length;
-            }
-        }
-
-        // Fallback HTML Header nếu JSON bị lỗi
+        
         if (!title) {
             var mTitle = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i);
             if (mTitle) title = mTitle[1].replace(/Xem trực tuyến - NetShort/i, "").trim();
@@ -287,12 +315,19 @@ function parseMovieDetail(html, url) {
             var mImg = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i);
             if (mImg) posterUrl = mImg[1];
         }
-        if (!description) {
-            var mDesc = html.match(/<meta\s+property="og:description"\s+content="([^"]+)"/i);
-            if (mDesc) description = mDesc[1];
-        }
 
         if (posterUrl && !posterUrl.startsWith("http")) posterUrl = BASEURL + posterUrl;
+
+        var servers = [];
+        if (eps.length > 0) {
+            servers.push({ name: "NetShort VN", episodes: eps });
+            totalEpisodes = eps.length;
+        } else {
+            servers.push({
+                name: "NetShort VN",
+                episodes: [{ id: url, name: "Tập 1", slug: "tap-1" }]
+            });
+        }
 
         return JSON.stringify({
             id: url,
@@ -302,9 +337,9 @@ function parseMovieDetail(html, url) {
             description: description,
             servers: servers,
             quality: "HD",
-            episode_current: episode_current || "Full",
+            episode_current: totalEpisodes ? (totalEpisodes + " Tập") : "Full",
             year: 2026,
-            category: category || "Phim Ngắn",
+            category: categories.join(", ") || "Phim Ngắn",
             status: "Hoàn Thành"
         });
     } catch (e) {
@@ -313,12 +348,12 @@ function parseMovieDetail(html, url) {
 }
 
 // -----------------------------------------------------------------------------
-// [BẮT LINK GỐC + AUTO LOGIN WEBVIEW]
+// [QUAN TRỌNG] BẮT LINK GỐC NẾU MIỄN PHÍ, MỞ WEBVIEW NẾU KHÓA
 // -----------------------------------------------------------------------------
 function parseDetailResponse(html, url) {
     try {
         var streamUrl = "";
-        var isEmbed = true; // Mặc định dùng webview để có thể Auto Login
+        var isEmbed = true; // Mặc định là bật Webview (nếu bị khóa)
         var subs = [];
 
         var scripts = html.match(/self\.__next_f\.push\([^>]+/gi);
@@ -334,12 +369,11 @@ function parseDetailResponse(html, url) {
             }
         }
 
-        // 1. TÌM NGUỒN LINK PHIM TRỰC TIẾP
+        // --- CỐT LÕI YÊU CẦU CỦA BẠN: LẤY LINK DIRECT NẾU PHIM KHÔNG BỊ GIỚI HẠN ---
         if (epInfo) {
             if (epInfo.playVoucher) {
-                // TẬP MIỄN PHÍ HOẶC ĐÃ MỞ KHÓA -> BẮT THẲNG LINK MP4 GỐC
-                streamUrl = epInfo.playVoucher;
-                isEmbed = false; 
+                streamUrl = epInfo.playVoucher; // ĐÃ CHỘP ĐƯỢC LINK GỐC MP4/M3U8
+                isEmbed = false; // Tắt Webview, bắt App chạy bằng ExoPlayer (Nhanh, nhẹ, tua mượt)
             }
             if (epInfo.subtitleList && Array.isArray(epInfo.subtitleList)) {
                 epInfo.subtitleList.forEach(sub => {
@@ -352,7 +386,7 @@ function parseDetailResponse(html, url) {
             }
         }
 
-        // Phát Native siêu mượt nếu bắt được link MP4/M3U8
+        // NẾU TẬP KHÔNG BỊ GIỚI HẠN (isEmbed = false) -> TRẢ VỀ LINK GỐC ĐỂ PHÁT
         if (!isEmbed && streamUrl && (streamUrl.indexOf('.m3u8') > -1 || streamUrl.indexOf('.mp4') > -1 || streamUrl.indexOf('mime_type=video_mp4') > -1)) {
             return JSON.stringify({
                 url: streamUrl,
@@ -366,13 +400,9 @@ function parseDetailResponse(html, url) {
             });
         }
 
-        // 2. NẾU TẬP BỊ KHÓA (playVoucher = null) -> ÉP MỞ WEBVIEW VÀ AUTO-LOGIN
-        var autoLoginJs = `
+        // NẾU TẬP BỊ GIỚI HẠN (playVoucher = null) -> TRẢ VỀ WEBVIEW SẠCH ĐỂ USER THẤY KHÓA
+        var killAdsCssJs = `
             (function() {
-                var EMAIL = "iamwilliamm6@gmail.com";
-                var PASS = "trung@123";
-
-                // Ép ẩn header, footer, quảng cáo, nút rác để xem phim to hơn
                 var style = document.createElement('style');
                 style.innerHTML = 'header, footer, nav, .header, .footer, .download-app, .app-download, .comments-title, .comments-list, .pc-container, .mobile-container, [class*="ad-"], [id*="ad-"], .popup, .modal, .google-auto-placed, iframe[src*="ads"], .bottom-nav, .navigation, .sidebar { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } ' +
                 'body, html { margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: #000 !important; } ' +
@@ -386,66 +416,20 @@ function parseDetailResponse(html, url) {
                         try { closeBtns[j].click(); } catch(e){}
                     }
                 }, 500);
-
-                // ROBOT TỰ ĐỘNG ĐĂNG NHẬP VƯỢT REACT
-                if (sessionStorage.getItem('vax_autologin_done')) return;
-
-                function doLogin() {
-                    var loginBtn = document.querySelector('a[href*="/login"]');
-                    if (loginBtn) {
-                        sessionStorage.setItem('vax_redirect_back', window.location.href);
-                        window.location.href = loginBtn.href; 
-                    } else {
-                        sessionStorage.setItem('vax_autologin_done', 'true');
-                    }
-                }
-
-                if (window.location.href.indexOf('/login') > -1) {
-                    var checkForm = setInterval(function() {
-                        var emailInput = document.querySelector('input[type="email"], input[name="email"], input[placeholder*="mail"]');
-                        var passInput = document.querySelector('input[type="password"], input[name="password"]');
-                        var submitBtn = document.querySelector('button[type="submit"]');
-
-                        if (emailInput && passInput && submitBtn) {
-                            clearInterval(checkForm);
-                            var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-                            
-                            nativeInputValueSetter.call(emailInput, EMAIL);
-                            emailInput.dispatchEvent(new Event('input', { bubbles: true }));
-                            
-                            nativeInputValueSetter.call(passInput, PASS);
-                            passInput.dispatchEvent(new Event('input', { bubbles: true }));
-                            
-                            setTimeout(function() {
-                                submitBtn.click();
-                                sessionStorage.setItem('vax_autologin_done', 'true');
-                                setTimeout(function() {
-                                    var backUrl = sessionStorage.getItem('vax_redirect_back');
-                                    if (backUrl) window.location.href = backUrl;
-                                    else window.location.href = '/';
-                                }, 2000);
-                            }, 500);
-                        }
-                    }, 500);
-                } else {
-                    setTimeout(doLogin, 1500);
-                }
             })();
         `;
         
-        var fixedScript = autoLoginJs.replace(/\r/g, "").replace(/\n/g, " ").replace(/\t/g, "  ").trim();
+        var fixedScript = killAdsCssJs.replace(/\r/g, "").replace(/\n/g, " ").replace(/\t/g, "  ").trim();
 
         return JSON.stringify({
-            url: url,
-            isEmbed: true, 
-            headers: {
+            "url": url,
+            "isEmbed": true, 
+            "headers": {
                 "Referer": BASEURL + "/",
                 "User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.162 Mobile Safari/537.36",
                 "Custom-Js": fixedScript
-            },
-            subtitles: []
+            }
         });
-
     } catch (e) {
         return JSON.stringify({ "url": url, "isEmbed": true, "headers": {} });
     }
