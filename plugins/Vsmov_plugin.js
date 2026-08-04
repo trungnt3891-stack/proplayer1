@@ -1,12 +1,13 @@
 // =============================================================================
-// PLUGIN MOVIE SCRAPER: VSMOV.COM (ADVANCED HTML SCRAPER & NATIVE PLAYER)
+// PLUGIN MOVIE SCRAPER: VSMOV.COM (NATIVE EPISODE SELECTOR + WEBVIEW PLAYER)
+// AUTHOR: JAVASCRIPT EXPERT
 // =============================================================================
 
 function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.0.9",
+        "version": "1.1.0",
         "baseUrl": "https://vsmov.com",
         "iconUrl": "https://vsmov.com/favicon-vsm.png",
         "isEnabled": true,
@@ -16,10 +17,11 @@ function getManifest() {
 
 function getHomeSections() {
     return JSON.stringify([
-        { slug: 'phim-moi', title: 'Phim Mới Cập Nhật', type: 'Grid' },
-        { slug: 'phim-bo', title: 'Phim Bộ', type: 'Horizontal' },
-        { slug: 'phim-le', title: 'Phim Lẻ', type: 'Horizontal' },
-        { slug: 'phim-chieu-rap', title: 'Phim Chiếu Rạp', type: 'Horizontal' }
+        { slug: 'phim-moi', title: 'Phim Mới Cập Nhật', type: 'Grid', path: 'danh-sach' },
+        { slug: 'phim-bo', title: 'Phim Bộ', type: 'Horizontal', path: 'danh-sach' },
+        { slug: 'phim-le', title: 'Phim Lẻ', type: 'Horizontal', path: 'danh-sach' },
+        // Đã sửa 'phim-chieu-rap' thành 'dang-chieu' theo đúng chuẩn server vsmov
+        { slug: 'dang-chieu', title: 'Phim Đang Chiếu (Chiếu Rạp)', type: 'Horizontal', path: 'danh-sach' }
     ]);
 }
 
@@ -28,7 +30,8 @@ function getPrimaryCategories() {
         { name: 'Phim mới', slug: 'phim-moi' },
         { name: 'Phim bộ', slug: 'phim-bo' },
         { name: 'Phim lẻ', slug: 'phim-le' },
-        { name: 'Chiếu Rạp', slug: 'phim-chieu-rap' }
+        // Đã sửa 'phim-chieu-rap' thành 'dang-chieu' theo đúng chuẩn server vsmov
+        { name: 'Đang Chiếu / Rạp', slug: 'dang-chieu' }
     ]);
 }
 
@@ -53,9 +56,11 @@ function getUrlList(slug, filtersJson) {
         }
     } catch (e) {}
 
+    // Chuẩn hóa tên đường dẫn
     if (slug === 'phim-moi-cap-nhat' || slug === 'phim-moi-cap-nhat-v3') slug = 'phim-moi';
 
-    var danhSachSlugs = ['phim-moi', 'phim-bo', 'phim-le', 'dang-chieu', '4k', 'long-tieng', 'thuyet-minh', 'subteam', 'phim-chieu-rap'];
+    // Xác định đúng thư mục (vsmov xếp Phim Đang Chiếu vào mục danh-sach)
+    var danhSachSlugs = ['phim-moi', 'phim-bo', 'phim-le', 'dang-chieu', '4k', 'long-tieng', 'thuyet-minh', 'subteam'];
     var basePath = "the-loai"; 
     
     if (danhSachSlugs.indexOf(slug) !== -1) {
@@ -88,7 +93,7 @@ function getUrlCountries() { return "https://vsmov.com/quoc-gia"; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// DATA PARSERS (REGEX BÓC TÁCH GIAO DIỆN)
+// DATA PARSERS (HTML SCRAPING)
 // =============================================================================
 
 function parseListResponse(html) {
@@ -157,7 +162,7 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// BÓC TÁCH CHI TIẾT & SỐ TẬP TỪ THẺ SCRIPT ẨN TRONG HTML
+// KÉO TẬP PHIM RA GIAO DIỆN NATIVE ĐỂ CHỌN
 function parseMovieDetail(html, url) {
     try {
         var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
@@ -170,11 +175,12 @@ function parseMovieDetail(html, url) {
         var descMatch = html.match(/<meta property="og:description" content="([^"]+)"/i);
         var desc = descMatch ? descMatch[1].trim() : "";
 
-        // THUẬT TOÁN KÉO CHUỖI JSON CHỨA TẬP PHIM RA KHỎI HTML
         var servers = [];
-        var episodesJson = html.match(/var\s+episodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
+        
+        // Ưu tiên vét biến embedEpisodes (chứa link Iframe phát trên Webview tốt nhất)
+        var episodesJson = html.match(/var\s+embedEpisodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
         if (!episodesJson) {
-            episodesJson = html.match(/var\s+embedEpisodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
+            episodesJson = html.match(/var\s+episodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
         }
 
         if (episodesJson && episodesJson[1]) {
@@ -187,10 +193,11 @@ function parseMovieDetail(html, url) {
 
                 for (var j = 0; j < sList.length; j++) {
                     var ep = sList[j];
-                    var mediaLink = ep.m3u8 || ep.embed || ep.link || "";
+                    // QUAN TRỌNG: Ưu tiên bắt link Embed để truyền vào Webview
+                    var mediaLink = ep.embed || ep.link_embed || ep.link || ep.m3u8 || "";
                     if (mediaLink) {
                         serverEps.push({
-                            id: mediaLink, // Ép link làm ID để App đọc phát Native luôn
+                            id: mediaLink, // Đưa thẳng link Iframe Webview vào biến ID
                             name: ep.name || "Tập " + (j + 1),
                             slug: ep.slug || ""
                         });
@@ -198,7 +205,6 @@ function parseMovieDetail(html, url) {
                 }
 
                 if (serverEps.length > 0) {
-                    // Cắt chữ cho gọn tên Server
                     sName = sName.replace(/[\r\n\t]+/g, ' ').trim();
                     servers.push({
                         name: sName,
@@ -214,25 +220,26 @@ function parseMovieDetail(html, url) {
             posterUrl: posterUrl,
             backdropUrl: posterUrl,
             description: desc,
-            servers: servers
+            servers: servers // Trả về danh sách tập cho App vẽ giao diện
         });
     } catch (error) {
         return "null";
     }
 }
 
-// LỆNH ÉP PHÁT NATIVE
+// BẬT WEBVIEW XEM PHIM NGAY KHI NGƯỜI DÙNG BẤM CHỌN TẬP
 function parseDetailResponse(html, url) {
-    // Luôn trả về isEmbed: false để ép Android mở ExoPlayer
-    // MimeType mặc định để x-mpegURL cho các máy chủ stream HLS
+    // Ép Video giãn 100% màn hình, xoá mọi dấu vết giao diện web rác
+    var customJs = "document.querySelectorAll('header, footer, nav, aside, .ads, .sidebar, iframe[sandbox]').forEach(function(e){e.style.display='none'});";
+    customJs += "var v = document.querySelector('video, iframe'); if(v){ v.style.width='100vw'; v.style.height='100vh'; v.style.position='fixed'; v.style.top='0'; v.style.left='0'; v.style.zIndex='999999'; }";
+    
     return JSON.stringify({
-        url: url,
-        isEmbed: false, 
-        mimeType: "application/x-mpegURL",
+        url: url, // Đây chính là Link Embed Iframe nhận từ parseMovieDetail ở trên
+        isEmbed: true, // Kích hoạt trình duyệt Webview tích hợp
         headers: { 
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
             "Referer": "https://vsmov.com/",
-            "Origin": "https://vsmov.com"
+            "Custom-Js": customJs 
         }
     });
 }
@@ -242,7 +249,7 @@ function parseEmbedResponse(html, url) {
 }
 
 function parseCategoriesResponse(apiResponseJson) {
-    return "[]"; // Đã vô hiệu hoá theo yêu cầu gọt bớt menu
+    return "[]"; 
 }
 
 function parseCountriesResponse(apiResponseJson) {
