@@ -10,8 +10,8 @@ function getManifest() {
       "id": "vsmov",
       "name": "VsMov",
       "description": "Nguồn phim VSMOV.COM",
-      "version": "1.2.8",
-      "info": "Tối ưu hoàn chỉnh chuẩn giao diện Webview Native Player để hiển thị phụ đề và tuỳ chọn mượt mà.",
+      "version": "1.2.9",
+      "info": "Tối ưu hóa chuẩn định dạng JSON, fix triệt để lỗi load chi tiết tập phim và WebView.",
       "baseUrl": DOMAIN,
       "iconUrl": DOMAIN + "/favicon-vsm.png",
       "isEnabled": true,
@@ -251,7 +251,7 @@ function sortEpisodesByName(data) {
     return data;
 }
 
-// BÓC TÁCH CHI TIẾT PHIM VÀ ĐƯA LINK GỐC VÀO ID TẬP PHIM
+// BÓC TÁCH CHI TIẾT PHIM VÀ XÂY DỰNG DANH SÁCH TẬP PHIM CHUẨN XÁC TUYỆT ĐỐI
 function parseMovieDetail(html, url) {
     log("parseMovieDetail: " + url)
     try {
@@ -259,8 +259,6 @@ function parseMovieDetail(html, url) {
         var title = "";
         var poster = "";
         var desc = "";
-        var status = "";
-        var category = "";
 
         var metaTitle = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
         if (metaTitle) title = decodeHTMLEntities(metaTitle[1].replace(/- VSMOV.*/i, '').replace('Phim ', '').trim());
@@ -273,8 +271,8 @@ function parseMovieDetail(html, url) {
         if (metaDesc) desc = decodeHTMLEntities(metaDesc[1].trim());
 
         var servers = [];
-        
         var episodesJson = null;
+        
         var matchEmbed = html.match(/var\s+embedEpisodes\s*=\s*(\[[\s\S]*?\]);\s*var\s+m3u8Episodes/i);
         if (matchEmbed && matchEmbed[1]) {
             episodesJson = matchEmbed[1];
@@ -326,6 +324,33 @@ function parseMovieDetail(html, url) {
             } catch (jsonErr) {}
         }
 
+        // DỰ PHÒNG: Nếu trang không có mảng embedEpisodes, quét trực tiếp các nút tập từ thẻ a trong HTML
+        if (servers.length === 0) {
+            var fallbackEps = [];
+            var linkRegex = /href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+            var matchEp;
+            var count = 1;
+            while ((matchEp = linkRegex.exec(html)) !== null) {
+                var lHref = matchEp[1];
+                var lText = matchEp[2].replace(/<[^>]+>/g, '').trim();
+                if (lText.toLowerCase().indexOf('tập') !== -1 || (lText.length <= 5 && !isNaN(lText))) {
+                    var fullEpLink = lHref.indexOf('http') === 0 ? lHref : BASEURL + (lHref.startsWith('/') ? lHref : '/' + lHref);
+                    fallbackEps.push({
+                        id: fullEpLink,
+                        name: lText.toLowerCase().indexOf('tập') !== -1 ? lText : "Tập " + lText,
+                        slug: "tap-" + count
+                    });
+                    count++;
+                }
+            }
+            if (fallbackEps.length > 0) {
+                servers.push({
+                    name: "Vietsub",
+                    episodes: fallbackEps
+                });
+            }
+        }
+
         servers = sortEpisodesByName(servers);
 
         return JSON.stringify({
@@ -337,7 +362,7 @@ function parseMovieDetail(html, url) {
             quality: "HD",
             year: 2026,
             rating: 8.5,
-            category: category,
+            category: "",
             servers: servers
         });
 
@@ -351,7 +376,7 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// BẬT WEBVIEW TOÀN TRANG GỐC ĐỂ TẢI ĐẦY ĐỦ TRÌNH PHÁT, PHỤ ĐỀ VÀ CÁC CÀI ĐẶT
+// BẬT WEBVIEW TOÀN TRANG GỐC ĐỂ TẢI ĐẦY ĐỦ TRÌNH PHÁT, PHỤ ĐỀ VÀ GIAO DIỆN
 function parseDetailResponse(html, url) {
     try {
         var targetUrl = url;
@@ -391,7 +416,7 @@ function parseCountriesResponse(html) { return "[]"; }
 function parseYearsResponse(html) { return "[]"; }
 
 function getLISTmenu() {
-    return `[{\"link\":\"/danh-sach/phim-moi\",\"name\":\"Phim Mới\"},{\"link\":\"/danh-sach/phim-le\",\"name\":\"Phim Lẻ\"},{\"link\":\"/danh-sach/phim-bo\",\"name\":\"Phim Bộ\"},{\"link\":\"/the-loai/than-thoai-co-trang-1\",\"name\":\"Cổ trang\"},{\"link\":\"/the-loai/hanh-dong-1\",\"name\":\"Hành động\"},{\"link\":\"/the-loai/tam-ly-1\",\"name\":\"Tâm lý\"},{\"link\":\"/the-loai/chien-tranh-1\",\"name\":\"Chiến tranh\"},{\"link\":\"/the-loai/vo-thuat-kiem-hiep-1\",\"name\":\"Võ thuật - Kiếm hiệp\"},{\"link\":\"/the-loai/nhac-kich-1\",\"name\":\"Nhạc kịch\"},{\"link\":\"/the-loai/kinh-di-1\",\"name\":\"Kinh dị\"},{\"link\":\"/the-loai/toi-pham-hinh-su-1\",\"name\":\"Tội phạm - Hình sự\"},{\"link\":\"/the-loai/phieu-luu-1\",\"name\":\"Phiêu lưu\"},{\"link\":\"/the-loai/hai-huoc-1\",\"name\":\"Hài hước\"},{\"link\":\"/the-loai/vien-tuong-1\",\"name\":\"Viễn tưởng\"},{\"link\":\"/the-loai/khoa-hoc-tai-lieu-1\",\"name\":\"Khoa học - Tài liệu\"},{\"link\":\"/the-loai/hoat-hinh-1\",\"name\":\"Hoạt hình\"},{\"link\":\"/the-loai/the-thao-1\",\"name\":\"Thể thao\"},{\"link\":\"/the-loai/tinh-cam-lang-man-1\",\"name\":\"Tình cảm - Lãng mạn\"},{\"link\":\"/the-loai/ky-ao-1\",\"name\":\"Kỳ ảo\"},{\"link\":\"/the-loai/giat-gan-1\",\"name\":\"Giật gân\"},{\"link\":\"/the-loai/gia-dinh-1\",\"name\":\"Gia đình\"},{\"link\":\"/the-loai/bi-an-1\",\"name\":\"Bí ẩn\"},{\"link\":\"/the-loai/lich-su-1\",\"name\":\"Lịch sử\"},{\"link\":\"/the-loai/vien-tay-1\",\"name\":\"Viễn Tây\"},{\"link\":\"/the-loai/tieu-su-1\",\"name\":\"Tiểu sử\"},{\"link\":\"/the-loai/chuong-trinh-truyen-hinh-1\",\"name\":\"GameShow\"},{\"link\":\"/the-loai/dramatv-1\",\"name\":\"DramaTV\"}]`  
+    return `[{\"link\":\"/danh-sach/phim-moi\",\"name\":\"Phim Mới\"},{\"link\":\"/danh-sach/phim-le\",\"name\":\"Phim Lẻ\"},{\"link\":\"/danh-sach/phim-bo\",\"name\":\"Phim Bộ\"},{\"link\":\"/the-loai/than-thoai-co-trang-1\",\"name\":\"Cổ trang\"},{\"link\":\"/the-loai/hanh-dong-1\",\"name\":\"Hành động\"},{\"link\":\"/the-loai/tam-ly-1\",\"name\":\"Tâm lý\"},{\"link\":\"/the-loai/chien-tranh-1\",\"name\":\"Chiến tranh\"},{\"link\":\"/the-loai/vo-thuat-kiem-hiep-1\",\"name\":\"Võ thuật - Kiếm hiệp\"},{\"link\":\"/the-loai/nhac-kich-1\",\"name\":\"Nhạc kịch\"},{\"link\":\"/the-loai/kinh-di-1\",\"name\":\"Kinh dị\"},{\"link\":\"/the-loai/toi-pham-hinh-su-1\",\"name\":\"Tội phạm - Hình sự\"},{\"link\":\"/the-loai/phieu-luu-1\",\"name\":\"Phiêu lưu\"},{\"link\":\"/the-loai/hai-huoc-1\",\"name\":\"Hài hước\"},{\"link\":\"/the-loai/vien-tuong-1\",\"name\":\"Viễn tưởng\"},{\"link\":\"/the-loai/khoa-hoc-tai-lieu-1\",\"name\":\"Khoa học - Tài liệu\"},{\"link\":\"/the-loai/hoat-hinh-1\",\"name\":\"Hoạt hình\"},{\"link\":\"/the-thao-1\",\"name\":\"Thể thao\"},{\"link\":\"/the-loai/tinh-cam-lang-man-1\",\"name\":\"Tình cảm - Lãng mạn\"},{\"link\":\"/the-loai/ky-ao-1\",\"name\":\"Kỳ ảo\"},{\"link\":\"/the-loai/giat-gan-1\",\"name\":\"Giật gân\"},{\"link\":\"/the-loai/gia-dinh-1\",\"name\":\"Gia đình\"},{\"link\":\"/the-loai/bi-an-1\",\"name\":\"Bí ẩn\"},{\"link\":\"/the-loai/lich-su-1\",\"name\":\"Lịch sử\"},{\"link\":\"/the-loai/vien-tay-1\",\"name\":\"Viễn Tây\"},{\"link\":\"/the-loai/tieu-su-1\",\"name\":\"Tiểu sử\"},{\"link\":\"/the-loai/chuong-trinh-truyen-hinh-1\",\"name\":\"GameShow\"},{\"link\":\"/the-loai/dramatv-1\",\"name\":\"DramaTV\"}]`  
 }
 
 function buildMenu(menuStr, type) { 
