@@ -7,7 +7,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.1.7",
+        "version": "1.1.8",
         "baseUrl": "https://vsmov.com",
         "iconUrl": "https://vsmov.com/favicon-vsm.png",
         "isEnabled": true,
@@ -166,7 +166,7 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// BÓC TÁCH AN TOÀN VÀ CHÍNH XÁC DỮ LIỆU TẬP PHIM TỪ JAVASCRIPT PAYLOAD CỦA TRANG WEB
+// BÓC TÁCH CHÍNH XÁC BIẾN embedEpisodes ĐỂ LẤY ĐƯỜNG DẪN VIETSUB SẴN CỦA TỪNG TẬP
 function parseMovieDetail(html, url) {
     try {
         var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
@@ -181,7 +181,7 @@ function parseMovieDetail(html, url) {
 
         var servers = [];
         
-        // Quét tìm biến chứa dữ liệu tập phim (embedEpisodes hoặc episodes)
+        // Quét lấy chính xác dữ liệu từ biến embedEpisodes giống trên web
         var episodesJson = null;
         var matchEmbed = html.match(/var\s+embedEpisodes\s*=\s*(\[[\s\S]*?\]);\s*var\s+m3u8Episodes/i);
         if (matchEmbed && matchEmbed[1]) {
@@ -204,21 +204,13 @@ function parseMovieDetail(html, url) {
 
                     for (var j = 0; j < sList.length; j++) {
                         var ep = sList[j];
-                        var watchSlug = ep.slug || "";
-                        
-                        var episodeWebLink = "";
-                        if (watchSlug.indexOf("http") === 0) {
-                            episodeWebLink = watchSlug;
-                        } else {
-                            var cleanBaseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
-                            episodeWebLink = cleanBaseUrl + "/" + (watchSlug.startsWith('/') ? watchSlug.slice(1) : watchSlug);
-                        }
-
-                        if (watchSlug) {
+                        // Lấy đúng link embed tích hợp sẵn vietsub của tập phim
+                        var mediaLink = ep.embed || ep.link_embed || ep.m3u8 || ep.link || "";
+                        if (mediaLink) {
                             serverEps.push({
-                                id: episodeWebLink, // Trỏ hoàn toàn link webview nguyên bản vào ID
+                                id: mediaLink, // Gán trực tiếp link stream/embed chứa sub vào ID
                                 name: ep.name || "Tập " + (j + 1),
-                                slug: watchSlug
+                                slug: ep.slug || ""
                             });
                         }
                     }
@@ -247,12 +239,12 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// MỞ WEBVIEW VỚI LINK WEB GỐC CHO PHÉP TÙY CHỌN SUB VÀ CÀI ĐẶT THUẬN TIỆN
+// TRUYỀN LINK EMBED CHỨA SẴN VIETSUB VÀO WEBVIEW PLAYER ĐỂ PHÁT
 function parseDetailResponse(html, url) {
     var customJs = "document.querySelectorAll('header, footer, nav, aside, .ads, .sidebar, iframe[sandbox]').forEach(function(e){e.style.display='none'});";
     
     return JSON.stringify({
-        url: url, // Link trang web tập phim gốc
+        url: url, // Link embed chính xác của tập phim
         isEmbed: true, // Kích hoạt Webview tích hợp
         headers: { 
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
