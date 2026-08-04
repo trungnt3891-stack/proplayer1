@@ -61,8 +61,10 @@ function getUrlList(slug, filtersJson) {
         }
     } catch (e) {}
 
+    // Chuẩn hóa tên đường dẫn
     if (slug === 'phim-moi-cap-nhat' || slug === 'phim-moi-cap-nhat-v3') slug = 'phim-moi';
 
+    // Xác định đúng thư mục (vsmov xếp các menu này vào mục danh-sach)
     var danhSachSlugs = ['phim-moi', 'phim-bo', 'phim-le', 'dang-chieu', '4k', 'long-tieng', 'thuyet-minh', 'subteam'];
     var basePath = "the-loai"; 
     
@@ -134,7 +136,7 @@ function parseListResponse(html) {
                 id: slug,
                 title: title,
                 originalTitle: originalTitle,
-                posterUrl: posterUrl,
+                    posterUrl: posterUrl,
                 backdropUrl: posterUrl,
                 episode_current: status,
                 year: year,
@@ -166,7 +168,7 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// KÉO TẬP PHIM RA GIAO DIỆN NATIVE ĐỂ CHỌN (ĐÃ FIX LỖI THIẾU LINK PHIM KHÔNG CHẠY)
+// KÉO TẬP PHIM RA GIAO DIỆN NATIVE ĐỂ CHỌN (TRỎ LINK VỀ TRANG WEB GỐC ĐỂ HIỂN THỊ SUB VÀ CHẾ ĐỘ)
 function parseMovieDetail(html, url) {
     try {
         var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
@@ -181,32 +183,31 @@ function parseMovieDetail(html, url) {
 
         var servers = [];
         
-        // Vét toàn bộ các biến dữ liệu tập phim có thể xuất hiện trong trang JS
         var episodesJson = html.match(/var\s+embedEpisodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
         if (!episodesJson) {
             episodesJson = html.match(/var\s+episodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
-        }
-        if (!episodesJson) {
-            episodesJson = html.match(/let\s+episodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
         }
 
         if (episodesJson && episodesJson[1]) {
             var epData = JSON.parse(episodesJson[1]);
             for (var i = 0; i < epData.length; i++) {
                 var serverObj = epData[i];
-                var sName = serverObj.server_name || serverObj.name || "Vietsub";
-                var sList = serverObj.list || serverObj.items || [];
+                var sName = serverObj.server_name || "Vietsub";
+                var sList = serverObj.list || [];
                 var serverEps = [];
 
                 for (var j = 0; j < sList.length; j++) {
                     var ep = sList[j];
-                    // MỞ RỘNG VÉT LINK: Ưu tiên embed, sau đó đến link trực tiếp, m3u8 hoặc link dự phòng
-                    var mediaLink = ep.embed || ep.link_embed || ep.link || ep.m3u8 || ep.file || ep.url || "";
-                    if (mediaLink) {
+                    // Lấy link xem tập gốc trên website thay vì link embed riêng lẻ để kích hoạt đầy đủ sub/chế độ của web
+                    var watchSlug = ep.slug || "";
+                    var baseMovieUrl = url; // url truyền vào là https://vsmov.com/phim/slug-phim
+                    var episodeWebLink = baseMovieUrl + "/" + watchSlug;
+
+                    if (watchSlug) {
                         serverEps.push({
-                            id: mediaLink, 
+                            id: episodeWebLink, // Trỏ ID về link web gốc chứa đầy đủ trình phát, sub và tuỳ chọn
                             name: ep.name || "Tập " + (j + 1),
-                            slug: ep.slug || ""
+                            slug: watchSlug
                         });
                     }
                 }
@@ -218,33 +219,6 @@ function parseMovieDetail(html, url) {
                         episodes: serverEps
                     });
                 }
-            }
-        }
-
-        // TRƯỜNG HỢP DỰ PHÒNG: Nếu trang không có biến embedEpisodes/episodes, quét trực tiếp các thẻ a hoặc attribute link trong HTML
-        if (servers.length === 0) {
-            var fallbackEps = [];
-            var linkRegex = /href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
-            // Tìm các nút chọn tập dạng thông thường nếu có
-            var matchEp;
-            var count = 1;
-            while ((matchEp = linkRegex.exec(html)) !== null) {
-                var lHref = matchEp[1];
-                var lText = matchEp[2].replace(/<[^>]+>/g, '').trim();
-                if (lText.toLowerCase().indexOf('tập') !== -1 || (lText.length <= 5 && !isNaN(lText))) {
-                    fallbackEps.push({
-                        id: lHref.indexOf('http') === 0 ? lHref : "https://vsmov.com" + lHref,
-                        name: lText.toLowerCase().indexOf('tập') !== -1 ? lText : "Tập " + lText,
-                        slug: "tap-" + count
-                    });
-                    count++;
-                }
-            }
-            if (fallbackEps.length > 0) {
-                servers.push({
-                    name: "Vietsub",
-                    episodes: fallbackEps
-                });
             }
         }
 
@@ -261,14 +235,15 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// BẬT WEBVIEW XEM PHIM NGAY KHI NGƯỜI DÙNG BẤM CHỌN TẬP
+// BẬT WEBVIEW XEM PHIM CHO PHÉP CHỌN SUB VÀ ĐIỀU KHIỂN GIAO DIỆN GỐC
 function parseDetailResponse(html, url) {
+    // Tinh chỉnh CSS trong Webview: Ẩn các thành phần thừa, phóng to khung phát video/phim web tối ưu nhất
     var customJs = "document.querySelectorAll('header, footer, nav, aside, .ads, .sidebar, iframe[sandbox]').forEach(function(e){e.style.display='none'});";
-    customJs += "var v = document.querySelector('video, iframe'); if(v){ v.style.width='100vw'; v.style.height='100vh'; v.style.position='fixed'; v.style.top='0'; v.style.left='0'; v.style.zIndex='999999'; }";
+    customJs += "var v = document.querySelector('video, iframe, .player-container, #player'); if(v){ v.style.width='100vw'; v.style.height='100vh'; v.style.position='fixed'; v.style.top='0'; v.style.left='0'; v.style.zIndex='999999'; }";
     
     return JSON.stringify({
-        url: url, 
-        isEmbed: true, 
+        url: url, // Link web chi tiết tập phim nhận từ parseMovieDetail
+        isEmbed: true, // Chạy qua WebView để hiển thị nguyên vẹn giao diện web, sub và các tuỳ chọn
         headers: { 
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
             "Referer": "https://vsmov.com/",
