@@ -10,7 +10,7 @@ function getManifest() {
       "id": "vsmov",
       "name": "VsMov",
       "description": "Nguồn phim VSMOV.COM",
-      "version": "1.2.7",
+      "version": "1.2.8",
       "info": "Tối ưu hoàn chỉnh chuẩn giao diện Webview Native Player để hiển thị phụ đề và tuỳ chọn mượt mà.",
       "baseUrl": DOMAIN,
       "iconUrl": DOMAIN + "/favicon-vsm.png",
@@ -351,7 +351,7 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// BẬT TRỰC TIẾP GIAO DIỆN WEBVIEW TỪNG TẬP PHIM (CHUẨN CHẤN PHIMFUN)
+// BẬT WEBVIEW TOÀN TRANG GỐC ĐỂ TẢI ĐẦY ĐỦ TRÌNH PHÁT, PHỤ ĐỀ VÀ CÁC CÀI ĐẶT
 function parseDetailResponse(html, url) {
     try {
         var targetUrl = url;
@@ -362,7 +362,6 @@ function parseDetailResponse(html, url) {
             targetUrl = BASEURL + (targetUrl.startsWith('/') ? targetUrl : '/' + targetUrl);
         }
 
-        // Tùy chỉnh làm sạch giao diện webview cho gọn gàng, hiển thị trọn vẹn player gốc có Vietsub
         var customJs = "document.querySelectorAll('header, footer, nav, aside, .ads, .sidebar, iframe[sandbox]').forEach(function(e){e.style.display='none'});";
 
         return JSON.stringify({
