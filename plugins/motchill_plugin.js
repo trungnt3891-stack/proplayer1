@@ -9,7 +9,7 @@ function getManifest() {
         "id": "motchill_ios",
         "name": "Motchill iOS",
         "description": "Bản Master cho iOS: Parse JSON Next.js, Bắt m3u8 trực tiếp, Chặn 100% Quảng Cáo",
-        "version": "1.0.5",
+        "version": "1.0.4",
         "info": "Plugin bóc tách dữ liệu JSON cực nhanh. Fix lỗi hiển thị toàn bộ tập phim từ Next.js Payload.",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/motchill.png",
@@ -210,66 +210,61 @@ function parseMovieDetail(html, url) {
             category.push(this.text().trim());
         });
 
-        // 1. Unescape chuỗi HTML để parse JSON Next.js không bị xước ký tự
-        var cleanHtml = html
-            .replace(/\\"/g, '"')
-            .replace(/\\\\/g, '\\')
-            .replace(/\\u0026/g, '&');
+        var cleanHtml = html.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
         
+        // Trích xuất toàn bộ các object tập phim (thường nằm ở dạng mảng JSON trong Next.js payload hoặc thuộc tính episodes)
         var serversMap = {};
+        
+        // Quét tìm tất cả các block json có chứa trường "server", "name", "link"
+        var epRegex = /\{[^{}]*"(?:server|name)"\s*:\s*"[^"]+"[^{}]*\}/g;
+        var match;
         var allRawEpisodes = [];
 
-        // 2. PHƯƠNG ÁN 1: Bắt chính xác mảng "episodes": [...] từ Payload Next.js
-        var jsonArrMatch = cleanHtml.match(/"episodes"\s*:\s*(\[\s*\{[\s\S]*?\}\s*\])/);
-        if (jsonArrMatch) {
-            try {
-                var parsedArray = JSON.parse(jsonArrMatch[1]);
-                if (Array.isArray(parsedArray)) {
+        while ((match = epRegex.exec(cleanHtml)) !== null) {
+            var block = match[0];
+            var linkMatch = block.match(/"link"\s*:\s*"([^"]+)"/);
+            var nameMatch = block.match(/"name"\s*:\s*"([^"]+)"/);
+            var serverMatch = block.match(/"server"\s*:\s*"([^"]+)"/);
+            var slugMatch = block.match(/"slug"\s*:\s*"([^"]+)"/);
+            var typeMatch = block.match(/"type"\s*:\s*"([^"]+)"/);
+
+            if (linkMatch && linkMatch[1]) {
+                allRawEpisodes.push({
+                    server: serverMatch ? serverMatch[1] : "Vietsub",
+                    name: nameMatch ? nameMatch[1] : "Tập",
+                    slug: slugMatch ? slugMatch[1] : "",
+                    type: typeMatch ? typeMatch[1] : "m3u8",
+                    link: linkMatch[1]
+                });
+            }
+        }
+
+        // Nếu không tìm thấy bằng regex block, thử tìm cụm mảng episodes: [...]
+        if (allRawEpisodes.length === 0) {
+            var jsonArrMatch = cleanHtml.match(/"episodes"\s*:\s*(\[[\s\S]*?\])/);
+            if (jsonArrMatch) {
+                try {
+                    var parsedArray = JSON.parse(jsonArrMatch[1]);
                     for (var a = 0; a < parsedArray.length; a++) {
                         var epItem = parsedArray[a];
-                        if (epItem && epItem.link) {
+                        if (epItem.link) {
                             allRawEpisodes.push({
-                                server: epItem.server || epItem.server_name || "Vietsub",
-                                name: epItem.name || ("Tập " + (a + 1)),
+                                server: epItem.server || "Vietsub",
+                                name: epItem.name || "Tập",
                                 slug: epItem.slug || "",
                                 type: epItem.type || "m3u8",
                                 link: epItem.link
                             });
                         }
                     }
-                }
-            } catch(ex){}
-        }
-
-        // 3. PHƯƠNG ÁN 2: Bắt qua Regex quét có chọn lọc (chỉ nhận item chứa link và server/type)
-        if (allRawEpisodes.length === 0) {
-            var epRegex = /\{[^{}]*"(?:server|type)"\s*:\s*"[^"]+"[^{}]*"link"\s*:\s*"[^"]+"[^{}]*\}/g;
-            var match;
-
-            while ((match = epRegex.exec(cleanHtml)) !== null) {
-                var block = match[0];
-                var linkMatch = block.match(/"link"\s*:\s*"([^"]+)"/);
-                var nameMatch = block.match(/"name"\s*:\s*"([^"]+)"/);
-                var serverMatch = block.match(/"server"\s*:\s*"([^"]+)"/);
-                var slugMatch = block.match(/"slug"\s*:\s*"([^"]+)"/);
-                var typeMatch = block.match(/"type"\s*:\s*"([^"]+)"/);
-
-                if (linkMatch && linkMatch[1]) {
-                    allRawEpisodes.push({
-                        server: serverMatch ? serverMatch[1] : "Vietsub",
-                        name: nameMatch ? nameMatch[1] : "Tập",
-                        slug: slugMatch ? slugMatch[1] : "",
-                        type: typeMatch ? typeMatch[1] : "m3u8",
-                        link: linkMatch[1]
-                    });
-                }
+                } catch(ex){}
             }
         }
 
-        // 4. Phân loại các tập vào Server tương ứng
+        // Phân loại vào các server tương ứng
         for (var i = 0; i < allRawEpisodes.length; i++) {
             var ep = allRawEpisodes[i];
-            var srvName = (ep.server || "Vietsub").replace(/\\/g, '').trim();
+            var srvName = ep.server.replace(/\\/g, '').trim();
             if (!serversMap[srvName]) serversMap[srvName] = [];
             
             var link = ep.link.replace(/\\/g, '');
@@ -284,16 +279,13 @@ function parseMovieDetail(html, url) {
                 finalLink += "#embed";
             }
 
-            var rawName = ep.name.replace(/\\/g, '').trim();
-            var formattedName = rawName;
-            if (!/tập|full/i.test(rawName)) {
-                formattedName = "Tập " + rawName;
-            }
+            var epName = ep.name.replace(/\\/g, '').trim();
+            var formattedName = (epName.toLowerCase().indexOf("tập") === -1 && epName.toLowerCase().indexOf("full") === -1) ? "Tập " + epName : epName;
 
-            // Lọc trùng lặp tập dựa trên URL
+            // Chống trùng lặp tập trong cùng server
             var exists = false;
             for (var s = 0; s < serversMap[srvName].length; s++) {
-                if (serversMap[srvName][s].url === finalLink) {
+                if (serversMap[srvName][s].url === finalLink || serversMap[srvName][s].name === formattedName) {
                     exists = true;
                     break;
                 }
@@ -308,32 +300,17 @@ function parseMovieDetail(html, url) {
             }
         }
 
-        // 5. Sắp xếp thứ tự tập chính xác (Lấy số đứng ngay sau chữ "Tập" hoặc chữ số cuối cùng)
         var servers = [];
         for (var key in serversMap) {
             if (serversMap.hasOwnProperty(key)) {
-                var eps = serversMap[key];
-
-                eps.sort(function(a, b) {
-                    function extractEpNumber(str) {
-                        if (!str) return 0;
-                        var tapMatch = str.match(/tập\s*(\d+)/i);
-                        if (tapMatch) return parseInt(tapMatch[1], 10);
-                        
-                        var digits = str.match(/(\d+)/g);
-                        if (digits && digits.length > 0) {
-                            return parseInt(digits[digits.length - 1], 10);
-                        }
-                        return 0;
-                    }
-
-                    return extractEpNumber(a.name) - extractEpNumber(b.name);
+                var eps = serversMap[key].sort(function(a, b) {
+                    var numA = parseInt((a.name.match(/\d+/) || [0])[0]);
+                    var numB = parseInt((b.name.match(/\d+/) || [0])[0]);
+                    return numA - numB;
                 });
-
                 var formattedEps = eps.map(function(e) {
                     return { id: e.url, name: e.name, slug: e.slug };
                 });
-
                 servers.push({
                     name: key,
                     episodes: formattedEps
