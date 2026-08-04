@@ -108,6 +108,13 @@
             "iconUrl": "https://vicdn.cc/vicdn.png",
     },
     {
+            "id": "Vsmov",
+            "name": "PhimVsmov",
+            "version": "1.1.6",
+            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/Vsmov_plugin.js",
+            "iconUrl": "https://vsmov.com/VSmov.png",
+    },
+    {
       "id": "Anime09",
       "name": "Anime09",
       "version": "1.0.3",
