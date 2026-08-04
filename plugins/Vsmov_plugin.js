@@ -1,5 +1,5 @@
 // =============================================================================
-// PLUGIN MOVIE SCRAPER: VSMOV.COM (STABLE HTML & WEBVIEW EMBED PLAYER)
+// PLUGIN MOVIE SCRAPER: VSMOV.COM (FIX HOMEPAGE & WEBVIEW PLAYER)
 // =============================================================================
 
 var DOMAIN = "https://vsmov.com";
@@ -9,7 +9,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.6.1",
+        "version": "1.6.2",
         "baseUrl": DOMAIN,
         "iconUrl": DOMAIN + "/favicon-vsm.png",
         "isEnabled": true,
@@ -75,13 +75,20 @@ function getUrlList(slug, filtersJson) {
         }
     } catch (e) {}
 
+    if (!slug || slug === '/' || slug === 'home') {
+        return "https://vsmov.com/danh-sach/phim-moi?page=" + page;
+    }
+
     if (slug === 'phim-moi-cap-nhat' || slug === 'phim-moi-cap-nhat-v3') slug = 'phim-moi';
 
     var danhSachSlugs = ['phim-moi', 'phim-bo', 'phim-le', 'dang-chieu', '4k', 'long-tieng', 'thuyet-minh', 'subteam'];
     var basePath = "the-loai"; 
     
-    if (danhSachSlugs.indexOf(slug) !== -1) {
+    if (danhSachSlugs.indexOf(slug) !== -1 || slug.indexOf('danh-sach/') === 0) {
         basePath = "danh-sach";
+        if (slug.indexOf('danh-sach/') === 0) {
+            slug = slug.replace('danh-sach/', '');
+        }
     }
 
     return "https://vsmov.com/" + basePath + "/" + slug + "?page=" + page;
@@ -309,3 +316,4 @@ function parseCategoriesResponse(apiResponseJson) {
 function parseCountriesResponse(apiResponseJson) {
     return "[]"; 
 }
+
