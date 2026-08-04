@@ -7,7 +7,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.1.6",
+        "version": "1.1.7",
         "baseUrl": "https://vsmov.com",
         "iconUrl": "https://vsmov.com/favicon-vsm.png",
         "isEnabled": true,
@@ -61,10 +61,8 @@ function getUrlList(slug, filtersJson) {
         }
     } catch (e) {}
 
-    // Chuẩn hóa tên đường dẫn
     if (slug === 'phim-moi-cap-nhat' || slug === 'phim-moi-cap-nhat-v3') slug = 'phim-moi';
 
-    // Xác định đúng thư mục (vsmov xếp các menu này vào mục danh-sach)
     var danhSachSlugs = ['phim-moi', 'phim-bo', 'phim-le', 'dang-chieu', '4k', 'long-tieng', 'thuyet-minh', 'subteam'];
     var basePath = "the-loai"; 
     
@@ -168,7 +166,7 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// BÓC TÁCH DANH SÁCH TẬP PHIM VÀ TRỎ ID HOÀN TOÀN VỀ LINK WEBVIEW GỐC CỦA TỪNG TẬP
+// BÓC TÁCH AN TOÀN VÀ CHÍNH XÁC DỮ LIỆU TẬP PHIM TỪ JAVASCRIPT PAYLOAD CỦA TRANG WEB
 function parseMovieDetail(html, url) {
     try {
         var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
@@ -183,48 +181,57 @@ function parseMovieDetail(html, url) {
 
         var servers = [];
         
-        var episodesJson = html.match(/var\s+embedEpisodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
-        if (!episodesJson) {
-            episodesJson = html.match(/var\s+episodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
+        // Quét tìm biến chứa dữ liệu tập phim (embedEpisodes hoặc episodes)
+        var episodesJson = null;
+        var matchEmbed = html.match(/var\s+embedEpisodes\s*=\s*(\[[\s\S]*?\]);\s*var\s+m3u8Episodes/i);
+        if (matchEmbed && matchEmbed[1]) {
+            episodesJson = matchEmbed[1];
+        } else {
+            var matchFallback = html.match(/(?:var|let)\s+embedEpisodes\s*=\s*(\[[\s\S]*?\]);/i) || html.match(/(?:var|let)\s+episodes\s*=\s*(\[[\s\S]*?\]);/i);
+            if (matchFallback && matchFallback[1]) {
+                episodesJson = matchFallback[1];
+            }
         }
 
-        if (episodesJson && episodesJson[1]) {
-            var epData = JSON.parse(episodesJson[1]);
-            for (var i = 0; i < epData.length; i++) {
-                var serverObj = epData[i];
-                var sName = serverObj.server_name || "Vietsub";
-                var sList = serverObj.list || [];
-                var serverEps = [];
+        if (episodesJson) {
+            try {
+                var epData = JSON.parse(episodesJson);
+                for (var i = 0; i < epData.length; i++) {
+                    var serverObj = epData[i];
+                    var sName = serverObj.server_name || "Vietsub";
+                    var sList = serverObj.list || [];
+                    var serverEps = [];
 
-                for (var j = 0; j < sList.length; j++) {
-                    var ep = sList[j];
-                    var watchSlug = ep.slug || "";
-                    
-                    var episodeWebLink = "";
-                    if (watchSlug.indexOf("http") === 0) {
-                        episodeWebLink = watchSlug;
-                    } else {
-                        var cleanBaseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
-                        episodeWebLink = cleanBaseUrl + "/" + (watchSlug.startsWith('/') ? watchSlug.slice(1) : watchSlug);
+                    for (var j = 0; j < sList.length; j++) {
+                        var ep = sList[j];
+                        var watchSlug = ep.slug || "";
+                        
+                        var episodeWebLink = "";
+                        if (watchSlug.indexOf("http") === 0) {
+                            episodeWebLink = watchSlug;
+                        } else {
+                            var cleanBaseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+                            episodeWebLink = cleanBaseUrl + "/" + (watchSlug.startsWith('/') ? watchSlug.slice(1) : watchSlug);
+                        }
+
+                        if (watchSlug) {
+                            serverEps.push({
+                                id: episodeWebLink, // Trỏ hoàn toàn link webview nguyên bản vào ID
+                                name: ep.name || "Tập " + (j + 1),
+                                slug: watchSlug
+                            });
+                        }
                     }
 
-                    if (watchSlug) {
-                        serverEps.push({
-                            id: episodeWebLink, // Trỏ ID hoàn toàn về link trang web gốc của tập phim
-                            name: ep.name || "Tập " + (j + 1),
-                            slug: watchSlug
+                    if (serverEps.length > 0) {
+                        sName = sName.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+                        servers.push({
+                            name: sName,
+                            episodes: serverEps
                         });
                     }
                 }
-
-                if (serverEps.length > 0) {
-                    sName = sName.replace(/[\r\n\t]+/g, ' ').trim();
-                    servers.push({
-                        name: sName,
-                        episodes: serverEps
-                    });
-                }
-            }
+            } catch (jsonErr) {}
         }
 
         return JSON.stringify({
@@ -240,7 +247,7 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// MỞ WEBVIEW VỚI LINK WEB GỐC ĐỂ NGƯỜI DÙNG TỰ ĐỘNG CÀI ĐẶT SUB VÀ CHẾ ĐỘ PHÁT
+// MỞ WEBVIEW VỚI LINK WEB GỐC CHO PHÉP TÙY CHỌN SUB VÀ CÀI ĐẶT THUẬN TIỆN
 function parseDetailResponse(html, url) {
     var customJs = "document.querySelectorAll('header, footer, nav, aside, .ads, .sidebar, iframe[sandbox]').forEach(function(e){e.style.display='none'});";
     
