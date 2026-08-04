@@ -80,8 +80,7 @@ function getUrlList(slug, filtersJson) {
 }
 
 function getUrlSearch(keyword, filtersJson) {
-    // SỬA LỖI SEARCH: Web này không có API tìm kiếm, nó load lại trang chủ và filter nội bộ
-    // Vì vậy ta ép gọi URL trang chủ kèm tham số q=...
+    // Ép gọi thẳng vào trang chủ kèm Query, do website dùng JS nội bộ để lọc
     return BASEURL + "/?q=" + encodeURIComponent(keyword.trim());
 }
 
@@ -135,7 +134,7 @@ function parseListResponse(html) {
 }
 
 // -----------------------------------------------------------------------------
-// [FIX LỖI] PARSER TÌM KIẾM (ĐỌC DATA TỪ HTML VÀ TỰ FILTER)
+// [BƯỚC ĐỘT PHÁ]: PARSER TÌM KIẾM CỰC CHUẨN - CHỐNG TRÀN BỘ NHỚ RAM
 // -----------------------------------------------------------------------------
 function parseSearchResponse(html, url) {
     try {
@@ -143,24 +142,60 @@ function parseSearchResponse(html, url) {
         var matchKeyword = url.match(/[?&]q=([^&]+)/);
         var keyword = matchKeyword ? decodeURIComponent(matchKeyword[1]).toLowerCase().trim() : "";
         
-        // 2. Trích xuất mảng "const allData = [...]" từ HTML của trang chủ
-        var dataMatch = html.match(/const\s+allData\s*=\s*(\[[\s\S]*?\]);\s*let\s+filteredData/);
-        if (!dataMatch) {
+        if (!keyword) {
+            return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
+        }
+
+        // 2. Trích xuất JSON mảng allData bằng indexOf thay vì Regex (Chống Stack Overflow cho mảng lớn)
+        var startTag = "const allData = ";
+        var startIdx = html.indexOf(startTag);
+        
+        if (startIdx === -1) {
             log("Không tìm thấy biến allData trong HTML.");
             return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
         }
         
-        var allData = JSON.parse(dataMatch[1]);
+        var jsonStart = startIdx + startTag.length;
+        var filterIdx = html.indexOf("let filteredData", jsonStart);
+        
+        if (filterIdx === -1) {
+            log("Không tìm thấy điểm kết thúc JSON.");
+            return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
+        }
+        
+        // Tìm dấu đóng ngoặc vuông ] gần nhất trước chữ let filteredData
+        var jsonEnd = html.lastIndexOf("]", filterIdx);
+        if (jsonEnd === -1) {
+            return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
+        }
+        
+        var jsonString = html.substring(jsonStart, jsonEnd + 1);
+        var allData = JSON.parse(jsonString);
         var items = [];
         
-        // 3. Tự viết logic lọc tên phim y như JavaScript của web
+        // 3. Hàm loại bỏ dấu tiếng Việt để gõ "nguoi khi" vẫn ra "Người Khí"
+        function removeAccents(str) {
+            return str.replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g, "a")
+                      .replace(/è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ/g, "e")
+                      .replace(/ì|í|ị|ỉ|ĩ/g, "i")
+                      .replace(/ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ/g, "o")
+                      .replace(/ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ/g, "u")
+                      .replace(/ỳ|ý|ỵ|ỷ|ỹ/g, "y")
+                      .replace(/đ/g, "d");
+        }
+        
+        var kwNorm = removeAccents(keyword).toLowerCase();
+
+        // 4. Lọc kết quả y hệt cách website chạy nội bộ
         for (var i = 0; i < allData.length; i++) {
             var item = allData[i];
             var vname = (item.vname || "").toLowerCase();
             var ename = (item.ename || "").toLowerCase();
             
-            // Nếu tên Tiếng Việt hoặc tiếng Anh có chứa từ khóa
-            if (vname.indexOf(keyword) > -1 || ename.indexOf(keyword) > -1) {
+            var vNorm = removeAccents(vname);
+            var eNorm = removeAccents(ename);
+            
+            if (vname.indexOf(keyword) > -1 || ename.indexOf(keyword) > -1 || vNorm.indexOf(kwNorm) > -1 || eNorm.indexOf(kwNorm) > -1) {
                 
                 var pUrl = item.poster || "";
                 if (pUrl && pUrl.indexOf("http") === -1) pUrl = "https://image.tmdb.org/t/p/w300/" + pUrl + ".jpg";
@@ -179,10 +214,10 @@ function parseSearchResponse(html, url) {
             }
         }
         
-        log("Đã tìm thấy " + items.length + " kết quả cho từ khóa: " + keyword);
+        log("Tìm kiếm thành công: " + items.length + " kết quả.");
         return JSON.stringify({
             "items": items,
-            "pagination": { "currentPage": 1, "totalPages": 1 } // Search local nên chỉ có 1 trang
+            "pagination": { "currentPage": 1, "totalPages": 1 }
         });
         
     } catch (e) {
@@ -192,7 +227,7 @@ function parseSearchResponse(html, url) {
 }
 
 // -----------------------------------------------------------------------------
-// BÓC TÁCH CHI TIẾT VÀ DANH SÁCH TẬP
+// BÓC TÁCH CHI TIẾT VÀ DANH SÁCH TẬP NATIVE
 // -----------------------------------------------------------------------------
 function parseMovieDetail(html, url) {
     try {
