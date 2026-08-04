@@ -9,7 +9,7 @@ function getManifest() {
         "id": "motchill_ios",
         "name": "Motchill iOS",
         "description": "Bản Master cho iOS: Parse JSON Next.js, Bắt m3u8 trực tiếp, Chặn 100% Quảng Cáo",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "info": "Plugin bóc tách dữ liệu JSON cực nhanh. Fix lỗi hiển thị 1 tập. Không dùng Webview giúp chặn tuyệt đối Popup.",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/motchill.png",
@@ -30,11 +30,13 @@ function log(msg) {
 
 function getHomeSections() {
     return JSON.stringify([
-        { "slug": "danh-sach/phim-bo", "title": "Phim Bộ Mới", "type": "Horizontal" },
-        { "slug": "danh-sach/phim-le", "title": "Phim Lẻ Mới", "type": "Horizontal" },
-        { "slug": "the-loai/hoat-hinh", "title": "Hoạt Hình - Anime", "type": "Horizontal" },
-        { "slug": "quoc-gia/han-quoc", "title": "Phim Hàn Quốc", "type": "Horizontal" },
-        { "slug": "quoc-gia/trung-quoc", "title": "Phim Trung Quốc", "type": "Horizontal" }
+        { "slug": "danh-sach/phim-long-tieng", "title": "Phim Lồng Tiếng", "type": "Horizontal" },
+        { "slug": "danh-sach/phim-thuyet-minh", "title": "Phim Thuyết Minh", "type": "Horizontal" },
+        { "slug": "danh-sach/phim-le", "title": "Phim Lẻ", "type": "Horizontal" },
+        { "slug": "danh-sach/phim-bo", "title": "Phim Bộ", "type": "Horizontal" },
+        { "slug": "danh-sach/phim-moi", "title": "Phim Mới Cập Nhật", "type": "Horizontal" },
+        { "slug": "danh-sach/phim-dang-chieu", "title": "Phim Đang Chiếu", "type": "Horizontal" },
+        { "slug": "danh-sach/phim-4k", "title": "Phim 4K", "type": "Horizontal" }
     ]);
 }
 
@@ -196,7 +198,7 @@ function parseSearchResponse(html, url) {
     return parseListResponse(html, url);
 }
 
-// FIX: BÓC TÁCH JSON LẤY TOÀN BỘ TẬP PHIM CHUẨN XÁC THEO MOVIE_ID
+// FIX: BÓC TÁCH JSON LẤY TOÀN BỘ TẬP PHIM CHUẨN XÁC VÀ LINH HOẠT HƠN
 function parseMovieDetail(html, url) {
     try {
         var doc = _$(html);
@@ -234,22 +236,53 @@ function parseMovieDetail(html, url) {
             }
         }
 
-        // 2. GOM TẤT CẢ CÁC TẬP TỪ MỌI MẢNG JSON
+        // 2. GOM TẤT CẢ CÁC TẬP TỪ MỌI MẢNG JSON (CẬP NHẬT CƠ CHẾ QUÉT MỚI CHỐNG LỖI)
         var epsByMovieId = {};
-        // Regex bắt gọn từng block tập phim trong chuỗi JSON mà không cần lookbehind
-        var epObjRegex = /"movie_id":"([^"]+)","server":"([^"]+)","name":"([^"]+)","slug":"([^"]+)","type":"([^"]+)","link":"([^"]+)"/g;
+        // Bắt mọi khối JSON object chứa "movie_id" và "link" bất chấp thứ tự hay thiếu trường
+        var flatObjRegex = /\{[^{}]*"link"\s*:\s*"[^"]+"[^{}]*\}/g;
         var epM;
         
-        while ((epM = epObjRegex.exec(cleanHtml)) !== null) {
-            var mId = epM[1];
-            if (!epsByMovieId[mId]) epsByMovieId[mId] = [];
-            epsByMovieId[mId].push({
-                server: epM[2],
-                name: epM[3],
-                slug: epM[4],
-                type: epM[5],
-                link: epM[6]
-            });
+        while ((epM = flatObjRegex.exec(cleanHtml)) !== null) {
+            var block = epM[0];
+            var mIdMatch = block.match(/"movie_id"\s*:\s*"?([^",}]+)"?/);
+            if (!mIdMatch) continue;
+            var mId = mIdMatch[1];
+            
+            var srvMatch = block.match(/"server"\s*:\s*"([^"]+)"/);
+            var server = srvMatch ? srvMatch[1] : "Vietsub";
+            
+            var nameMatch = block.match(/"name"\s*:\s*"([^"]+)"/);
+            var name = nameMatch ? nameMatch[1] : "Tập";
+            
+            var slugMatch = block.match(/"slug"\s*:\s*"([^"]+)"/);
+            var slug = slugMatch ? slugMatch[1] : "";
+            
+            var typeMatch = block.match(/"type"\s*:\s*"([^"]+)"/);
+            var type = typeMatch ? typeMatch[1] : "m3u8";
+            
+            var linkMatch = block.match(/"link"\s*:\s*"([^"]+)"/);
+            var link = linkMatch ? linkMatch[1] : "";
+            
+            if (mId && link) {
+                if (!epsByMovieId[mId]) epsByMovieId[mId] = [];
+                // Tránh trùng lặp tập có cùng link
+                var exists = false;
+                for (var j = 0; j < epsByMovieId[mId].length; j++) {
+                    if (epsByMovieId[mId][j].link === link) {
+                        exists = true; 
+                        break;
+                    }
+                }
+                if (!exists) {
+                    epsByMovieId[mId].push({
+                        server: server,
+                        name: name,
+                        slug: slug,
+                        type: type,
+                        link: link
+                    });
+                }
+            }
         }
 
         // 3. LỌC CHÍNH XÁC TẬP CỦA PHIM HIỆN TẠI
@@ -257,7 +290,7 @@ function parseMovieDetail(html, url) {
         if (targetMovieId && epsByMovieId[targetMovieId]) {
             targetEps = epsByMovieId[targetMovieId];
         } else {
-            // Backup: Nếu không tìm thấy ID, lấy bộ mảng chứa nhiều tập nhất
+            // Backup: Nếu không tìm thấy ID chính, lấy bộ mảng chứa nhiều tập nhất
             var maxLen = 0;
             for (var k in epsByMovieId) {
                 if (epsByMovieId[k].length > maxLen) {
@@ -411,10 +444,13 @@ function parseYearsResponse(html) { return "[]"; }
 
 function getLISTmenu() {
     return `
+danh-sach/phim-long-tieng@@Phim Lồng Tiếng
+danh-sach/phim-thuyet-minh@@Phim Thuyết Minh
 danh-sach/phim-le@@Phim Lẻ
 danh-sach/phim-bo@@Phim Bộ
-danh-sach/phim-chieu-rap@@Phim Chiếu Rạp
-danh-sach/phim-thuyet-minh@@Phim Thuyết Minh
+danh-sach/phim-moi@@Phim Mới Cập Nhật
+danh-sach/phim-dang-chieu@@Phim Đang Chiếu
+danh-sach/phim-4k@@Phim 4K
 the-loai/hanh-dong@@Hành Động
 the-loai/tinh-cam@@Tình Cảm
 the-loai/hai-huoc@@Hài Hước
