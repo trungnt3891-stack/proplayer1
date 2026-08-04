@@ -8,7 +8,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "kkphim",
         "name": "KKPhim",
-        "version": "1.0.4",
+        "version": "1.0.5",
         "baseUrl": "https://phimapi.com",
         "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/kkphim.png",
         "isEnabled": true,
@@ -78,15 +78,16 @@ function getUrlList(slug, filtersJson) {
 }
 
 function getUrlSearch(keyword, filtersJson) {
+    var page = 1;
+    var limit = 24;
     try {
         var filters = typeof filtersJson === 'string' ? JSON.parse(filtersJson || "{}") : (filtersJson || {});
-        var page = filters.page || 1;
-        var limit = filters.limit || 24;
-        // Bắt chính xác endpoint API JSON mà bạn đã test bằng cURL
-        return "https://phimapi.com/v1/api/tim-kiem?keyword=" + encodeURIComponent(keyword) + "&page=" + page + "&limit=" + limit;
+        page = filters.page || 1;
     } catch (e) {
-        return "https://phimapi.com/v1/api/tim-kiem?keyword=" + encodeURIComponent(keyword);
+        log("Lỗi JSON Filter Search: " + e);
     }
+    // Đúng cấu trúc query theo cURL API Document hướng dẫn
+    return "https://phimapi.com/v1/api/tim-kiem?keyword=" + encodeURIComponent(keyword) + "&page=" + page + "&limit=" + limit;
 }
 
 function getUrlDetail(slug) {
@@ -97,27 +98,34 @@ function getUrlCategories() { return "https://phimapi.com/the-loai"; }
 function getUrlCountries() { return "https://phimapi.com/quoc-gia"; }
 
 // =============================================================================
-// PARSERS (BÓC TÁCH DỮ LIỆU CỰC AN TOÀN)
+// PARSERS
 // =============================================================================
 
-// Gom chung luồng Parse của List và Search vì JSON trả về giống nhau
 function parseListResponse(apiResponseJson) {
     try {
         var response = typeof apiResponseJson === 'string' ? JSON.parse(apiResponseJson) : apiResponseJson;
         var data = response.data || {};
         
-        // Quét mảng items linh hoạt ở mọi ngóc ngách của JSON
         var items = Array.isArray(data.items) ? data.items : 
                    (Array.isArray(response.items) ? response.items : 
                    (Array.isArray(data) ? data : []));
 
+        // Lấy domain ảnh (API phim-moi trả pathImage, API danh-sach trả APP_DOMAIN_CDN_IMAGE)
+        var imageDomain = data.APP_DOMAIN_CDN_IMAGE || response.pathImage || "https://phimimg.com";
+        if (imageDomain.charAt(imageDomain.length - 1) === '/') imageDomain = imageDomain.slice(0, -1);
+
         var movies = items.map(function (item) {
+            var poster = item.poster_url || "";
+            if (poster && poster.indexOf("http") !== 0) poster = imageDomain + "/" + poster;
+            var thumb = item.thumb_url || poster;
+            if (thumb && thumb.indexOf("http") !== 0) thumb = imageDomain + "/" + thumb;
+
             return {
                 id: item.slug || item._id,
                 title: item.name || item.title || "",
                 originalTitle: item.origin_name || "",
-                posterUrl: getPosterUrl(item.poster_url),
-                backdropUrl: getPosterUrl(item.thumb_url || item.poster_url),
+                posterUrl: poster,
+                backdropUrl: thumb,
                 year: item.year || 0,
                 quality: item.quality || "",
                 episode_current: item.episode_current || "",
@@ -125,38 +133,74 @@ function parseListResponse(apiResponseJson) {
             };
         });
 
-        // THUẬT TOÁN BÓC TÁCH PHÂN TRANG CHỐNG CRASH NAN
         var pagination = (data.params && data.params.pagination) || response.pagination || {};
         var currentPage = parseInt(pagination.currentPage, 10) || 1;
-        var totalItems = parseInt(pagination.totalItems, 10) || movies.length;
-        var itemsPerPage = parseInt(pagination.totalItemsPerPage, 10) || 24;
+        var totalPages = parseInt(pagination.totalPages, 10) || 1;
+        if (totalPages < currentPage) totalPages = currentPage; // Chống lỗi lệch trang
+
+        return JSON.stringify({
+            items: movies,
+            pagination: { currentPage: currentPage, totalPages: totalPages }
+        });
+    } catch (error) {
+        log("Lỗi Parse List: " + error);
+        return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
+    }
+}
+
+// BÓC TÁCH SEARCH ĐỘC LẬP - Chống nhiễu dữ liệu và lỗi scope
+function parseSearchResponse(apiResponseJson) {
+    try {
+        var response = typeof apiResponseJson === 'string' ? JSON.parse(apiResponseJson) : apiResponseJson;
+        var data = response.data || {};
+        var items = data.items || [];
         
-        var totalPages = 1;
-        if (totalItems > 0 && itemsPerPage > 0) {
-            totalPages = Math.ceil(totalItems / itemsPerPage);
+        // Cực kỳ quan trọng: Bắt buộc lấy Domain Image do API Search chỉ trả về Tên file
+        var imageDomain = data.APP_DOMAIN_CDN_IMAGE || "https://phimimg.com";
+        if (imageDomain.charAt(imageDomain.length - 1) === '/') {
+            imageDomain = imageDomain.slice(0, -1);
         }
-        
-        // Fix dứt điểm lỗi NaN (Not a Number) làm sập App
-        if (isNaN(totalPages) || totalPages < currentPage) {
-            totalPages = currentPage;
+
+        var movies = [];
+        for (var i = 0; i < items.length; i++) {
+            var item = items[i];
+            
+            // Xử lý link ảnh mượt mà
+            var poster = item.poster_url || "";
+            if (poster && poster.indexOf("http") !== 0) poster = imageDomain + "/" + poster;
+            
+            var thumb = item.thumb_url || poster;
+            if (thumb && thumb.indexOf("http") !== 0) thumb = imageDomain + "/" + thumb;
+
+            movies.push({
+                id: item.slug || item._id,
+                title: item.name || "",
+                originalTitle: item.origin_name || "",
+                posterUrl: poster,
+                backdropUrl: thumb,
+                year: item.year || 0,
+                quality: item.quality || "",
+                episode_current: item.episode_current || "",
+                lang: item.lang || ""
+            });
         }
+
+        // Bóc tách phân trang chính xác tuyệt đối theo Document của KKPhim
+        var pagination = (data.params && data.params.pagination) || {};
+        var currentPage = parseInt(pagination.currentPage, 10) || 1;
+        var totalPages = parseInt(pagination.totalPages, 10) || 1;
 
         return JSON.stringify({
             items: movies,
             pagination: {
                 currentPage: currentPage,
-                totalPages: totalPages
+                totalPages: Math.max(currentPage, totalPages)
             }
         });
     } catch (error) {
-        log("Lỗi Parse List/Search: " + error);
+        log("Lỗi Parse Search: " + error);
         return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
     }
-}
-
-// Chỏ trực tiếp qua parseListResponse vì cấu trúc data.items là như nhau
-function parseSearchResponse(apiResponseJson) {
-    return parseListResponse(apiResponseJson);
 }
 
 function parseMovieDetail(apiResponseJson) {
@@ -182,12 +226,20 @@ function parseMovieDetail(apiResponseJson) {
             }
         });
 
+        // Tự động ghép nối API Image Domain cho Detail nếu thiếu
+        var imageDomain = "https://phimimg.com";
+        var posterUrl = movie.poster_url || "";
+        if (posterUrl && posterUrl.indexOf("http") !== 0) posterUrl = imageDomain + "/" + posterUrl;
+        
+        var thumbUrl = movie.thumb_url || posterUrl;
+        if (thumbUrl && thumbUrl.indexOf("http") !== 0) thumbUrl = imageDomain + "/" + thumbUrl;
+
         return JSON.stringify({
             id: movie.slug,
             title: movie.name,
             originName: movie.origin_name || "",
-            posterUrl: getPosterUrl(movie.poster_url),
-            backdropUrl: getPosterUrl(movie.thumb_url),
+            posterUrl: posterUrl,
+            backdropUrl: thumbUrl,
             description: (movie.content || "").replace(/<[^>]*>/g, ""),
             year: movie.year || 0,
             rating: movie.tmdb ? (movie.tmdb.vote_average || 0) : 0,
@@ -247,12 +299,4 @@ function parseCountriesResponse(html) {
         var items = response.data?.items || response.items || (Array.isArray(response) ? response : []);
         return JSON.stringify(items.map(function (i) { return { name: i.name, value: i.slug }; }));
     } catch (e) { return "[]"; }
-}
-
-function getPosterUrl(path) {
-    if (!path) return "";
-    if (path.indexOf("http") === 0) return path;
-    // Bắt lỗi an toàn nếu path có chứa dấu "/" thừa ở đầu
-    if (path.indexOf("/") === 0) path = path.substring(1);
-    return "https://phimimg.com/" + path;
 }
