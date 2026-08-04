@@ -10,7 +10,7 @@ function getManifest() {
       "id": "vsmov",
       "name": "VsMov",
       "description": "Nguồn phim VSMOV.COM",
-      "version": "1.2.6",
+      "version": "1.2.7",
       "info": "Tối ưu hoàn chỉnh chuẩn giao diện Webview Native Player để hiển thị phụ đề và tuỳ chọn mượt mà.",
       "baseUrl": DOMAIN,
       "iconUrl": DOMAIN + "/favicon-vsm.png",
@@ -251,7 +251,7 @@ function sortEpisodesByName(data) {
     return data;
 }
 
-// BÓC TÁCH CHI TIẾT PHIM VÀ GÁN TRỰC TIẾP LINK WEBVIEW CHO TỪNG TẬP
+// BÓC TÁCH CHI TIẾT PHIM VÀ ĐƯA LINK GỐC VÀO ID TẬP PHIM
 function parseMovieDetail(html, url) {
     log("parseMovieDetail: " + url)
     try {
@@ -351,7 +351,7 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// BẬT WEBVIEW CHUẨN XÁC ĐỂ LOAD TRANG GỐC HIỆN ĐỦ SUB VÀ MENU ĐIỀU KHIỂN
+// BẬT TRỰC TIẾP GIAO DIỆN WEBVIEW TỪNG TẬP PHIM (CHUẨN CHẤN PHIMFUN)
 function parseDetailResponse(html, url) {
     try {
         var targetUrl = url;
@@ -362,6 +362,7 @@ function parseDetailResponse(html, url) {
             targetUrl = BASEURL + (targetUrl.startsWith('/') ? targetUrl : '/' + targetUrl);
         }
 
+        // Tùy chỉnh làm sạch giao diện webview cho gọn gàng, hiển thị trọn vẹn player gốc có Vietsub
         var customJs = "document.querySelectorAll('header, footer, nav, aside, .ads, .sidebar, iframe[sandbox]').forEach(function(e){e.style.display='none'});";
 
         return JSON.stringify({
@@ -372,11 +373,12 @@ function parseDetailResponse(html, url) {
                 "Origin": BASEURL,
                 "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
                 "Custom-Js": customJs
-            }
+            },
+            subtitles: []
         });
     } catch (e) {
         log("parseDetailResponse error: " + e.message);
-        return JSON.stringify({ url: url, isEmbed: true, headers: {} });
+        return JSON.stringify({ url: url, isEmbed: true, headers: {}, subtitles: [] });
     }
 }
 
