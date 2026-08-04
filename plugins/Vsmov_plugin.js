@@ -1,5 +1,5 @@
 // =============================================================================
-// PLUGIN MOVIE SCRAPER: VSMOV.COM (FIX HOMEPAGE & WEBVIEW PLAYER)
+// PLUGIN MOVIE SCRAPER: VSMOV.COM (DIRECT WEBVIEW EMBED)
 // =============================================================================
 
 var DOMAIN = "https://vsmov.com";
@@ -9,7 +9,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.6.2",
+        "version": "1.6.3",
         "baseUrl": DOMAIN,
         "iconUrl": DOMAIN + "/favicon-vsm.png",
         "isEnabled": true,
@@ -190,7 +190,7 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// BÓC TÁCH CHI TIẾT PHIM VÀ LẤY LINK WEBVIEW CHO TỪNG TẬP
+// BÓC TÁCH CHI TIẾT VÀ TẠO NÚT BẤM XEM PHIM TRỰC TIẾP
 function parseMovieDetail(html, url) {
     try {
         var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
@@ -204,7 +204,16 @@ function parseMovieDetail(html, url) {
         var desc = descMatch ? descMatch[1].trim() : "";
 
         var servers = [];
-        
+        var episodes = [];
+
+        // Đưa đường dẫn trang chính thức vào làm nút bấm trực quan
+        episodes.push({
+            id: url,
+            name: "Bấm vào để xem phim",
+            slug: "xem-ngay"
+        });
+
+        // Quét thêm danh sách tập nếu có
         var episodesJson = null;
         var matchEmbed = html.match(/var\s+embedEpisodes\s*=\s*(\[[\s\S]*?\]);\s*var\s+m3u8Episodes/i);
         if (matchEmbed && matchEmbed[1]) {
@@ -228,7 +237,6 @@ function parseMovieDetail(html, url) {
                     for (var j = 0; j < sList.length; j++) {
                         var ep = sList[j];
                         var watchSlug = ep.slug || "";
-                        
                         var episodeWebLink = "";
                         var cleanBaseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
                         if (watchSlug.indexOf("http") === 0) {
@@ -247,14 +255,20 @@ function parseMovieDetail(html, url) {
                     }
 
                     if (serverEps.length > 0) {
-                        sName = sName.replace(/[\r\n\t]+/g, ' ').trim();
                         servers.push({
-                            name: sName,
+                            name: sName.replace(/[\r\n\t]+/g, ' ').trim(),
                             episodes: serverEps
                         });
                     }
                 }
             } catch (jsonErr) {}
+        }
+
+        if (servers.length === 0) {
+            servers.push({
+                name: "Vietsub",
+                episodes: episodes
+            });
         }
 
         return JSON.stringify({
@@ -270,9 +284,7 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// =============================================================================
-// INJECT CUSTOM-JS CHO WEBVIEW PLAYER
-// =============================================================================
+// KÍCH HOẠT WEBVIEW TẢI TRANG GỐC
 function parseDetailResponse(html, url) {
     try {
         var targetUrl = url;
@@ -280,22 +292,12 @@ function parseDetailResponse(html, url) {
             targetUrl = "https://vsmov.com" + (targetUrl.startsWith('/') ? targetUrl : '/' + targetUrl);
         }
 
-        var customJS = `
-            try {
-                var s = document.createElement('style');
-                s.innerHTML = 'html, body { margin:0!important; padding:0!important; width:100vw!important; height:100vh!important; overflow:hidden!important; background:#000!important; } ' +
-                              'header, footer, nav, aside, .ads, .sidebar { display:none!important; pointer-events:none!important; }';
-                document.head.appendChild(s);
-            } catch(e) {}
-        `;
-        
         return JSON.stringify({
             url: targetUrl,
             isEmbed: true, 
             headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                "Referer": "https://vsmov.com/",
-                "Custom-Js": customJS.replace(/\s+/g, ' ').trim()
+                "Referer": "https://vsmov.com/"
             },
             subtitles: []
         });
@@ -316,4 +318,3 @@ function parseCategoriesResponse(apiResponseJson) {
 function parseCountriesResponse(apiResponseJson) {
     return "[]"; 
 }
-
