@@ -6,12 +6,12 @@ function getManifest() {
     return JSON.stringify({
         "id": "sextop2",
         "name": "Sextop2",
-        "version": "1.1.6",
+        "version": "1.1.7",
         "baseUrl": "https://sextop1.forum",
         "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/sextop1.webp",
         "isEnabled": true,
         "isAdult": true,
-        "type": "VIDEO",
+        "type": "MOVIE",
         "playerType": "embed",
         "layoutType": "HORIZONTAL"
     });
