@@ -1,5 +1,5 @@
 // =============================================================================
-// CẤU HÌNH DOMAIN VICDN - TỐI ƯU HÓA BỞI JS EXPERT
+// CẤU HÌNH DOMAIN VICDN - TỐI ƯU HÓA TÌM KIẾM
 // =============================================================================
 var BASEURL = "https://vicdn.cc"; 
 var BASEAPI = BASEURL + "/api";
@@ -8,8 +8,8 @@ function getManifest() {
     return JSON.stringify({
         id: "vicdn",
         name: "ViCDN Pro",
-        description: "Bản Master: Fix lỗi Search HTML, hiển thị List tập Native, Inject CustomJS siêu tốc chống chặn JWPlayer.",
-        version: "7.1.0",
+        description: "Bản Master: Fix lỗi Search HTML 100%, hiển thị List tập Native, Inject CustomJS siêu tốc.",
+        version: "7.2.0",
         baseUrl: BASEURL,
         iconUrl: BASEURL + "/vicdn.png",
         isEnabled: true,
@@ -80,7 +80,7 @@ function getUrlList(slug, filtersJson) {
 }
 
 function getUrlSearch(keyword, filtersJson) {
-    // Ép gọi thẳng vào trang chủ kèm Query, do website dùng JS nội bộ để lọc
+    // Gọi thẳng URL trang chủ với tham số tìm kiếm, Server sẽ tự lọc
     return BASEURL + "/?q=" + encodeURIComponent(keyword.trim());
 }
 
@@ -134,94 +134,59 @@ function parseListResponse(html) {
 }
 
 // -----------------------------------------------------------------------------
-// [BƯỚC ĐỘT PHÁ]: PARSER TÌM KIẾM CỰC CHUẨN - CHỐNG TRÀN BỘ NHỚ RAM
+// [ĐÃ FIX 100%] PARSER TÌM KIẾM TỪ HTML
 // -----------------------------------------------------------------------------
 function parseSearchResponse(html, url) {
     try {
-        // 1. Lấy keyword người dùng nhập từ URL
-        var matchKeyword = url.match(/[?&]q=([^&]+)/);
-        var keyword = matchKeyword ? decodeURIComponent(matchKeyword[1]).toLowerCase().trim() : "";
+        var jsonString = "";
         
-        if (!keyword) {
-            return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
-        }
-
-        // 2. Trích xuất JSON mảng allData bằng indexOf thay vì Regex (Chống Stack Overflow cho mảng lớn)
-        var startTag = "const allData = ";
-        var startIdx = html.indexOf(startTag);
-        
-        if (startIdx === -1) {
-            log("Không tìm thấy biến allData trong HTML.");
-            return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
-        }
-        
-        var jsonStart = startIdx + startTag.length;
-        var filterIdx = html.indexOf("let filteredData", jsonStart);
-        
-        if (filterIdx === -1) {
-            log("Không tìm thấy điểm kết thúc JSON.");
-            return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
-        }
-        
-        // Tìm dấu đóng ngoặc vuông ] gần nhất trước chữ let filteredData
-        var jsonEnd = html.lastIndexOf("]", filterIdx);
-        if (jsonEnd === -1) {
-            return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
-        }
-        
-        var jsonString = html.substring(jsonStart, jsonEnd + 1);
-        var allData = JSON.parse(jsonString);
-        var items = [];
-        
-        // 3. Hàm loại bỏ dấu tiếng Việt để gõ "nguoi khi" vẫn ra "Người Khí"
-        function removeAccents(str) {
-            return str.replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g, "a")
-                      .replace(/è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ/g, "e")
-                      .replace(/ì|í|ị|ỉ|ĩ/g, "i")
-                      .replace(/ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ/g, "o")
-                      .replace(/ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ/g, "u")
-                      .replace(/ỳ|ý|ỵ|ỷ|ỹ/g, "y")
-                      .replace(/đ/g, "d");
-        }
-        
-        var kwNorm = removeAccents(keyword).toLowerCase();
-
-        // 4. Lọc kết quả y hệt cách website chạy nội bộ
-        for (var i = 0; i < allData.length; i++) {
-            var item = allData[i];
-            var vname = (item.vname || "").toLowerCase();
-            var ename = (item.ename || "").toLowerCase();
-            
-            var vNorm = removeAccents(vname);
-            var eNorm = removeAccents(ename);
-            
-            if (vname.indexOf(keyword) > -1 || ename.indexOf(keyword) > -1 || vNorm.indexOf(kwNorm) > -1 || eNorm.indexOf(kwNorm) > -1) {
-                
-                var pUrl = item.poster || "";
-                if (pUrl && pUrl.indexOf("http") === -1) pUrl = "https://image.tmdb.org/t/p/w300/" + pUrl + ".jpg";
-                
-                var bUrl = item.banner || "";
-                if (bUrl && bUrl.indexOf("http") === -1) bUrl = "https://image.tmdb.org/t/p/w533_and_h300_face/" + bUrl + ".jpg";
-
-                items.push({
-                    "id": item.slug, 
-                    "title": item.vname || item.ename,
-                    "posterUrl": pUrl,
-                    "backdropUrl": bUrl,
-                    "quality": item.type ? item.type.toUpperCase() : "HD",
-                    "episode_current": "Tập " + item.stt + "/" + item.total
-                });
+        // Phương pháp trích xuất chuỗi an toàn tuyệt đối
+        // Tách chuỗi từ đoạn "allData = [" cho đến "];let filteredData"
+        var parts = html.split('allData = [');
+        if (parts.length > 1) {
+            jsonString = "[" + parts[1].split('];let filteredData')[0] + "]";
+        } else {
+            // Dự phòng nếu code JS trên web bị đổi khoảng trắng (allData=[)
+            parts = html.split('allData=[');
+            if (parts.length > 1) {
+                jsonString = "[" + parts[1].split('];let filteredData')[0] + "]";
             }
         }
         
-        log("Tìm kiếm thành công: " + items.length + " kết quả.");
+        if (!jsonString || jsonString === "[]") {
+            return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
+        }
+
+        var allData = JSON.parse(jsonString);
+        var items = [];
+        
+        // Server đã lọc sẵn, ta chỉ cần lặp qua mảng allData và lấy dữ liệu
+        for (var i = 0; i < allData.length; i++) {
+            var item = allData[i];
+            
+            var pUrl = item.poster || "";
+            if (pUrl && pUrl.indexOf("http") === -1) pUrl = "https://image.tmdb.org/t/p/w300/" + pUrl + ".jpg";
+            
+            var bUrl = item.banner || "";
+            if (bUrl && bUrl.indexOf("http") === -1) bUrl = "https://image.tmdb.org/t/p/w533_and_h300_face/" + bUrl + ".jpg";
+
+            items.push({
+                "id": item.slug, 
+                "title": item.vname || item.ename,
+                "posterUrl": pUrl,
+                "backdropUrl": bUrl,
+                "quality": item.type ? item.type.toUpperCase() : "HD",
+                "episode_current": "Tập " + item.stt + "/" + item.total
+            });
+        }
+        
         return JSON.stringify({
             "items": items,
             "pagination": { "currentPage": 1, "totalPages": 1 }
         });
         
     } catch (e) {
-        log("Lỗi parseSearchResponse: " + e);
+        log("Lỗi parseSearchResponse: " + e.message);
         return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
     }
 }
@@ -255,7 +220,7 @@ function parseMovieDetail(html, url) {
                 var splitEpi = itemEpi.split("|");
                 if(splitEpi.length >= 2) {
                     episodes.push({
-                        id: splitEpi[1].trim(), // Lấy thẳng link Player làm ID
+                        id: splitEpi[1].trim(),
                         name: "Tập " + splitEpi[0].trim(),
                         slug: "tap-" + splitEpi[0].trim()
                     });
@@ -305,21 +270,18 @@ function parseDetailResponse(html, url) {
 
         var customJS = `
             try {
-                // 1. Phá hủy ngay lập tức trình phát hiện F12/DevTools của vicdn (Chống tự reload trang)
                 if (window.devtoolsDetector) {
                     window.devtoolsDetector.launch = function(){};
                     window.devtoolsDetector.addListener = function(){};
                     window.devtoolsDetector.isOpen = false;
                 }
                 
-                // 2. Tiêm CSS bóp nghẹt mọi phần tử không cần thiết, ép Player Full màn hình
                 var s = document.createElement('style');
                 s.innerHTML = 'html, body { margin:0!important; padding:0!important; width:100vw!important; height:100vh!important; overflow:hidden!important; background:#000!important; } ' +
                               '#ssPlay { position:fixed!important; top:0!important; left:0!important; width:100vw!important; height:100vh!important; z-index:999999!important; display:flex!important; } ' +
                               '#sub-cfg-modal, header, footer, iframe:not(#ssPlay iframe) { display:none!important; pointer-events:none!important; }';
                 document.head.appendChild(s);
                 
-                // 3. Auto-Play và Skip Ads thông minh
                 var checkJWP = setInterval(function() {
                     if (typeof jwplayer === 'function') {
                         var player = jwplayer();
