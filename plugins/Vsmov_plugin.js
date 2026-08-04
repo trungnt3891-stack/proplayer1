@@ -7,7 +7,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.3.1",
+        "version": "1.3.2",
         "baseUrl": "https://vsmov.com",
         "iconUrl": "https://vsmov.com/favicon-vsm.png",
         "isEnabled": true,
@@ -60,8 +60,10 @@ function getUrlList(slug, filtersJson) {
         }
     } catch (e) {}
 
+    // Chuẩn hóa tên đường dẫn
     if (slug === 'phim-moi-cap-nhat' || slug === 'phim-moi-cap-nhat-v3') slug = 'phim-moi';
 
+    // Xác định đúng thư mục (vsmov xếp các menu này vào mục danh-sach)
     var danhSachSlugs = ['phim-moi', 'phim-bo', 'phim-le', 'dang-chieu', '4k', 'long-tieng', 'thuyet-minh', 'subteam'];
     var basePath = "the-loai"; 
     
@@ -236,7 +238,7 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// BẬT WEBVIEW Ở CHẾ ĐỘ CHUẨN NGUYÊN BẢN (KHÔNG CAN THIỆP ÉP KHUNG JS) ĐỂ HIỆN ĐỦ SUB VÀ MENU GỐC
+// BẬT WEBVIEW CHUẨN NGUYÊN BẢN (KHÔNG CAN THIỆP ÉP KHUNG JS) ĐỂ HIỆN ĐỦ SUB VÀ GIAO DIỆN GỐC
 function parseDetailResponse(html, url) {
     return JSON.stringify({
         url: url, // Đường dẫn trang web gốc chứa player chuẩn và Vietsub
