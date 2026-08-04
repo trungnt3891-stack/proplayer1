@@ -1,6 +1,5 @@
 // =============================================================================
-// PLUGIN MOVIE SCRAPER: VSMOV.COM (WEBVIEW EMBED PLAYER & CUSTOM-JS)
-// AUTHOR: JAVASCRIPT EXPERT
+// PLUGIN MOVIE SCRAPER: VSMOV.COM (STABLE HTML & WEBVIEW EMBED PLAYER)
 // =============================================================================
 
 var DOMAIN = "https://vsmov.com";
@@ -9,9 +8,8 @@ var BASEURL = DOMAIN;
 function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
-        "name": "VsMov Pro",
-        "description": "Nguồn phim VSMOV.COM - Tối ưu hóa WebView Embed Player",
-        "version": "1.6.0",
+        "name": "VsMov",
+        "version": "1.6.1",
         "baseUrl": DOMAIN,
         "iconUrl": DOMAIN + "/favicon-vsm.png",
         "isEnabled": true,
@@ -68,6 +66,9 @@ function getFilterConfig() {
 function getUrlList(slug, filtersJson) {
     var page = 1;
     try {
+        if (slug && slug.indexOf("http") === 0) {
+            return slug;
+        }
         if (typeof filtersJson === 'string' && filtersJson !== "") {
             var fixedJson = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
             page = JSON.parse(fixedJson).page || 1;
@@ -102,6 +103,8 @@ function getUrlSearch(keyword, filtersJson) {
 }
 
 function getUrlDetail(slug) {
+    if (!slug) return "";
+    if (slug.indexOf('http') === 0) return slug;
     return "https://vsmov.com/phim/" + slug;
 }
 
@@ -126,6 +129,7 @@ function parseListResponse(html) {
             var slugMatch = row.match(/href="[^"]*\/phim\/([^"]+)"/i);
             if (!slugMatch) continue;
             var slug = slugMatch[1];
+            var fullLink = "https://vsmov.com/phim/" + slug;
 
             var titleMatch = row.match(/<h4[^>]*>([\s\S]*?)<\/h4>/i);
             var title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : "";
@@ -144,7 +148,7 @@ function parseListResponse(html) {
             var year = yearMatch ? parseInt(yearMatch[1], 10) : 0;
 
             items.push({
-                id: slug,
+                id: fullLink,
                 title: title,
                 originalTitle: originalTitle,
                 posterUrl: posterUrl,
@@ -179,7 +183,7 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// BÓC TÁCH CHI TIẾT PHIM VÀ LẤY LINK WEBVIEW CHUẨN XÁC CHO TỪNG TẬP
+// BÓC TÁCH CHI TIẾT PHIM VÀ LẤY LINK WEBVIEW CHO TỪNG TẬP
 function parseMovieDetail(html, url) {
     try {
         var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
@@ -264,6 +268,11 @@ function parseMovieDetail(html, url) {
 // =============================================================================
 function parseDetailResponse(html, url) {
     try {
+        var targetUrl = url;
+        if (targetUrl && targetUrl.indexOf("http") !== 0) {
+            targetUrl = "https://vsmov.com" + (targetUrl.startsWith('/') ? targetUrl : '/' + targetUrl);
+        }
+
         var customJS = `
             try {
                 var s = document.createElement('style');
@@ -274,7 +283,7 @@ function parseDetailResponse(html, url) {
         `;
         
         return JSON.stringify({
-            url: url,
+            url: targetUrl,
             isEmbed: true, 
             headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
