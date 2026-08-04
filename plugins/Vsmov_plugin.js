@@ -1,5 +1,5 @@
 // =============================================================================
-// PLUGIN MOVIE SCRAPER: VSMOV.COM (DIRECT WEBVIEW EMBED)
+// PLUGIN MOVIE SCRAPER: VSMOV.COM (DIRECT EMBED BUTTON & WEBVIEW)
 // =============================================================================
 
 var DOMAIN = "https://vsmov.com";
@@ -9,7 +9,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.6.3",
+        "version": "1.6.4",
         "baseUrl": DOMAIN,
         "iconUrl": DOMAIN + "/favicon-vsm.png",
         "isEnabled": true,
@@ -190,7 +190,7 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// BÓC TÁCH CHI TIẾT VÀ TẠO NÚT BẤM XEM PHIM TRỰC TIẾP
+// BÓC TÁCH CHI TIẾT TẠO NÚT XEM PHIM BẮT BUỘC HIỆN TRÊN GIAO DIỆN
 function parseMovieDetail(html, url) {
     try {
         var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
@@ -203,73 +203,17 @@ function parseMovieDetail(html, url) {
         var descMatch = html.match(/<meta property="og:description" content="([^"]+)"/i);
         var desc = descMatch ? descMatch[1].trim() : "";
 
-        var servers = [];
         var episodes = [];
-
-        // Đưa đường dẫn trang chính thức vào làm nút bấm trực quan
         episodes.push({
             id: url,
             name: "Bấm vào để xem phim",
             slug: "xem-ngay"
         });
 
-        // Quét thêm danh sách tập nếu có
-        var episodesJson = null;
-        var matchEmbed = html.match(/var\s+embedEpisodes\s*=\s*(\[[\s\S]*?\]);\s*var\s+m3u8Episodes/i);
-        if (matchEmbed && matchEmbed[1]) {
-            episodesJson = matchEmbed[1];
-        } else {
-            var matchFallback = html.match(/(?:var|let)\s+embedEpisodes\s*=\s*(\[[\s\S]*?\]);/i) || html.match(/(?:var|let)\s+episodes\s*=\s*(\[[\s\S]*?\]);/i);
-            if (matchFallback && matchFallback[1]) {
-                episodesJson = matchFallback[1];
-            }
-        }
-
-        if (episodesJson) {
-            try {
-                var epData = JSON.parse(episodesJson);
-                for (var i = 0; i < epData.length; i++) {
-                    var serverObj = epData[i];
-                    var sName = serverObj.server_name || "Vietsub";
-                    var sList = serverObj.list || [];
-                    var serverEps = [];
-
-                    for (var j = 0; j < sList.length; j++) {
-                        var ep = sList[j];
-                        var watchSlug = ep.slug || "";
-                        var episodeWebLink = "";
-                        var cleanBaseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
-                        if (watchSlug.indexOf("http") === 0) {
-                            episodeWebLink = watchSlug;
-                        } else {
-                            episodeWebLink = cleanBaseUrl + "/" + (watchSlug.startsWith('/') ? watchSlug.slice(1) : watchSlug);
-                        }
-
-                        if (watchSlug) {
-                            serverEps.push({
-                                id: episodeWebLink, 
-                                name: ep.name || "Tập " + (j + 1),
-                                slug: watchSlug
-                            });
-                        }
-                    }
-
-                    if (serverEps.length > 0) {
-                        servers.push({
-                            name: sName.replace(/[\r\n\t]+/g, ' ').trim(),
-                            episodes: serverEps
-                        });
-                    }
-                }
-            } catch (jsonErr) {}
-        }
-
-        if (servers.length === 0) {
-            servers.push({
-                name: "Vietsub",
-                episodes: episodes
-            });
-        }
+        var servers = [{
+            name: "Vietsub",
+            episodes: episodes
+        }];
 
         return JSON.stringify({
             id: url,
@@ -280,11 +224,15 @@ function parseMovieDetail(html, url) {
             servers: servers 
         });
     } catch (error) {
-        return "null";
+        return JSON.stringify({
+            id: url,
+            title: "Phim Mới",
+            servers: [{ name: "Vietsub", episodes: [{ id: url, name: "Bấm vào để xem phim", slug: "xem-ngay" }] }]
+        });
     }
 }
 
-// KÍCH HOẠT WEBVIEW TẢI TRANG GỐC
+// KÍCH HOẠT WEBVIEW HIỂN THỊ TOÀN BỘ GIAO DIỆN WEBSITE CHÍNH CHỦ
 function parseDetailResponse(html, url) {
     try {
         var targetUrl = url;
