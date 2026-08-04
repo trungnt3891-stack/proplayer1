@@ -8,8 +8,8 @@ function getManifest() {
   return JSON.stringify({
     id: "vicdn",
     name: "Nguồn Vicdn",
-    description: "Tối ưu hóa 100% API JSON siêu tốc. Giao Diện Chọn Tập CustomJS Nổi.",
-    version: "6.1.0",
+    description: "Đã Fix lỗi văng Webview hiển thị JSON. 1 Nút bấm xem phim, CustomJS chọn tập.",
+    version: "6.1.1",
     baseUrl: BASEURL,
     iconUrl: BASEURL + "/vicdn.png",
     isEnabled: true,
@@ -96,11 +96,12 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // -----------------------------------------------------------------------------
-// PARSER SIÊU TỐC - ĐỌC TRỰC TIẾP TỪ JSON, KHÔNG CẦN DOM QUÉT HTML
+// PARSER SIÊU TỐC - ĐỌC TRỰC TIẾP TỪ JSON
 // -----------------------------------------------------------------------------
 function parseListResponse(html) {
     try {
-        var json = JSON.parse(html);
+        // [FIX CRASH] Kiểm tra xem html là chuỗi hay đã được App tự parse thành Object
+        var json = typeof html === 'string' ? JSON.parse(html) : html;
         var data = json.data || [];
         var items = [];
 
@@ -132,6 +133,7 @@ function parseListResponse(html) {
             "pagination": { "currentPage": currentPage, "totalPages": totalPages }
         });
     } catch (e) {
+        log("parseListResponse[err]: " + e);
         return JSON.stringify({ "items": [], "pagination": { "currentPage": 1, "totalPages": 1 } });
     }
 }
@@ -145,7 +147,8 @@ function parseSearchResponse(html) {
 // -----------------------------------------------------------------------------
 function parseMovieDetail(html, url) {
     try {
-        var json = JSON.parse(html);
+        // [FIX CRASH] Kiểm tra xem html là chuỗi hay đã được App tự parse thành Object
+        var json = typeof html === 'string' ? JSON.parse(html) : html;
         var data = json.data;
         
         var limg = data.banner || data.poster || "";
@@ -188,6 +191,7 @@ function parseMovieDetail(html, url) {
         });
 
     } catch (e) {
+        log("parseMovieDetail[err]: " + e);
         return JSON.stringify({ id: url, title: "Lỗi tải dữ liệu", servers: [] });
     }
 }
@@ -197,38 +201,34 @@ function parseMovieDetail(html, url) {
 // -----------------------------------------------------------------------------
 function parseDetailResponse(html, url) {
   try {
-    var json = JSON.parse(html);
+    // [FIX CRASH] Tránh lỗi JSON.parse khi html đã là Object
+    var json = typeof html === 'string' ? JSON.parse(html) : html;
     var data = json.data;
     var current = 1;
     
     var matchCurrent = url.match(/current=(\d+)/i);
-    if (matchCurrent) current = parseInt(matchCurrent[1]);
+    if (matchCurrent) current = Number(matchCurrent[1]);
     
-    var stream = "";
+    var stream = url; // Fallback giống hệt code gốc của bạn
     
     if (data.list_episodes && data.list_episodes.length > 0) {
         for (var j = 0; j < data.list_episodes.length; j++) {
             var item = data.list_episodes[j];
             var split = item.split("|");
-            if(parseInt(split[0]) === current){
-                stream = split[1];
+            if(Number(split[0]) === current){
+                // Giữ nguyên logic nối link của bạn
+                stream = split[1] + "?episodes=" + url;
                 break;
             }
         }
-        // Truyền URL của API json vào link Iframe để mã CustomJS tự lấy danh sách tập
-        if (stream) {
-            var separator = stream.indexOf("?") > -1 ? "&" : "?";
-            stream += separator + "episodes=" + encodeURIComponent(url.split("?")[0]);
-        }
     } else if (data.mkv) {
-        var separator = data.mkv.indexOf("?") > -1 ? "&" : "?";
-        stream = data.mkv + separator + "episodes=" + encodeURIComponent(url.split("?")[0]);
+        stream = data.mkv + "?episodes=" + url;
     }
     
     var customJS = checkRaw(rawJS(stream), true);
     
     return JSON.stringify({
-      url: stream || BASEURL,
+      url: stream,
       isEmbed: true, // Ép mở Webview
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -238,6 +238,7 @@ function parseDetailResponse(html, url) {
       subtitles: [],
     });
   } catch (e) {
+    log("parseDetailResponse[err]: " + e);
     return JSON.stringify({ url: "", isEmbed: true, headers: {} });
   }
 }
@@ -266,7 +267,7 @@ function parseCountriesResponse(html) { return "[]"; }
 function parseYearsResponse(html) { return "[]"; }
 
 // -----------------------------------------------------------------------------
-// GIAO DIỆN CUSTOM JS ĐỘC QUYỀN (GIỮ NGUYÊN 100%)
+// GIAO DIỆN CUSTOM JS ĐỘC QUYỀN CỦA BẠN (GIỮ NGUYÊN 100%)
 // -----------------------------------------------------------------------------
 function rawJS(stream) {
   return `
@@ -694,6 +695,7 @@ function rawJS(stream) {
             var prevHist = getHistory();
             if (prevHist && prevHist.lastEpi) {
                 savedHistoryEpi = parseInt(prevHist.lastEpi, 10);
+                
                 if (Number(currentEpisode) !== Number(savedHistoryEpi) && 
                     Number(currentEpisode) !== (Number(savedHistoryEpi) + 1)) {
                     isFirstLoadWithHist = true; 
@@ -721,15 +723,12 @@ function rawJS(stream) {
                                 var item = data.list_episodes[j];
                                 var split = item.split("|");
                                 var epNum = parseInt(split[0], 10);
-                                var epLink = split[1];
-                                // Gắn query episodes=... vào link để chuyển sang Iframe
-                                var sep = epLink.indexOf("?") > -1 ? "&" : "?";
                                 episodeList.push({
                                     id: EMBED_STREAM_URL + "?current=" + epNum,
                                     name: "Tập " + epNum,
                                     slug: "tap-" + epNum,
                                     num: epNum,
-                                    streamUrl: epLink + sep + "episodes=" + encodeURIComponent(parsed.listEpisodesUrl)
+                                    streamUrl: split[1]
                                 });
                             }
                             buildUI();
