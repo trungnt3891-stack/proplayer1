@@ -8,8 +8,8 @@ function getManifest() {
     return JSON.stringify({
         id: "vicdn",
         name: "ViCDN Pro",
-        description: "Bản Master: Fix lỗi bắt link, hiển thị List tập Native, Inject CustomJS siêu tốc chống chặn JWPlayer.",
-        version: "7.0.0",
+        description: "Bản Master: Fix lỗi Search HTML, hiển thị List tập Native, Inject CustomJS siêu tốc chống chặn JWPlayer.",
+        version: "7.1.0",
         baseUrl: BASEURL,
         iconUrl: BASEURL + "/vicdn.png",
         isEnabled: true,
@@ -66,7 +66,7 @@ function getPrimaryCategories() {
 function getFilterConfig() { return JSON.stringify({}); }
 
 // -----------------------------------------------------------------------------
-// URL GENERATOR - CHUẨN HÓA GỌI API TRỰC TIẾP
+// URL GENERATOR
 // -----------------------------------------------------------------------------
 function getUrlList(slug, filtersJson) {
     try {
@@ -80,14 +80,9 @@ function getUrlList(slug, filtersJson) {
 }
 
 function getUrlSearch(keyword, filtersJson) {
-    try {
-        var page = 1;
-        if (filtersJson) {
-            var fixedJson = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
-            try { page = parseInt(JSON.parse(fixedJson).page) || 1; } catch (e) {}
-        }
-        return BASEAPI + "/search?keysearch=" + encodeURIComponent(keyword.trim()) + "&page=" + page;
-    } catch(e) { return BASEAPI + "/search?keysearch=" + encodeURIComponent(keyword.trim()); }
+    // SỬA LỖI SEARCH: Web này không có API tìm kiếm, nó load lại trang chủ và filter nội bộ
+    // Vì vậy ta ép gọi URL trang chủ kèm tham số q=...
+    return BASEURL + "/?q=" + encodeURIComponent(keyword.trim());
 }
 
 function getUrlDetail(slug) {
@@ -99,7 +94,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // -----------------------------------------------------------------------------
-// PARSER SIÊU TỐC - ĐỌC TRỰC TIẾP TỪ JSON
+// PARSER DANH SÁCH (ĐỌC TỪ API JSON)
 // -----------------------------------------------------------------------------
 function parseListResponse(html) {
     try {
@@ -110,7 +105,6 @@ function parseListResponse(html) {
         for (var i = 0; i < data.length; i++) {
             var item = data[i];
             
-            // Xử lý logic ảnh TMDB
             var pUrl = item.poster || "";
             if (pUrl && pUrl.indexOf("http") === -1) pUrl = "https://image.tmdb.org/t/p/w300/" + pUrl + ".jpg";
             
@@ -140,12 +134,65 @@ function parseListResponse(html) {
     }
 }
 
-function parseSearchResponse(html) {
-    return parseListResponse(html);
+// -----------------------------------------------------------------------------
+// [FIX LỖI] PARSER TÌM KIẾM (ĐỌC DATA TỪ HTML VÀ TỰ FILTER)
+// -----------------------------------------------------------------------------
+function parseSearchResponse(html, url) {
+    try {
+        // 1. Lấy keyword người dùng nhập từ URL
+        var matchKeyword = url.match(/[?&]q=([^&]+)/);
+        var keyword = matchKeyword ? decodeURIComponent(matchKeyword[1]).toLowerCase().trim() : "";
+        
+        // 2. Trích xuất mảng "const allData = [...]" từ HTML của trang chủ
+        var dataMatch = html.match(/const\s+allData\s*=\s*(\[[\s\S]*?\]);\s*let\s+filteredData/);
+        if (!dataMatch) {
+            log("Không tìm thấy biến allData trong HTML.");
+            return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
+        }
+        
+        var allData = JSON.parse(dataMatch[1]);
+        var items = [];
+        
+        // 3. Tự viết logic lọc tên phim y như JavaScript của web
+        for (var i = 0; i < allData.length; i++) {
+            var item = allData[i];
+            var vname = (item.vname || "").toLowerCase();
+            var ename = (item.ename || "").toLowerCase();
+            
+            // Nếu tên Tiếng Việt hoặc tiếng Anh có chứa từ khóa
+            if (vname.indexOf(keyword) > -1 || ename.indexOf(keyword) > -1) {
+                
+                var pUrl = item.poster || "";
+                if (pUrl && pUrl.indexOf("http") === -1) pUrl = "https://image.tmdb.org/t/p/w300/" + pUrl + ".jpg";
+                
+                var bUrl = item.banner || "";
+                if (bUrl && bUrl.indexOf("http") === -1) bUrl = "https://image.tmdb.org/t/p/w533_and_h300_face/" + bUrl + ".jpg";
+
+                items.push({
+                    "id": item.slug, 
+                    "title": item.vname || item.ename,
+                    "posterUrl": pUrl,
+                    "backdropUrl": bUrl,
+                    "quality": item.type ? item.type.toUpperCase() : "HD",
+                    "episode_current": "Tập " + item.stt + "/" + item.total
+                });
+            }
+        }
+        
+        log("Đã tìm thấy " + items.length + " kết quả cho từ khóa: " + keyword);
+        return JSON.stringify({
+            "items": items,
+            "pagination": { "currentPage": 1, "totalPages": 1 } // Search local nên chỉ có 1 trang
+        });
+        
+    } catch (e) {
+        log("Lỗi parseSearchResponse: " + e);
+        return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
+    }
 }
 
 // -----------------------------------------------------------------------------
-// [BƯỚC ĐỘT PHÁ]: BÓC TÁCH TOÀN BỘ DANH SÁCH TẬP PHIM ĐẨY RA APP NATIVE
+// BÓC TÁCH CHI TIẾT VÀ DANH SÁCH TẬP
 // -----------------------------------------------------------------------------
 function parseMovieDetail(html, url) {
     try {
@@ -167,7 +214,6 @@ function parseMovieDetail(html, url) {
         
         var episodes = [];
         
-        // Quét mảng list_episodes do API trả về (VD: "1|https://vicdn.cc/play/...")
         if (data.list_episodes && data.list_episodes.length > 0) {
             for (var j = 0; j < data.list_episodes.length; j++) {
                 var itemEpi = data.list_episodes[j];
@@ -181,7 +227,6 @@ function parseMovieDetail(html, url) {
                 }
             }
         } else if (data.mkv) {
-            // Trường hợp phim lẻ
             episodes.push({
                 id: data.mkv.trim(),
                 name: "Xem Ngay",
@@ -189,7 +234,6 @@ function parseMovieDetail(html, url) {
             });
         }
         
-        // Fallback nếu api rỗng, tự sinh ra 1 nút báo lỗi
         if (episodes.length === 0) {
             episodes.push({ id: url, name: "Phim chưa có link", slug: "error" });
         }
@@ -218,14 +262,12 @@ function parseMovieDetail(html, url) {
 }
 
 // -----------------------------------------------------------------------------
-// [BƯỚC QUYẾT ĐỊNH]: INJECT CUSTOM-JS XỬ LÝ JWPLAYER MÃ HÓA
+// INJECT CUSTOM-JS XỬ LÝ JWPLAYER MÃ HÓA
 // -----------------------------------------------------------------------------
 function parseDetailResponse(html, url) {
     try {
-        // Biến url truyền vào lúc này chính là id của tập phim (tức là link https://vicdn.cc/play/...)
         var streamLink = url;
 
-        // Custom-JS siêu nhỏ gọn nhưng sức mạnh tuyệt đối
         var customJS = `
             try {
                 // 1. Phá hủy ngay lập tức trình phát hiện F12/DevTools của vicdn (Chống tự reload trang)
@@ -253,7 +295,6 @@ function parseDetailResponse(html, url) {
                             }
                         }
                     }
-                    // Bấm tắt popup nếu có
                     var skip = document.querySelector('.jw-skip');
                     if (skip) skip.click();
                 }, 1000);
@@ -262,11 +303,11 @@ function parseDetailResponse(html, url) {
         
         return JSON.stringify({
             url: streamLink,
-            isEmbed: true, // Ép Webview mở link để nó tự giải mã AES
+            isEmbed: true, 
             headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                 "Referer": "https://vicdn.cc/",
-                "Custom-Js": customJS.replace(/\\s+/g, ' ').trim() // Nén CustomJS trên 1 dòng
+                "Custom-Js": customJS.replace(/\\s+/g, ' ').trim()
             },
             subtitles: []
         });
