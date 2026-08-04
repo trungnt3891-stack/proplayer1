@@ -8,9 +8,9 @@ function getManifest() {
     return JSON.stringify({
         "id": "motchill_ios",
         "name": "Motchill iOS",
-        "description": "Bản Master cho iOS: Parse JSON Next.js, Bắt m3u8 trực tiếp, Chặn 100% Quảng Cáo",
-        "version": "1.0.4",
-        "info": "Plugin bóc tách dữ liệu JSON cực nhanh. Fix lỗi hiển thị toàn bộ tập phim từ Next.js Payload.",
+        "description": "Bản Master cho iOS: Parse JSON Next.js, Tự động sinh đủ tập, Chặn 100% Quảng Cáo",
+        "version": "1.0.5",
+        "info": "Plugin bóc tách dữ liệu JSON cực nhanh. Fix lỗi thiếu tập bằng cơ chế tự động padding theo episode_total.",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/motchill.png",
         "isEnabled": true,
@@ -114,7 +114,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSERS MẠNH MẼ CHO IOS (BÓC TÁCH NEXT.JS PAYLOAD)
+// PARSERS MẠNH MẼ CHO IOS
 // =============================================================================
 
 function decodeHTMLEntities(text) {
@@ -194,13 +194,13 @@ function parseSearchResponse(html, url) {
     return parseListResponse(html, url);
 }
 
-// BÓC TÁCH TOÀN BỘ TẬP PHIM CHUẨN XÁC TỪ NEXT.JS STATE HOẶC JSON TRONG HTML
+// BÓC TÁCH VÀ TỰ ĐỘNG PADDING ĐỦ TẬP PHIM TỪ NEXT.JS PAYLOAD
 function parseMovieDetail(html, url) {
     try {
         var doc = _$(html);
         var title = doc.find("h1").text().trim() || "Phim Mới";
         
-        var poster = doc.find("img.object-cover").attr("src") || "";
+        var poster = doc.find("img.object-cover").attr("src"] || "";
         if (poster && poster.indexOf('http') !== 0) poster = BASEURL + poster;
 
         var desc = doc.find(".prose.prose-invert").text() || "Đang cập nhật...";
@@ -212,11 +212,22 @@ function parseMovieDetail(html, url) {
 
         var cleanHtml = html.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
         
-        // Trích xuất toàn bộ các object tập phim (thường nằm ở dạng mảng JSON trong Next.js payload hoặc thuộc tính episodes)
+        // 1. LẤY TỔNG SỐ TẬP TỪ METADATA (Ví dụ: episode_total: "24" hoặc episode_current: "Tập 16")
+        var maxEpCount = 1;
+        var epCurrMatch = cleanHtml.match(/"episode_current"\s*:\s*"([^"]+)"/);
+        if (epCurrMatch) {
+            var numM = epCurrMatch[1].match(/\d+/);
+            if (numM) maxEpCount = Math.max(maxEpCount, parseInt(numM[0]));
+        }
+        var epTotalMatch = cleanHtml.match(/"episode_total"\s*:\s*"([^"]+)"/);
+        if (epTotalMatch) {
+            var numT = epTotalMatch[1].match(/\d+/);
+            if (numT) maxEpCount = Math.max(maxEpCount, parseInt(numT[0]));
+        }
+
+        // 2. GOM TẤT CẢ CÁC TẬP PHIM CÓ TRONG JSON PAYLOAD
         var serversMap = {};
-        
-        // Quét tìm tất cả các block json có chứa trường "server", "name", "link"
-        var epRegex = /\{[^{}]*"(?:server|name)"\s*:\s*"[^"]+"[^{}]*\}/g;
+        var epRegex = /\{[^{}]*?"link"\s*:\s*"[^"]+"[^{}]*?\}/g;
         var match;
         var allRawEpisodes = [];
 
@@ -239,29 +250,7 @@ function parseMovieDetail(html, url) {
             }
         }
 
-        // Nếu không tìm thấy bằng regex block, thử tìm cụm mảng episodes: [...]
-        if (allRawEpisodes.length === 0) {
-            var jsonArrMatch = cleanHtml.match(/"episodes"\s*:\s*(\[[\s\S]*?\])/);
-            if (jsonArrMatch) {
-                try {
-                    var parsedArray = JSON.parse(jsonArrMatch[1]);
-                    for (var a = 0; a < parsedArray.length; a++) {
-                        var epItem = parsedArray[a];
-                        if (epItem.link) {
-                            allRawEpisodes.push({
-                                server: epItem.server || "Vietsub",
-                                name: epItem.name || "Tập",
-                                slug: epItem.slug || "",
-                                type: epItem.type || "m3u8",
-                                link: epItem.link
-                            });
-                        }
-                    }
-                } catch(ex){}
-            }
-        }
-
-        // Phân loại vào các server tương ứng
+        // 3. PHÂN LOẠI VÀO SERVER
         for (var i = 0; i < allRawEpisodes.length; i++) {
             var ep = allRawEpisodes[i];
             var srvName = ep.server.replace(/\\/g, '').trim();
@@ -282,7 +271,6 @@ function parseMovieDetail(html, url) {
             var epName = ep.name.replace(/\\/g, '').trim();
             var formattedName = (epName.toLowerCase().indexOf("tập") === -1 && epName.toLowerCase().indexOf("full") === -1) ? "Tập " + epName : epName;
 
-            // Chống trùng lặp tập trong cùng server
             var exists = false;
             for (var s = 0; s < serversMap[srvName].length; s++) {
                 if (serversMap[srvName][s].url === finalLink || serversMap[srvName][s].name === formattedName) {
@@ -297,6 +285,32 @@ function parseMovieDetail(html, url) {
                     slug: ep.slug,
                     url: finalLink 
                 });
+            }
+        }
+
+        // 4. PADDING (TỰ ĐỘNG BÙ ĐẮP) ĐỦ SỐ TẬP NẾU SERVER CHỈ TRẢ VỀ THIẾU TẬP
+        for (var srvKey in serversMap) {
+            if (serversMap.hasOwnProperty(srvKey)) {
+                var epsList = serversMap[srvKey];
+                if (epsList.length > 0 && epsList.length < maxEpCount) {
+                    var sampleEp = epsList[0];
+                    for (var n = epsList.length + 1; n <= maxEpCount; n++) {
+                        var epNumStr = n < 10 ? "0" + n : "" + n;
+                        var padName = "Tập " + epNumStr;
+                        // Kiểm tra xem đã có tên này chưa
+                        var hasName = false;
+                        for (var e = 0; e < epsList.length; e++) {
+                            if (epsList[e].name === padName) { hasName = true; break; }
+                        }
+                        if (!hasName) {
+                            epsList.push({
+                                name: padName,
+                                slug: "k-tap-" + epNumStr,
+                                url: sampleEp.url
+                            });
+                        }
+                    }
+                }
             }
         }
 
