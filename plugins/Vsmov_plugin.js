@@ -1,5 +1,5 @@
 // =============================================================================
-// PLUGIN MOVIE SCRAPER: VSMOV.COM
+// PLUGIN MOVIE SCRAPER: VSMOV.COM (HYBRID JSON/HTML ENGINE)
 // AUTHOR: JAVASCRIPT EXPERT
 // =============================================================================
 
@@ -7,9 +7,9 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "baseUrl": "https://vsmov.com",
-        "iconUrl": "https://vsmov.com/uploads/favicon.png",
+        "iconUrl": "https://vsmov.com/favicon-vsm.png",
         "isEnabled": true,
         "type": "MOVIE"
     });
@@ -17,17 +17,17 @@ function getManifest() {
 
 function getHomeSections() {
     return JSON.stringify([
+        { slug: 'phim-moi', title: 'Phim Mới Cập Nhật', type: 'Grid', path: 'danh-sach' },
         { slug: 'phim-bo', title: 'Phim Bộ', type: 'Horizontal', path: 'danh-sach' },
         { slug: 'phim-le', title: 'Phim Lẻ', type: 'Horizontal', path: 'danh-sach' },
         { slug: 'hoat-hinh', title: 'Hoạt Hình', type: 'Horizontal', path: 'danh-sach' },
-        { slug: 'tv-shows', title: 'TV Shows', type: 'Horizontal', path: 'danh-sach' },
-        { slug: 'phim-moi-cap-nhat', title: 'Phim Mới Cập Nhật', type: 'Grid', path: 'danh-sach' }
+        { slug: 'tv-shows', title: 'TV Shows', type: 'Horizontal', path: 'danh-sach' }
     ]);
 }
 
 function getPrimaryCategories() {
     return JSON.stringify([
-        { name: 'Phim mới', slug: 'phim-moi-cap-nhat' },
+        { name: 'Phim mới', slug: 'phim-moi' },
         { name: 'Phim bộ', slug: 'phim-bo' },
         { name: 'Phim lẻ', slug: 'phim-le' },
         { name: 'Hoạt hình', slug: 'hoat-hinh' },
@@ -46,126 +46,155 @@ function getFilterConfig() {
 }
 
 // =============================================================================
-// URL GENERATION
+// URL GENERATION (SỬ DỤNG CHUẨN API GỐC OPHIM)
 // =============================================================================
 
 function getUrlList(slug, filtersJson) {
+    var page = 1;
     try {
-        var page = 1;
-        var limit = 24;
         if (typeof filtersJson === 'string' && filtersJson !== "") {
-            var filters = JSON.parse(filtersJson);
-            page = filters.page || 1;
+            page = JSON.parse(filtersJson).page || 1;
         }
+    } catch (e) {}
 
-        // Với API chuẩn, "phim-moi-cap-nhat" thường có endpoint riêng
-        if (slug === 'phim-moi-cap-nhat' || slug === 'phim-moi-cap-nhat-v3') {
-            return "https://vsmov.com/danh-sach/phim-moi-cap-nhat?page=" + page;
-        }
+    // Xử lý thông minh slug phim mới
+    if (slug === 'phim-moi-cap-nhat' || slug === 'phim-moi-cap-nhat-v3') slug = 'phim-moi';
 
-        return "https://vsmov.com/v1/api/danh-sach/" + slug + "?page=" + page + "&limit=" + limit;
-    } catch (e) {
-        return "https://vsmov.com/v1/api/danh-sach/" + slug;
-    }
+    // Đường dẫn chuẩn API của Vsmov
+    return "https://vsmov.com/api/danh-sach/" + slug + "?page=" + page;
 }
 
 function getUrlSearch(keyword, filtersJson) {
+    var page = 1;
     try {
-        var page = 1;
-        // Bắt lỗi an toàn cho biến filters
         if (typeof filtersJson === 'string' && filtersJson !== "") {
-            var filters = JSON.parse(filtersJson);
-            page = filters.page || 1;
+            page = JSON.parse(filtersJson).page || 1;
         } else if (typeof filtersJson === 'number') {
             page = filtersJson;
         }
-        
-        // Đảm bảo encode an toàn không bị double encoding
-        var safeKeyword = encodeURIComponent(decodeURIComponent(keyword));
-        return "https://vsmov.com/v1/api/tim-kiem?keyword=" + safeKeyword + "&page=" + page + "&limit=24";
-    } catch (e) {
-        return "https://vsmov.com/v1/api/tim-kiem?keyword=" + encodeURIComponent(keyword);
-    }
+    } catch (e) {}
+    
+    // Tránh bị mã hóa kép từ khóa khiến kết quả sai
+    var safeKeyword = encodeURIComponent(decodeURIComponent(keyword));
+    return "https://vsmov.com/api/tim-kiem?keyword=" + safeKeyword + "&page=" + page;
 }
 
 function getUrlDetail(slug) {
-    return "https://vsmov.com/phim/" + slug;
+    return "https://vsmov.com/api/phim/" + slug;
 }
 
-function getUrlCategories() { return "https://vsmov.com/the-loai"; }
-function getUrlCountries() { return "https://vsmov.com/quoc-gia"; }
+function getUrlCategories() { return "https://vsmov.com/api/the-loai"; }
+function getUrlCountries() { return "https://vsmov.com/api/quoc-gia"; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// DATA PARSERS (API JSON PROCESSING)
+// DATA PARSERS (THUẬT TOÁN HYBRID: JSON & HTML)
 // =============================================================================
 
-function parseListResponse(apiResponseJson) {
+function parseListResponse(html) {
     try {
-        var response = JSON.parse(apiResponseJson);
-        var data = response.data || {};
-        
-        // Luôn linh hoạt tìm mảng items
         var items = [];
-        if (Array.isArray(data.items)) items = data.items;
-        else if (Array.isArray(response.items)) items = response.items;
-        else if (Array.isArray(data)) items = data;
-
-        // Bắt URL ảnh tự động
-        var imageDomain = data.APP_DOMAIN_CDN_IMAGE || response.pathImage || "";
-        if (imageDomain && imageDomain.charAt(imageDomain.length - 1) === '/') {
-            imageDomain = imageDomain.slice(0, -1);
-        }
-
-        var movies = [];
-        for (var i = 0; i < items.length; i++) {
-            var item = items[i];
-            if (!item) continue;
-
-            // Nối Domain Ảnh nếu API trả về dạng path rút gọn
-            var poster = item.poster_url || "";
-            if (poster && poster.indexOf("http") !== 0 && imageDomain) {
-                poster = imageDomain + (poster.indexOf("/") === 0 ? "" : "/") + poster;
-            }
-            var thumb = item.thumb_url || item.poster_url || "";
-            if (thumb && thumb.indexOf("http") !== 0 && imageDomain) {
-                thumb = imageDomain + (thumb.indexOf("/") === 0 ? "" : "/") + thumb;
-            }
-
-            movies.push({
-                id: item.slug || item._id || "",
-                title: item.name || item.title || "",
-                originalTitle: item.origin_name || "",
-                posterUrl: poster,
-                backdropUrl: thumb,
-                year: parseInt(item.year, 10) || 0,
-                quality: item.quality || "",
-                episode_current: item.episode_current || "",
-                lang: item.lang || ""
-            });
-        }
-
-        // Tính toán phân trang
-        var params = data.params || {};
-        var pagination = response.pagination || params.pagination || {};
-        var currentPage = parseInt(pagination.currentPage, 10) || 1;
+        var currentPage = 1;
         var totalPages = 1;
+        var trimmed = typeof html === 'string' ? html.trim() : "";
 
-        if (pagination.totalPages) {
-            totalPages = parseInt(pagination.totalPages, 10);
-        } else if (pagination.totalItems && pagination.totalItemsPerPage) {
-            totalPages = Math.ceil(parseInt(pagination.totalItems, 10) / parseInt(pagination.totalItemsPerPage, 10));
+        // 1. NẾU LÀ API JSON -> CHẠY LUỒNG SIÊU TỐC
+        if (trimmed.charAt(0) === '{' || trimmed.charAt(0) === '[') {
+            var response = JSON.parse(trimmed);
+            var data = response.data || response || {};
+            var rawItems = data.items || response.items || [];
+
+            var imgDomain = data.APP_DOMAIN_CDN_IMAGE || response.pathImage || "";
+            if (imgDomain && imgDomain.charAt(imgDomain.length - 1) === '/') {
+                imgDomain = imgDomain.slice(0, -1);
+            }
+
+            for (var i = 0; i < rawItems.length; i++) {
+                var item = rawItems[i];
+                if (!item) continue;
+                
+                var poster = item.poster_url || item.thumb_url || "";
+                if (poster && poster.indexOf("http") !== 0 && imgDomain) {
+                    poster = imgDomain + (poster.indexOf("/") === 0 ? "" : "/") + poster;
+                }
+                var thumb = item.thumb_url || item.poster_url || "";
+                if (thumb && thumb.indexOf("http") !== 0 && imgDomain) {
+                    thumb = imgDomain + (thumb.indexOf("/") === 0 ? "" : "/") + thumb;
+                }
+
+                items.push({
+                    id: item.slug || item._id || "",
+                    title: item.name || item.title || "",
+                    originalTitle: item.origin_name || "",
+                    posterUrl: poster,
+                    backdropUrl: thumb,
+                    year: parseInt(item.year, 10) || 0,
+                    quality: item.quality || "",
+                    episode_current: item.episode_current || "",
+                    lang: item.lang || ""
+                });
+            }
+
+            var pagination = (data.params && data.params.pagination) ? data.params.pagination : (response.pagination || {});
+            currentPage = parseInt(pagination.currentPage, 10) || 1;
+            totalPages = parseInt(pagination.totalPages, 10) || 1;
+            if (pagination.totalItems && pagination.totalItemsPerPage && !pagination.totalPages) {
+                totalPages = Math.ceil(parseInt(pagination.totalItems, 10) / parseInt(pagination.totalItemsPerPage, 10));
+            }
+        } 
+        // 2. NẾU BỊ CLOUDFLARE ÉP TRẢ VỀ HTML -> DÙNG REGEX CÀO THẲNG
+        else {
+            var rows = trimmed.match(/<tr[^>]*class="group\/tr[^>]*>([\s\S]*?)<\/tr>/gi) || [];
+            
+            for (var j = 0; j < rows.length; j++) {
+                var row = rows[j];
+                if (row.indexOf('<th') !== -1) continue; // Bỏ qua thanh tiêu đề
+
+                var titleMatch = row.match(/href="[^"]*\/phim\/([^"]+)"[^>]*>\s*<h4[^>]*>([^<]+)<\/h4>/i);
+                if (!titleMatch) continue;
+
+                var id = titleMatch[1];
+                var title = titleMatch[2].trim();
+
+                // Lấy ảnh gốc chống Lazyload
+                var posterMatch = row.match(/data-original="([^"]+)"/i) || row.match(/<img[^>]+src="([^"]+)"/i);
+                var posterUrl = posterMatch ? posterMatch[1] : "";
+
+                var originMatch = row.match(/class="text-sub-text line-clamp-1">([^<]*)<\/div>/i);
+                var originalTitle = originMatch ? originMatch[1].trim() : "";
+
+                var statusMatch = row.match(/<span class="flex-1 text-inherit font-normal px-1">\s*([^<]+?)\s*<\/span>/i);
+                var status = statusMatch ? statusMatch[1].trim() : "";
+
+                var yearMatch = row.match(/<span>(\d{4})<\/span>/i);
+                var year = yearMatch ? parseInt(yearMatch[1], 10) : 0;
+
+                items.push({
+                    id: id,
+                    title: title,
+                    originalTitle: originalTitle,
+                    posterUrl: posterUrl,
+                    backdropUrl: posterUrl,
+                    year: year,
+                    episode_current: status,
+                    quality: row.indexOf('4K') !== -1 ? '4K' : 'HD'
+                });
+            }
+
+            // Bóc phân trang từ HTML
+            var pageMatch = trimmed.match(/Trang\s+(\d+)\/(\d+)/i);
+            if (pageMatch) {
+                currentPage = parseInt(pageMatch[1], 10);
+                totalPages = parseInt(pageMatch[2], 10);
+            }
         }
 
         if (isNaN(totalPages) || totalPages < 1) totalPages = 1;
         if (totalPages < currentPage) totalPages = currentPage;
 
         return JSON.stringify({
-            items: movies,
-            pagination: {
-                currentPage: currentPage,
-                totalPages: totalPages
-            }
+            items: items,
+            pagination: { currentPage: currentPage, totalPages: totalPages }
         });
     } catch (error) {
         return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
@@ -173,18 +202,16 @@ function parseListResponse(apiResponseJson) {
 }
 
 function parseSearchResponse(apiResponseJson) {
-    // API Search của nền tảng này sử dụng chung cấu trúc trả về với List
     return parseListResponse(apiResponseJson);
 }
 
 function parseMovieDetail(apiResponseJson) {
     try {
-        var response = JSON.parse(apiResponseJson);
+        var response = typeof apiResponseJson === 'string' ? JSON.parse(apiResponseJson) : apiResponseJson;
         var movie = response.movie || {};
         var episodes = response.episodes || [];
-
-        // 1. Phân tích Server & Tập phim
         var servers = [];
+
         for (var i = 0; i < episodes.length; i++) {
             var server = episodes[i];
             var serverEpisodes = [];
@@ -204,7 +231,7 @@ function parseMovieDetail(apiResponseJson) {
             }
         }
 
-        // 2. Chống lỗi Undefined cho mảng
+        // Bóc tách metadata gọn gàng
         function getNames(arr) {
             if (!Array.isArray(arr)) return "";
             var names = [];
@@ -233,7 +260,7 @@ function parseMovieDetail(apiResponseJson) {
             originName: movie.origin_name || "",
             posterUrl: posterUrl,
             backdropUrl: thumbUrl,
-            description: (movie.content || "").replace(/<[^>]*>/g, ""), // Xóa tag HTML sạch sẽ
+            description: (movie.content || "").replace(/<[^>]*>/g, ""),
             year: parseInt(movie.year, 10) || 0,
             rating: ratingValue,
             quality: movie.quality || "",
@@ -253,21 +280,18 @@ function parseMovieDetail(apiResponseJson) {
 
 function parseDetailResponse(apiResponseJson, url) {
     try {
-        // Tối ưu NATIVE PLAYER: Bắt link luồng trực tiếp
         if (url && (url.indexOf(".m3u8") !== -1 || url.indexOf(".mp4") !== -1)) {
             return JSON.stringify({
                 url: url,
                 isEmbed: false,
                 mimeType: url.indexOf(".m3u8") !== -1 ? "application/x-mpegURL" : "video/mp4",
                 headers: { 
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36", 
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", 
                     "Referer": "https://vsmov.com/",
                     "Origin": "https://vsmov.com"
                 }
             });
         } 
-        
-        // Trả về Webview (iframe)
         return JSON.stringify({
             url: url || "",
             isEmbed: true,
@@ -285,14 +309,9 @@ function parseEmbedResponse(html, url) {
 function parseCategoriesResponse(apiResponseJson) {
     try {
         var response = JSON.parse(apiResponseJson);
-        var items = [];
-        if (response.data && Array.isArray(response.data.items)) items = response.data.items;
-        else if (Array.isArray(response.items)) items = response.items;
-
+        var items = (response.data && response.data.items) ? response.data.items : (response.items || []);
         var results = [];
-        for (var i = 0; i < items.length; i++) {
-            results.push({ name: items[i].name, slug: items[i].slug });
-        }
+        for (var i = 0; i < items.length; i++) results.push({ name: items[i].name, slug: items[i].slug });
         return JSON.stringify(results);
     } catch (e) { return "[]"; }
 }
@@ -300,14 +319,9 @@ function parseCategoriesResponse(apiResponseJson) {
 function parseCountriesResponse(apiResponseJson) {
     try {
         var response = JSON.parse(apiResponseJson);
-        var items = [];
-        if (response.data && Array.isArray(response.data.items)) items = response.data.items;
-        else if (Array.isArray(response.items)) items = response.items;
-
+        var items = (response.data && response.data.items) ? response.data.items : (response.items || []);
         var results = [];
-        for (var i = 0; i < items.length; i++) {
-            results.push({ name: items[i].name, value: items[i].slug });
-        }
+        for (var i = 0; i < items.length; i++) results.push({ name: items[i].name, value: items[i].slug });
         return JSON.stringify(results);
     } catch (e) { return "[]"; }
 }
