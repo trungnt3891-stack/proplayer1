@@ -1,13 +1,12 @@
 // =============================================================================
-// PLUGIN MOVIE SCRAPER: VSMOV.COM (NATIVE PLAYER + PARALLEL SUBTITLES)
-// AUTHOR: JAVASCRIPT EXPERT
+// PLUGIN MOVIE SCRAPER: VSMOV.COM (NATIVE PLAYER + NO AUTO PLAY + NO AUTO FULLSCREEN)
 // =============================================================================
 
 function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.4.0",
+        "version": "1.4.1",
         "baseUrl": "https://vsmov.com",
         "iconUrl": "https://vsmov.com/favicon-vsm.png",
         "isEnabled": true,
@@ -194,10 +193,8 @@ function parseMovieDetail(html, url) {
 
                 for (var j = 0; j < sList.length; j++) {
                     var ep = sList[j];
-                    // Lấy link m3u8 hoặc embed chuẩn để chạy trên Native Player
                     var streamLink = ep.m3u8 || ep.embed || ep.link_embed || ep.link || "";
                     
-                    // Quét xem trong thông tin tập phim có đính kèm file phụ đề (.vtt / .srt) rời hay không
                     var subtitles = [];
                     if (ep.subtitles && Array.isArray(ep.subtitles)) {
                         subtitles = ep.subtitles;
@@ -210,7 +207,7 @@ function parseMovieDetail(html, url) {
                             id: streamLink, 
                             name: ep.name || "Tập " + (j + 1),
                             slug: ep.slug || "",
-                            subtitles: subtitles // Gắn song song danh sách phụ đề vào tập phim
+                            subtitles: subtitles
                         });
                     }
                 }
@@ -238,23 +235,25 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// TRẢ VỀ CẤU HÌNH TRÌNH PHÁT NATIVE KÈM THEO LUỒNG STREAM VÀ GẮN SUB SONG SONG
+// TRẢ VỀ CẤU HÌNH TRÌNH PHÁT NATIVE (CHỐNG TỰ ĐỘNG PHÁT VÀ CHỐNG TỰ ĐỘNG PHÓNG TO)
 function parseDetailResponse(html, url) {
     return JSON.stringify({
-        url: url, // Luồng m3u8 / link stream chuẩn
-        isEmbed: false, // Dùng Native Player mượt mà
+        url: url,
+        isEmbed: false,
+        autoPlay: false,
+        fullscreen: false,
         mimeType: "application/x-mpegURL",
         headers: { 
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
             "Referer": "https://vsmov.com/",
             "Origin": "https://vsmov.com"
         },
-        subtitles: [] // Hệ thống sẽ nhận diện mảng phụ đề song song từ cấu hình tập phim
+        subtitles: []
     });
 }
 
 function parseEmbedResponse(html, url) {
-    return JSON.stringify({ url: url, isEmbed: false });
+    return JSON.stringify({ url: url, isEmbed: false, autoPlay: false, fullscreen: false });
 }
 
 function parseCategoriesResponse(apiResponseJson) {
