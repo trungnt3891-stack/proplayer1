@@ -7,7 +7,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.1.5",
+        "version": "1.1.6",
         "baseUrl": "https://vsmov.com",
         "iconUrl": "https://vsmov.com/favicon-vsm.png",
         "isEnabled": true,
@@ -61,8 +61,10 @@ function getUrlList(slug, filtersJson) {
         }
     } catch (e) {}
 
+    // Chuẩn hóa tên đường dẫn
     if (slug === 'phim-moi-cap-nhat' || slug === 'phim-moi-cap-nhat-v3') slug = 'phim-moi';
 
+    // Xác định đúng thư mục (vsmov xếp các menu này vào mục danh-sach)
     var danhSachSlugs = ['phim-moi', 'phim-bo', 'phim-le', 'dang-chieu', '4k', 'long-tieng', 'thuyet-minh', 'subteam'];
     var basePath = "the-loai"; 
     
@@ -166,7 +168,7 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// BÓC TÁCH DANH SÁCH TẬP PHIM VÀ TRỎ ID VỀ LINK WEB GỐC CỦA TỪNG TẬP
+// BÓC TÁCH DANH SÁCH TẬP PHIM VÀ TRỎ ID HOÀN TOÀN VỀ LINK WEBVIEW GỐC CỦA TỪNG TẬP
 function parseMovieDetail(html, url) {
     try {
         var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
@@ -208,7 +210,7 @@ function parseMovieDetail(html, url) {
 
                     if (watchSlug) {
                         serverEps.push({
-                            id: episodeWebLink, // Trỏ ID về link trang web gốc của tập phim
+                            id: episodeWebLink, // Trỏ ID hoàn toàn về link trang web gốc của tập phim
                             name: ep.name || "Tập " + (j + 1),
                             slug: watchSlug
                         });
@@ -238,9 +240,8 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// SỬ DỤNG HOÀN TOÀN LINK WEBVIEW NGUYÊN BẢN (KHÔNG ÉP TỰ ĐỘNG PLAY ĐỂ HIỂN ĐỦ CÀI ĐẶT VÀ CHỌN SUB)
+// MỞ WEBVIEW VỚI LINK WEB GỐC ĐỂ NGƯỜI DÙNG TỰ ĐỘNG CÀI ĐẶT SUB VÀ CHẾ ĐỘ PHÁT
 function parseDetailResponse(html, url) {
-    // Chỉ ẩn các thành phần rác (quảng cáo, header, footer), giữ nguyên trình phát và menu chọn sub/cài đặt của web
     var customJs = "document.querySelectorAll('header, footer, nav, aside, .ads, .sidebar, iframe[sandbox]').forEach(function(e){e.style.display='none'});";
     
     return JSON.stringify({
