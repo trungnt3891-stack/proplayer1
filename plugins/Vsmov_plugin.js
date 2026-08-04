@@ -1,12 +1,12 @@
 // =============================================================================
-// PLUGIN MOVIE SCRAPER: VSMOV.COM (NATIVE PLAYER + NO AUTO PLAY + NO AUTO FULLSCREEN)
+// PLUGIN MOVIE SCRAPER: VSMOV.COM (100% EXTERNAL WEBVIEW PLAYER & VIETSUB)
 // =============================================================================
 
 function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.4.1",
+        "version": "1.5.0",
         "baseUrl": "https://vsmov.com",
         "iconUrl": "https://vsmov.com/favicon-vsm.png",
         "isEnabled": true,
@@ -163,7 +163,7 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// BÓC TÁCH CHI TIẾT VÀ BẮT TRỰC TIẾP LUỒNG STREAM KÈM THÔNG TIN PHỤ ĐỀ SONG SONG
+// BÓC TÁCH CHI TIẾT VÀ GÁN LINK TRANG GỐC CHO TỪNG TẬP PHIM ĐỂ MỞ WEBVIEW
 function parseMovieDetail(html, url) {
     try {
         var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
@@ -193,21 +193,21 @@ function parseMovieDetail(html, url) {
 
                 for (var j = 0; j < sList.length; j++) {
                     var ep = sList[j];
-                    var streamLink = ep.m3u8 || ep.embed || ep.link_embed || ep.link || "";
+                    var watchSlug = ep.slug || "";
                     
-                    var subtitles = [];
-                    if (ep.subtitles && Array.isArray(ep.subtitles)) {
-                        subtitles = ep.subtitles;
-                    } else if (ep.sub && typeof ep.sub === 'string') {
-                        subtitles.push({ url: ep.sub, lang: "Vietsub" });
+                    var episodeWebLink = "";
+                    var cleanBaseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+                    if (watchSlug.indexOf("http") === 0) {
+                        episodeWebLink = watchSlug;
+                    } else {
+                        episodeWebLink = cleanBaseUrl + "/" + (watchSlug.startsWith('/') ? watchSlug.slice(1) : watchSlug);
                     }
 
-                    if (streamLink) {
+                    if (watchSlug) {
                         serverEps.push({
-                            id: streamLink, 
+                            id: episodeWebLink, // Trỏ ID về link trang xem phim gốc trên web
                             name: ep.name || "Tập " + (j + 1),
-                            slug: ep.slug || "",
-                            subtitles: subtitles
+                            slug: watchSlug
                         });
                     }
                 }
@@ -235,25 +235,22 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// TRẢ VỀ CẤU HÌNH TRÌNH PHÁT NATIVE (CHỐNG TỰ ĐỘNG PHÁT VÀ CHỐNG TỰ ĐỘNG PHÓNG TO)
+// ÉP 100% SANG EXTERNAL/WEBVIEW PLAYER ĐỂ TỰ ĐỘNG HIỂN THỊ VIETSUB CHUẨN XÁC
 function parseDetailResponse(html, url) {
     return JSON.stringify({
         url: url,
-        isEmbed: false,
+        isEmbed: true, // Kích hoạt WebPlayer / WebView ngoài
         autoPlay: false,
         fullscreen: false,
-        mimeType: "application/x-mpegURL",
         headers: { 
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-            "Referer": "https://vsmov.com/",
-            "Origin": "https://vsmov.com"
-        },
-        subtitles: []
+            "Referer": "https://vsmov.com/"
+        }
     });
 }
 
 function parseEmbedResponse(html, url) {
-    return JSON.stringify({ url: url, isEmbed: false, autoPlay: false, fullscreen: false });
+    return JSON.stringify({ url: url, isEmbed: true, autoPlay: false, fullscreen: false });
 }
 
 function parseCategoriesResponse(apiResponseJson) {
