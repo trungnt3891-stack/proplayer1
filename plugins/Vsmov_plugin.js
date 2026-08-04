@@ -1,5 +1,5 @@
 // =============================================================================
-// PLUGIN MOVIE SCRAPER: VSMOV.COM (NATIVE EPISODE SELECTOR + WEBVIEW PLAYER)
+// PLUGIN MOVIE SCRAPER: VSMOV.COM (NATIVE EPISODE SELECTOR + STANDARD WEBVIEW)
 // AUTHOR: JAVASCRIPT EXPERT
 // =============================================================================
 
@@ -7,7 +7,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.3.0",
+        "version": "1.3.1",
         "baseUrl": "https://vsmov.com",
         "iconUrl": "https://vsmov.com/favicon-vsm.png",
         "isEnabled": true,
@@ -60,10 +60,8 @@ function getUrlList(slug, filtersJson) {
         }
     } catch (e) {}
 
-    // Chuẩn hóa tên đường dẫn
     if (slug === 'phim-moi-cap-nhat' || slug === 'phim-moi-cap-nhat-v3') slug = 'phim-moi';
 
-    // Xác định đúng thư mục (vsmov xếp các menu này vào mục danh-sach)
     var danhSachSlugs = ['phim-moi', 'phim-bo', 'phim-le', 'dang-chieu', '4k', 'long-tieng', 'thuyet-minh', 'subteam'];
     var basePath = "the-loai"; 
     
@@ -166,7 +164,7 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// KÉO TẬP PHIM RA GIAO DIỆN NATIVE ĐỂ CHỌN VÀ GÁN LINK TRANG GỐC ĐỂ HIỆN SUB
+// KÉO TẬP PHIM RA GIAO DIỆN NATIVE ĐỂ CHỌN VÀ GÁN LINK TRANG GỐC CHỨA SẴN SUB
 function parseMovieDetail(html, url) {
     try {
         var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
@@ -198,7 +196,6 @@ function parseMovieDetail(html, url) {
                     var ep = sList[j];
                     var watchSlug = ep.slug || "";
                     
-                    // Tạo đường dẫn chuẩn trỏ trực tiếp đến trang xem tập phim trên web
                     var episodeWebLink = "";
                     var cleanBaseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
                     if (watchSlug.indexOf("http") === 0) {
@@ -209,7 +206,7 @@ function parseMovieDetail(html, url) {
 
                     if (watchSlug) {
                         serverEps.push({
-                            id: episodeWebLink, // Trỏ ID về link trang web xem phim gốc chứa sẵn Vietsub
+                            id: episodeWebLink, // Trỏ ID về link trang web xem phim gốc chứa đầy đủ Vietsub
                             name: ep.name || "Tập " + (j + 1),
                             slug: watchSlug
                         });
@@ -239,19 +236,14 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// BẬT WEBVIEW XEM PHIM GỐC CHỨA SẴN VIETSUB VÀ CÁC CÀI ĐẶT
+// BẬT WEBVIEW Ở CHẾ ĐỘ CHUẨN NGUYÊN BẢN (KHÔNG CAN THIỆP ÉP KHUNG JS) ĐỂ HIỆN ĐỦ SUB VÀ MENU GỐC
 function parseDetailResponse(html, url) {
-    // Ép Video giãn 100% màn hình, xoá rác, giữ nguyên vẹn trình phát và phụ đề chính hãng
-    var customJs = "document.querySelectorAll('header, footer, nav, aside, .ads, .sidebar, iframe[sandbox]').forEach(function(e){e.style.display='none'});";
-    customJs += "var v = document.querySelector('video, iframe, .player-container, #player'); if(v){ v.style.width='100vw'; v.style.height='100vh'; v.style.position='fixed'; v.style.top='0'; v.style.left='0'; v.style.zIndex='999999'; }";
-    
     return JSON.stringify({
-        url: url, // Link trang web tập phim gốc chứa đầy đủ phụ đề (Vietsub)
-        isEmbed: true, // Kích hoạt Webview tích hợp
+        url: url, // Đường dẫn trang web gốc chứa player chuẩn và Vietsub
+        isEmbed: true, // Kích hoạt Webview chuẩn của App
         headers: { 
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-            "Referer": "https://vsmov.com/",
-            "Custom-Js": customJs 
+            "Referer": "https://vsmov.com/"
         }
     });
 }
