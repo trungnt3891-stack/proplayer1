@@ -1,13 +1,12 @@
 // =============================================================================
-// PLUGIN MOVIE SCRAPER: VSMOV.COM (NATIVE EPISODE SELECTOR + STANDARD WEBVIEW)
-// AUTHOR: JAVASCRIPT EXPERT
+// PLUGIN MOVIE SCRAPER: VSMOV.COM (FULL WEBVIEW PLAYER & VIETSUB)
 // =============================================================================
 
 function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.3.2",
+        "version": "1.3.3",
         "baseUrl": "https://vsmov.com",
         "iconUrl": "https://vsmov.com/favicon-vsm.png",
         "isEnabled": true,
@@ -60,10 +59,8 @@ function getUrlList(slug, filtersJson) {
         }
     } catch (e) {}
 
-    // Chuẩn hóa tên đường dẫn
     if (slug === 'phim-moi-cap-nhat' || slug === 'phim-moi-cap-nhat-v3') slug = 'phim-moi';
 
-    // Xác định đúng thư mục (vsmov xếp các menu này vào mục danh-sach)
     var danhSachSlugs = ['phim-moi', 'phim-bo', 'phim-le', 'dang-chieu', '4k', 'long-tieng', 'thuyet-minh', 'subteam'];
     var basePath = "the-loai"; 
     
@@ -166,7 +163,7 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// KÉO TẬP PHIM RA GIAO DIỆN NATIVE ĐỂ CHỌN VÀ GÁN LINK TRANG GỐC CHỨA SẴN SUB
+// BÓC TÁCH CHI TIẾT VÀ GÁN LINK WEBVIEW TRỰC TIẾP CHO TỪNG TẬP PHIM
 function parseMovieDetail(html, url) {
     try {
         var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
@@ -208,7 +205,7 @@ function parseMovieDetail(html, url) {
 
                     if (watchSlug) {
                         serverEps.push({
-                            id: episodeWebLink, // Trỏ ID về link trang web xem phim gốc chứa đầy đủ Vietsub
+                            id: episodeWebLink,
                             name: ep.name || "Tập " + (j + 1),
                             slug: watchSlug
                         });
@@ -238,11 +235,11 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// BẬT WEBVIEW CHUẨN NGUYÊN BẢN (KHÔNG CAN THIỆP ÉP KHUNG JS) ĐỂ HIỆN ĐỦ SUB VÀ GIAO DIỆN GỐC
+// SỬ DỤNG WEBVIEW TOÀN TRANG ĐỂ HIỆN TRÌNH PHÁT GỐC VÀ VIETSUB
 function parseDetailResponse(html, url) {
     return JSON.stringify({
-        url: url, // Đường dẫn trang web gốc chứa player chuẩn và Vietsub
-        isEmbed: true, // Kích hoạt Webview chuẩn của App
+        url: url,
+        isEmbed: false,
         headers: { 
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
             "Referer": "https://vsmov.com/"
@@ -251,7 +248,7 @@ function parseDetailResponse(html, url) {
 }
 
 function parseEmbedResponse(html, url) {
-    return JSON.stringify({ url: url, isEmbed: true });
+    return JSON.stringify({ url: url, isEmbed: false });
 }
 
 function parseCategoriesResponse(apiResponseJson) {
