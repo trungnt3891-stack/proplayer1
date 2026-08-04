@@ -6,13 +6,13 @@ function getManifest() {
     return JSON.stringify({
         "id": "123av",
         "name": "123AV",
-        "version": "1.0.4",
+        "version": "1.0.5",
         "baseUrl": "https://123av.com",
         "referrer": "https://123av.com/",
         "iconUrl": "https://123av.com/assets/123av/favicon.png",
         "isEnabled": true,
         "isAdult": true,
-        "type": "VIDEO",
+        "type": "MOVIE",
         "layoutType": "HORIZONTAL",
         "subtitleCat": false
     });
