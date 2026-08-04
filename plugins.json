@@ -12,8 +12,8 @@
       "id": "motchill",
       "name": "motchill Phim",
       "version": "1.7.6",
-      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/Onflix_plugin.js",
-      "iconUrl": "https://onflix.lat/app/asset/logo.png"
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/motchill_plugin.js",
+      "iconUrl": "https://motchille.tv/motchill.png"
     },
     {
       "id": "bilutv",
