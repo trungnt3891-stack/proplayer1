@@ -7,7 +7,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.2.1",
+        "version": "1.2.2",
         "baseUrl": "https://vsmov.com",
         "iconUrl": "https://vsmov.com/favicon-vsm.png",
         "isEnabled": true,
@@ -166,7 +166,7 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// BÓC TÁCH DANH SÁCH TẬP VÀ TRỎ HOÀN TOÀN VỀ URL TRANG XEM TẬP PHIM CHÍNH HÃNG
+// BÓC TÁCH CHUẨN XÁC LINK TRANG TẬP PHIM CHO GIAO DIỆN CHỌN TẬP
 function parseMovieDetail(html, url) {
     try {
         var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
@@ -215,7 +215,7 @@ function parseMovieDetail(html, url) {
 
                         if (watchSlug) {
                             serverEps.push({
-                                id: episodeWebLink, // Trỏ ID về link trang web gốc của tập phim
+                                id: episodeWebLink, 
                                 name: ep.name || "Tập " + (j + 1),
                                 slug: watchSlug
                             });
@@ -246,13 +246,18 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// SỬ DỤNG WEBVIEW HOÀN TOÀN ĐỂ GIỮ NGUYÊN GIAO DIỆN CHỌN SUB VÀ CÀI ĐẶT CỦA WEB CHÍNH CHỦ
+// ÉP BẬT WEBVIEW ĐẦY ĐỦ VỚI URL TUYỆT ĐỐI ĐỂ HIỆN TRÌNH DUYỆT XEM PHIM GỐC
 function parseDetailResponse(html, url) {
+    var targetUrl = url;
+    if (targetUrl.indexOf("http") !== 0) {
+        targetUrl = "https://vsmov.com" + (targetUrl.startsWith('/') ? targetUrl : '/' + targetUrl);
+    }
+
     var customJs = "document.querySelectorAll('header, footer, nav, aside, .ads, .sidebar, iframe[sandbox]').forEach(function(e){e.style.display='none'});";
     
     return JSON.stringify({
-        url: url, // Link URL trang xem tập phim gốc
-        isEmbed: true, // Kích hoạt Webview toàn trang
+        url: targetUrl, 
+        isEmbed: true, 
         headers: { 
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
             "Referer": "https://vsmov.com/",
