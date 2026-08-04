@@ -7,7 +7,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.1.3",
+        "version": "1.1.4",
         "baseUrl": "https://vsmov.com",
         "iconUrl": "https://vsmov.com/favicon-vsm.png",
         "isEnabled": true,
@@ -166,7 +166,7 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// KÉO TẬP PHIM RA GIAO DIỆN NATIVE ĐỂ CHỌN (CHUẨN HÓA ĐẦY ĐỦ DOMAIN CHO URL WEBVIEW)
+// BÓC TÁCH DANH SÁCH TẬP PHIM VÀ LẤY TRỰC TIẾP LINK EMBED TƯƠNG ỨNG CHO TỪNG TẬP
 function parseMovieDetail(html, url) {
     try {
         var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
@@ -196,22 +196,13 @@ function parseMovieDetail(html, url) {
 
                 for (var j = 0; j < sList.length; j++) {
                     var ep = sList[j];
-                    var watchSlug = ep.slug || "";
-                    
-                    // Xử lý chuẩn hóa link tập phim đầy đủ giao diện gốc của web
-                    var episodeWebLink = "";
-                    if (watchSlug.indexOf("http") === 0) {
-                        episodeWebLink = watchSlug;
-                    } else {
-                        var cleanBaseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
-                        episodeWebLink = cleanBaseUrl + "/" + (watchSlug.startsWith('/') ? watchSlug.slice(1) : watchSlug);
-                    }
-
-                    if (watchSlug) {
+                    // Lấy chính xác link nguồn embed tương ứng của từng tập phim
+                    var mediaLink = ep.embed || ep.link_embed || ep.link || ep.m3u8 || "";
+                    if (mediaLink) {
                         serverEps.push({
-                            id: episodeWebLink, 
+                            id: mediaLink, // Gán thẳng link embed của tập vào ID để truyền xuống player
                             name: ep.name || "Tập " + (j + 1),
-                            slug: watchSlug
+                            slug: ep.slug || ""
                         });
                     }
                 }
@@ -239,14 +230,14 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// BẬT WEBVIEW XEM PHIM CHO PHÉP CHỌN SUB VÀ ĐIỀU KHIỂN GIAO DIỆN GỐC
+// PLAY TRỰC TIẾP LINK EMBED TƯƠNG ỨNG QUA WEBVIEW
 function parseDetailResponse(html, url) {
     var customJs = "document.querySelectorAll('header, footer, nav, aside, .ads, .sidebar, iframe[sandbox]').forEach(function(e){e.style.display='none'});";
     customJs += "var v = document.querySelector('video, iframe, .player-container, #player'); if(v){ v.style.width='100vw'; v.style.height='100vh'; v.style.position='fixed'; v.style.top='0'; v.style.left='0'; v.style.zIndex='999999'; }";
     
     return JSON.stringify({
-        url: url, 
-        isEmbed: true, 
+        url: url, // Đây là link embed trực tiếp của tập phim được truyền vào từ ID
+        isEmbed: true, // Kích hoạt Webview để render trực tiếp link nguồn phim
         headers: { 
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
             "Referer": "https://vsmov.com/",
