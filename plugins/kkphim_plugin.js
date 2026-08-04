@@ -2,13 +2,11 @@
 // CONFIGURATION & METADATA
 // =============================================================================
 
-var log = typeof log === "function" ? log : function(msg) { console.log(msg); };
-
 function getManifest() {
     return JSON.stringify({
         "id": "kkphim",
         "name": "KKPhim",
-        "version": "1.0.5",
+        "version": "1.0.6",
         "baseUrl": "https://phimapi.com",
         "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/kkphim.png",
         "isEnabled": true,
@@ -61,7 +59,10 @@ function getFilterConfig() {
 
 function getUrlList(slug, filtersJson) {
     try {
-        var filters = typeof filtersJson === 'string' ? JSON.parse(filtersJson || "{}") : (filtersJson || {});
+        var filters = {};
+        if (typeof filtersJson === 'string' && filtersJson !== "") {
+            filters = JSON.parse(filtersJson);
+        }
         var page = filters.page || 1;
 
         var listSlugs = ['phim-vietsub', 'subteam', 'phim-thuyet-minh', 'phim-long-tieng', 'phim-bo', 'phim-le', 'hoat-hinh', 'tv-shows', 'phim-chieu-rap', 'phim-moi-cap-nhat'];
@@ -88,26 +89,30 @@ function getUrlList(slug, filtersJson) {
     }
 }
 
-// Gọi URL Web HTML để tìm kiếm (tránh lỗi API)
-function getUrlSearch(keyword, filtersJson) {
+// Dùng API an toàn, xử lý triệt để biến đầu vào tránh crash do Object/String/Number
+function getUrlSearch(keyword, pageOrFilters) {
     var page = 1;
-    try {
-        if (typeof filtersJson === 'string') {
-            var filters = JSON.parse(filtersJson || "{}");
-            page = filters.page || 1;
-        } else if (typeof filtersJson === 'number') {
-            page = filtersJson;
+    if (pageOrFilters) {
+        if (typeof pageOrFilters === 'number') {
+            page = pageOrFilters;
+        } else if (typeof pageOrFilters === 'string') {
+            try {
+                var obj = JSON.parse(pageOrFilters);
+                page = obj.page || 1;
+            } catch (e) {
+                var parsed = parseInt(pageOrFilters, 10);
+                if (!isNaN(parsed)) page = parsed;
+            }
+        } else if (typeof pageOrFilters === 'object' && pageOrFilters.page) {
+            page = pageOrFilters.page;
         }
-    } catch (e) {
-        page = 1;
     }
-    return "https://kkphim.com/tim-kiem?keyword=" + encodeURIComponent(keyword) + "&page=" + page;
+    return "https://phimapi.com/v1/api/tim-kiem?keyword=" + encodeURIComponent(keyword) + "&limit=24&page=" + page;
 }
 
 function getUrlDetail(slug) {
     return "https://phimapi.com/phim/" + slug;
 }
-
 function getUrlCategories() { return "https://phimapi.com/the-loai"; }
 function getUrlCountries() { return "https://phimapi.com/quoc-gia"; }
 function getUrlYears() { return ""; }
@@ -118,31 +123,45 @@ function getUrlYears() { return ""; }
 
 function parseListResponse(apiResponseJson) {
     try {
-        var response = typeof apiResponseJson === 'string' ? JSON.parse(apiResponseJson) : apiResponseJson;
+        var response = JSON.parse(apiResponseJson);
         var data = response.data || {};
-        var items = data.items || (Array.isArray(data) ? data : (response.items || []));
+        
+        var items = [];
+        if (Array.isArray(data.items)) items = data.items;
+        else if (Array.isArray(response.items)) items = response.items;
+        else if (Array.isArray(data)) items = data;
 
         var params = data.params || {};
         var pagination = response.pagination || params.pagination || {};
 
-        var movies = items.map(function (item) {
-            return {
-                id: item.slug,
-                title: item.name,
+        var movies = [];
+        for (var i = 0; i < items.length; i++) {
+            var item = items[i];
+            if (!item) continue;
+            movies.push({
+                id: item.slug || item._id || "",
+                title: item.name || item.title || "",
                 posterUrl: getPosterUrl(item.poster_url),
                 backdropUrl: getPosterUrl(item.thumb_url || item.poster_url),
                 year: item.year || 0,
                 quality: item.quality || "",
                 episode_current: item.episode_current || "",
                 lang: item.lang || ""
-            };
-        });
+            });
+        }
+
+        var currentPage = parseInt(pagination.currentPage, 10) || 1;
+        var totalItems = parseInt(pagination.totalItems, 10) || 0;
+        var itemsPerPage = parseInt(pagination.totalItemsPerPage, 10) || 24;
+        var totalPages = totalItems > 0 ? Math.ceil(totalItems / itemsPerPage) : 1;
+
+        if (totalPages < currentPage) totalPages = currentPage;
 
         return JSON.stringify({
             items: movies,
             pagination: {
-                currentPage: parseInt(pagination.currentPage, 10) || 1,
-                totalPages: Math.ceil((pagination.totalItems || 0) / (pagination.totalItemsPerPage || 24)) || 1
+                currentPage: currentPage,
+                totalPages: totalPages
             }
         });
     } catch (error) {
@@ -150,56 +169,59 @@ function parseListResponse(apiResponseJson) {
     }
 }
 
-// Bóc tách Tìm kiếm bằng Regex từ HTML
-function parseSearchResponse(html) {
+// Bóc tách API Tìm kiếm chuẩn chỉ và an toàn
+function parseSearchResponse(apiResponseJson) {
     try {
+        var response = JSON.parse(apiResponseJson);
+        var data = response.data || {};
+        
         var items = [];
-        var tbodyMatch = html.match(/<tbody>([\s\S]*?)<\/tbody>/i);
-        var tbody = tbodyMatch ? tbodyMatch[1] : html;
-        var rows = tbody.match(/<tr>([\s\S]*?)<\/tr>/gi) || [];
+        if (Array.isArray(data.items)) items = data.items;
+        else if (Array.isArray(response.items)) items = response.items;
 
-        for (var i = 0; i < rows.length; i++) {
-            var row = rows[i];
+        var imageDomain = data.APP_DOMAIN_CDN_IMAGE || "https://phimimg.com";
+        if (imageDomain.charAt(imageDomain.length - 1) === '/') {
+            imageDomain = imageDomain.slice(0, -1);
+        }
 
-            var titleMatch = row.match(/<a[^>]+href="[^"]*\/phim\/([^"]+)"[^>]*class="info-title"[^>]*>([^<]+)<\/a>/i);
-            if (!titleMatch) continue; 
+        var movies = [];
+        for (var i = 0; i < items.length; i++) {
+            var item = items[i];
+            if (!item) continue;
+            
+            var poster = item.poster_url || "";
+            if (poster && poster.indexOf("http") !== 0) {
+                poster = imageDomain + (poster.indexOf("/") === 0 ? "" : "/") + poster;
+            }
+            
+            var thumb = item.thumb_url || item.poster_url || "";
+            if (thumb && thumb.indexOf("http") !== 0) {
+                thumb = imageDomain + (thumb.indexOf("/") === 0 ? "" : "/") + thumb;
+            }
 
-            var id = titleMatch[1];
-            var title = titleMatch[2].trim();
-
-            var posterMatch = row.match(/<img[^>]+src="([^"]+)"/i);
-            var posterUrl = posterMatch ? posterMatch[1] : "";
-
-            var originMatch = row.match(/<div class="info-origin">([^<]*)<\/div>/i);
-            var originalTitle = originMatch ? originMatch[1].trim() : "";
-
-            var yearMatch = row.match(/<td[^>]*class="text-secondary col-hide-sm">(\d{4})<\/td>/i);
-            var year = yearMatch ? parseInt(yearMatch[1], 10) : 0;
-
-            var statusMatch = row.match(/<span class="st-badge[^"]*">([^<]+)<\/span>/i);
-            var status = statusMatch ? statusMatch[1].trim() : "";
-
-            items.push({
-                id: id,
-                title: title,
-                originalTitle: originalTitle,
-                posterUrl: posterUrl,
-                backdropUrl: posterUrl, 
-                year: year,
-                episode_current: status
+            movies.push({
+                id: item.slug || item._id || "",
+                title: item.name || "",
+                originalTitle: item.origin_name || "",
+                posterUrl: poster,
+                backdropUrl: thumb,
+                year: item.year || 0,
+                quality: item.quality || "",
+                episode_current: item.episode_current || "",
+                lang: item.lang || ""
             });
         }
 
-        var currentPage = 1;
-        var totalPages = 1;
-        var pageMatch = html.match(/Trang\s+(\d+)\/(\d+)/i);
-        if (pageMatch) {
-            currentPage = parseInt(pageMatch[1], 10);
-            totalPages = parseInt(pageMatch[2], 10);
+        var pagination = (data.params && data.params.pagination) || response.pagination || {};
+        var currentPage = parseInt(pagination.currentPage, 10) || 1;
+        var totalPages = parseInt(pagination.totalPages, 10) || 1;
+        
+        if (totalPages < currentPage) {
+            totalPages = currentPage;
         }
 
         return JSON.stringify({
-            items: items,
+            items: movies,
             pagination: {
                 currentPage: currentPage,
                 totalPages: totalPages
@@ -212,7 +234,7 @@ function parseSearchResponse(html) {
 
 function parseMovieDetail(apiResponseJson) {
     try {
-        var response = typeof apiResponseJson === 'string' ? JSON.parse(apiResponseJson) : apiResponseJson;
+        var response = JSON.parse(apiResponseJson);
         var movie = response.movie || {};
         var episodes = response.episodes || [];
 
@@ -296,18 +318,20 @@ function parseEmbedResponse(html, url) {
     return JSON.stringify({ url: url, isEmbed: true });
 }
 
+// Fixed ES6 issue (?.) which crashed old Android JS engines
 function parseCategoriesResponse(apiResponseJson) {
     try {
-        var response = typeof apiResponseJson === 'string' ? JSON.parse(apiResponseJson) : apiResponseJson;
-        var items = response.data?.items || response.items || (Array.isArray(response) ? response : []);
+        var response = JSON.parse(apiResponseJson);
+        var items = (response.data && response.data.items) ? response.data.items : (response.items || []);
         return JSON.stringify(items.map(function (i) { return { name: i.name, slug: i.slug }; }));
     } catch (e) { return "[]"; }
 }
 
+// Fixed ES6 issue (?.) which crashed old Android JS engines
 function parseCountriesResponse(apiResponseJson) {
     try {
-        var response = typeof apiResponseJson === 'string' ? JSON.parse(apiResponseJson) : apiResponseJson;
-        var items = response.data?.items || response.items || (Array.isArray(response) ? response : []);
+        var response = JSON.parse(apiResponseJson);
+        var items = (response.data && response.data.items) ? response.data.items : (response.items || []);
         return JSON.stringify(items.map(function (i) { return { name: i.name, value: i.slug }; }));
     } catch (e) { return "[]"; }
 }
