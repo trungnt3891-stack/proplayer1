@@ -7,7 +7,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.1.0",
+        "version": "1.1.1",
         "baseUrl": "https://vsmov.com",
         "iconUrl": "https://vsmov.com/favicon-vsm.png",
         "isEnabled": true,
@@ -20,18 +20,22 @@ function getHomeSections() {
         { slug: 'phim-moi', title: 'Phim Mới Cập Nhật', type: 'Grid', path: 'danh-sach' },
         { slug: 'phim-bo', title: 'Phim Bộ', type: 'Horizontal', path: 'danh-sach' },
         { slug: 'phim-le', title: 'Phim Lẻ', type: 'Horizontal', path: 'danh-sach' },
-        // Đã sửa 'phim-chieu-rap' thành 'dang-chieu' theo đúng chuẩn server vsmov
-        { slug: 'dang-chieu', title: 'Phim Đang Chiếu (Chiếu Rạp)', type: 'Horizontal', path: 'danh-sach' }
+        { slug: 'long-tieng', title: 'Phim Lồng Tiếng', type: 'Horizontal', path: 'danh-sach' },
+        { slug: 'thuyet-minh', title: 'Phim Thuyết Minh', type: 'Horizontal', path: 'danh-sach' },
+        { slug: 'dang-chieu', title: 'Phim Đang Chiếu', type: 'Horizontal', path: 'danh-sach' },
+        { slug: '4k', title: 'Phim 4K', type: 'Horizontal', path: 'danh-sach' }
     ]);
 }
 
 function getPrimaryCategories() {
     return JSON.stringify([
-        { name: 'Phim mới', slug: 'phim-moi' },
+        { name: 'Phim mới cập nhật', slug: 'phim-moi' },
         { name: 'Phim bộ', slug: 'phim-bo' },
         { name: 'Phim lẻ', slug: 'phim-le' },
-        // Đã sửa 'phim-chieu-rap' thành 'dang-chieu' theo đúng chuẩn server vsmov
-        { name: 'Đang Chiếu / Rạp', slug: 'dang-chieu' }
+        { name: 'Phim lồng tiếng', slug: 'long-tieng' },
+        { name: 'Phim thuyết minh', slug: 'thuyet-minh' },
+        { name: 'Phim đang chiếu', slug: 'dang-chieu' },
+        { name: 'Phim 4K', slug: '4k' }
     ]);
 }
 
@@ -59,7 +63,7 @@ function getUrlList(slug, filtersJson) {
     // Chuẩn hóa tên đường dẫn
     if (slug === 'phim-moi-cap-nhat' || slug === 'phim-moi-cap-nhat-v3') slug = 'phim-moi';
 
-    // Xác định đúng thư mục (vsmov xếp Phim Đang Chiếu vào mục danh-sach)
+    // Xác định đúng thư mục (vsmov xếp các menu này vào mục danh-sach)
     var danhSachSlugs = ['phim-moi', 'phim-bo', 'phim-le', 'dang-chieu', '4k', 'long-tieng', 'thuyet-minh', 'subteam'];
     var basePath = "the-loai"; 
     
