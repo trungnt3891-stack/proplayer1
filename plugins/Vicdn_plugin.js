@@ -1,5 +1,5 @@
 // =============================================================================
-// CẤU HÌNH DOMAIN VICDN - TỐI ƯU HÓA TÌM KIẾM
+// CẤU HÌNH DOMAIN VICDN - TỐI ƯU HÓA BỞI JS EXPERT
 // =============================================================================
 var BASEURL = "https://vicdn.cc"; 
 var BASEAPI = BASEURL + "/api";
@@ -8,8 +8,8 @@ function getManifest() {
     return JSON.stringify({
         id: "vicdn",
         name: "ViCDN Pro",
-        description: "Bản Master: Fix lỗi Search HTML 100%, hiển thị List tập Native, Inject CustomJS siêu tốc.",
-        version: "7.2.0",
+        description: "Bản Master: Fix dứt điểm Search, lấy dữ liệu thẳng từ server. Anti-Detector mạnh mẽ.",
+        version: "7.3.0",
         baseUrl: BASEURL,
         iconUrl: BASEURL + "/vicdn.png",
         isEnabled: true,
@@ -80,7 +80,7 @@ function getUrlList(slug, filtersJson) {
 }
 
 function getUrlSearch(keyword, filtersJson) {
-    // Gọi thẳng URL trang chủ với tham số tìm kiếm, Server sẽ tự lọc
+    // Gọi thẳng vào giao diện tìm kiếm của website
     return BASEURL + "/?q=" + encodeURIComponent(keyword.trim());
 }
 
@@ -134,33 +134,39 @@ function parseListResponse(html) {
 }
 
 // -----------------------------------------------------------------------------
-// [ĐÃ FIX 100%] PARSER TÌM KIẾM TỪ HTML
+// [FIX DỨT ĐIỂM] PARSER TÌM KIẾM TỪ HTML
 // -----------------------------------------------------------------------------
 function parseSearchResponse(html, url) {
     try {
-        var jsonString = "";
+        // Tìm vị trí của mảng JSON trong HTML
+        var startTag = "const allData = [";
+        var startIdx = html.indexOf(startTag);
         
-        // Phương pháp trích xuất chuỗi an toàn tuyệt đối
-        // Tách chuỗi từ đoạn "allData = [" cho đến "];let filteredData"
-        var parts = html.split('allData = [');
-        if (parts.length > 1) {
-            jsonString = "[" + parts[1].split('];let filteredData')[0] + "]";
-        } else {
-            // Dự phòng nếu code JS trên web bị đổi khoảng trắng (allData=[)
-            parts = html.split('allData=[');
-            if (parts.length > 1) {
-                jsonString = "[" + parts[1].split('];let filteredData')[0] + "]";
-            }
-        }
-        
-        if (!jsonString || jsonString === "[]") {
+        if (startIdx === -1) {
+            log("Không tìm thấy biến allData trong HTML Tìm Kiếm.");
             return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
         }
-
+        
+        // Đặt con trỏ vào đúng ký tự "[" để bắt đầu mảng JSON
+        var jsonStart = startIdx + "const allData = ".length;
+        
+        // Tìm dấu "];" kết thúc của mảng JSON
+        var endIdx = html.indexOf("];let filteredData", jsonStart);
+        if (endIdx === -1) {
+            // Dự phòng nếu Web đổi code
+            endIdx = html.indexOf("];", jsonStart);
+        }
+        
+        if (endIdx === -1) {
+            return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
+        }
+        
+        // Cắt chính xác chuỗi JSON: từ "[" đến "]"
+        var jsonString = html.substring(jsonStart, endIdx + 1);
         var allData = JSON.parse(jsonString);
         var items = [];
         
-        // Server đã lọc sẵn, ta chỉ cần lặp qua mảng allData và lấy dữ liệu
+        // Không cần dùng If-Else để lọc từ khóa nữa, vì Server đã tự động gom kết quả vào allData rồi!
         for (var i = 0; i < allData.length; i++) {
             var item = allData[i];
             
@@ -179,6 +185,8 @@ function parseSearchResponse(html, url) {
                 "episode_current": "Tập " + item.stt + "/" + item.total
             });
         }
+        
+        log("Tìm kiếm thành công, số phim nhận từ Server: " + items.length);
         
         return JSON.stringify({
             "items": items,
@@ -220,7 +228,7 @@ function parseMovieDetail(html, url) {
                 var splitEpi = itemEpi.split("|");
                 if(splitEpi.length >= 2) {
                     episodes.push({
-                        id: splitEpi[1].trim(),
+                        id: splitEpi[1].trim(), // Lấy thẳng link Player làm ID
                         name: "Tập " + splitEpi[0].trim(),
                         slug: "tap-" + splitEpi[0].trim()
                     });
