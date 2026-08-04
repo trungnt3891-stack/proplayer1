@@ -10,8 +10,8 @@ function getManifest() {
       "id": "vsmov",
       "name": "VsMov",
       "description": "Nguồn phim VSMOV.COM",
-      "version": "1.2.4",
-      "info": "Tối ưu chuẩn giao diện Webview Native Player để hiển thị phụ đề và tuỳ chọn mượt mà.",
+      "version": "1.2.5",
+      "info": "Tối ưu chuẩn giao diện Webview và fix hoàn toàn lỗi quét danh sách trang chủ.",
       "baseUrl": DOMAIN,
       "iconUrl": DOMAIN + "/favicon-vsm.png",
       "isEnabled": true,
@@ -29,9 +29,12 @@ function log(msg) {
 }
 
 function getHomeSections() {
-    var listurl = '[{\"link\":\"/danh-sach/phim-moi\",\"name\":\"Phim Mới\"}]';
-    var menulist = buildMenu(listurl, true);
-    return JSON.stringify(menulist);
+    return JSON.stringify([
+        { "slug": "danh-sach/phim-moi", "title": "Phim Mới Cập Nhật", "type": "Grid" },
+        { "slug": "danh-sach/phim-bo", "title": "Phim Bộ", "type": "Horizontal" },
+        { "slug": "danh-sach/phim-le", "title": "Phim Lẻ", "type": "Horizontal" },
+        { "slug": "danh-sach/thuyet-minh", "title": "Phim Thuyết Minh", "type": "Horizontal" }
+    ]);
 }
 
 function getPrimaryCategories() {
@@ -112,21 +115,17 @@ function getUrlList(slug, filtersJson) {
 }
 
 function getUrlSearch(keyword, filtersJson) {
+    var page = 1;
     if (filtersJson) {
         var fixedJson = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
         try {
             var filters = JSON.parse(fixedJson);
-            var page = parseInt(filters.page) || 1;
-            if (page > 1) {
-                return BASEURL + "/?search=" + encodeURIComponent(keyword) + "&page=" + page;
-            } else {
-                return BASEURL + "/?search=" + encodeURIComponent(keyword);
-            }
-        } catch (jsonErr) {
-            return BASEURL + "/?search=" + encodeURIComponent(keyword);
-        }
+            page = parseInt(filters.page) || 1;
+        } catch (jsonErr) {}
     }
-    return BASEURL + "/?search=" + encodeURIComponent(keyword);
+    var res = BASEURL + "/?search=" + encodeURIComponent(keyword);
+    if (page > 1) res += "&page=" + page;
+    return res;
 }
 
 function getUrlDetail(slug) {
@@ -163,37 +162,45 @@ function fixHref(href) {
     return BASEURL + "/" + cleanHref;
 }
 
+// BÓC TÁCH DANH SÁCH CHUẨN XÁC CHO VSMOV (HỖ TRỢ CẢ DẠNG BẢNG TR VÀ GRID CARD)
 function parseListResponse(html, $url) {
     log("parseListResponse: " + $url)
     try {
         var items = [];
-        _$(html).find("tr, .MovieList li, .item").each(function() {
+        var doc = _$(html);
+        
+        // Quét các đối tượng phim trên vsmov (thường là thẻ tr trong bảng hoặc các khối card)
+        doc.find("tr, .movie-card, div.group, .item").each(function() {
             var aTag = this.find("a");
             var href = aTag.attr("href");
-            if (!href) return;
+            if (!href || href.indexOf("/phim/") === -1) return;
             href = fixHref(href);
 
             var imgTag = this.find("img");
-            var title = imgTag.attr("alt") || aTag.attr("title") || "";
-            title = decodeHTMLEntities(title);
+            var title = imgTag.attr("alt") || aTag.attr("title") || this.find("h3, h4").text() || "";
+            title = decodeHTMLEntities(title).trim();
+            if (!title) return;
 
-            var src = imgTag.attr("src") || "";
-            if (src.indexOf("base64") > -1 || !src){
-                src = imgTag.attr("data-src") || "";
-            }
+            var src = imgTag.attr("data-original") || imgTag.attr("src") || "";
             src = fixHref(src);
 
-            var episode_current = this.find(".mc__ep-badge, .badge, span").text().trim();
+            var episode_current = this.find("span.badge, .text-default-400, .absolute").text().trim();
 
-            if (href) {
-                var cleanThumb = (src || "").replace(/&amp;/g, '&').trim();
-                if (cleanThumb && cleanThumb.indexOf('http') !== 0) {
-                    cleanThumb = 'https:' + cleanThumb;
-                }
+            var cleanThumb = (src || "").replace(/&amp;/g, '&').trim();
+            if (cleanThumb && cleanThumb.indexOf('http') !== 0) {
+                cleanThumb = 'https:' + cleanThumb;
+            }
 
+            // Tránh trùng lặp item
+            var exists = false;
+            for (var k = 0; k < items.length; k++) {
+                if (items[k].id === href) { exists = true; break; }
+            }
+
+            if (!exists && href) {
                 items.push({
-                    "id": href.trim(),
-                    "title": (title || "").trim(),
+                    "id": href,
+                    "title": title,
                     "posterUrl": cleanThumb,
                     "backdropUrl": cleanThumb,
                     "quality": "HD",
@@ -258,7 +265,7 @@ function parseMovieDetail(html, url) {
         var status = "";
         var category = "";
 
-        var metaTitle = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i);
+        var metaTitle = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
         if (metaTitle) title = decodeHTMLEntities(metaTitle[1].replace(/- VSMOV.*/i, '').replace('Phim ', '').trim());
 
         var metaImg = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i);
@@ -295,13 +302,11 @@ function parseMovieDetail(html, url) {
                         var ep = sList[j];
                         var watchSlug = ep.slug || "";
                         
-                        // Tạo đường dẫn chuẩn trỏ trực tiếp đến trang xem tập phim trên web để hiện đủ sub/cài đặt
                         var episodeWebLink = "";
                         var cleanBaseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
                         if (watchSlug.indexOf("http") === 0) {
                             episodeWebLink = watchSlug;
                         } else {
-                            // Xây dựng URL chuẩn dạng https://vsmov.com/phim/ten-phim/tap-1
                             episodeWebLink = cleanBaseUrl + "/" + (watchSlug.startsWith('/') ? watchSlug.slice(1) : watchSlug);
                         }
 
@@ -358,7 +363,6 @@ function parseDetailResponse(html, url) {
             targetUrl = BASEURL + (targetUrl.startsWith('/') ? targetUrl : '/' + targetUrl);
         }
 
-        // Tự động dọn dẹp các thành phần rác, giữ lại khung xem phim và menu sub nguyên bản
         var customJs = "document.querySelectorAll('header, footer, nav, aside, .ads, .sidebar, iframe[sandbox]').forEach(function(e){e.style.display='none'});";
 
         return JSON.stringify({
