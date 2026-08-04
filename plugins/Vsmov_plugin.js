@@ -1,17 +1,31 @@
 // =============================================================================
-// PLUGIN MOVIE SCRAPER: VSMOV.COM (NATIVE PLAYER + NO AUTO PLAY + NO AUTO FULLSCREEN)
+// PLUGIN MOVIE SCRAPER: VSMOV.COM (WEBVIEW EMBED PLAYER & CUSTOM-JS)
+// AUTHOR: JAVASCRIPT EXPERT
 // =============================================================================
+
+var DOMAIN = "https://vsmov.com";
+var BASEURL = DOMAIN; 
 
 function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
-        "name": "VsMov",
-        "version": "1.4.1",
-        "baseUrl": "https://vsmov.com",
-        "iconUrl": "https://vsmov.com/favicon-vsm.png",
+        "name": "VsMov Pro",
+        "description": "Nguồn phim VSMOV.COM - Tối ưu hóa WebView Embed Player",
+        "version": "1.6.0",
+        "baseUrl": DOMAIN,
+        "iconUrl": DOMAIN + "/favicon-vsm.png",
         "isEnabled": true,
-        "type": "MOVIE"
+        "type": "MOVIE",
+        "playerType": "embed"
     });
+}
+
+function log(msg) {
+    if (typeof nativeLog !== 'undefined') {
+        nativeLog("[VsMov] " + msg);
+    } else if (typeof console !== 'undefined' && console.log) {
+        console.log("[VsMov] " + msg);
+    }
 }
 
 function getHomeSections() {
@@ -55,7 +69,8 @@ function getUrlList(slug, filtersJson) {
     var page = 1;
     try {
         if (typeof filtersJson === 'string' && filtersJson !== "") {
-            page = JSON.parse(filtersJson).page || 1;
+            var fixedJson = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
+            page = JSON.parse(fixedJson).page || 1;
         }
     } catch (e) {}
 
@@ -75,7 +90,8 @@ function getUrlSearch(keyword, filtersJson) {
     var page = 1;
     try {
         if (typeof filtersJson === 'string' && filtersJson !== "") {
-            page = JSON.parse(filtersJson).page || 1;
+            var fixedJson = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
+            page = JSON.parse(fixedJson).page || 1;
         } else if (typeof filtersJson === 'number') {
             page = filtersJson;
         }
@@ -163,7 +179,7 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// BÓC TÁCH CHI TIẾT VÀ BẮT TRỰC TIẾP LUỒNG STREAM KÈM THÔNG TIN PHỤ ĐỀ SONG SONG
+// BÓC TÁCH CHI TIẾT PHIM VÀ LẤY LINK WEBVIEW CHUẨN XÁC CHO TỪNG TẬP
 function parseMovieDetail(html, url) {
     try {
         var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
@@ -178,48 +194,56 @@ function parseMovieDetail(html, url) {
 
         var servers = [];
         
-        var episodesJson = html.match(/var\s+embedEpisodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
-        if (!episodesJson) {
-            episodesJson = html.match(/var\s+episodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
+        var episodesJson = null;
+        var matchEmbed = html.match(/var\s+embedEpisodes\s*=\s*(\[[\s\S]*?\]);\s*var\s+m3u8Episodes/i);
+        if (matchEmbed && matchEmbed[1]) {
+            episodesJson = matchEmbed[1];
+        } else {
+            var matchFallback = html.match(/(?:var|let)\s+embedEpisodes\s*=\s*(\[[\s\S]*?\]);/i) || html.match(/(?:var|let)\s+episodes\s*=\s*(\[[\s\S]*?\]);/i);
+            if (matchFallback && matchFallback[1]) {
+                episodesJson = matchFallback[1];
+            }
         }
 
-        if (episodesJson && episodesJson[1]) {
-            var epData = JSON.parse(episodesJson[1]);
-            for (var i = 0; i < epData.length; i++) {
-                var serverObj = epData[i];
-                var sName = serverObj.server_name || "Vietsub";
-                var sList = serverObj.list || [];
-                var serverEps = [];
+        if (episodesJson) {
+            try {
+                var epData = JSON.parse(episodesJson);
+                for (var i = 0; i < epData.length; i++) {
+                    var serverObj = epData[i];
+                    var sName = serverObj.server_name || "Vietsub";
+                    var sList = serverObj.list || [];
+                    var serverEps = [];
 
-                for (var j = 0; j < sList.length; j++) {
-                    var ep = sList[j];
-                    var streamLink = ep.m3u8 || ep.embed || ep.link_embed || ep.link || "";
-                    
-                    var subtitles = [];
-                    if (ep.subtitles && Array.isArray(ep.subtitles)) {
-                        subtitles = ep.subtitles;
-                    } else if (ep.sub && typeof ep.sub === 'string') {
-                        subtitles.push({ url: ep.sub, lang: "Vietsub" });
+                    for (var j = 0; j < sList.length; j++) {
+                        var ep = sList[j];
+                        var watchSlug = ep.slug || "";
+                        
+                        var episodeWebLink = "";
+                        var cleanBaseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+                        if (watchSlug.indexOf("http") === 0) {
+                            episodeWebLink = watchSlug;
+                        } else {
+                            episodeWebLink = cleanBaseUrl + "/" + (watchSlug.startsWith('/') ? watchSlug.slice(1) : watchSlug);
+                        }
+
+                        if (watchSlug) {
+                            serverEps.push({
+                                id: episodeWebLink, 
+                                name: ep.name || "Tập " + (j + 1),
+                                slug: watchSlug
+                            });
+                        }
                     }
 
-                    if (streamLink) {
-                        serverEps.push({
-                            id: streamLink, 
-                            name: ep.name || "Tập " + (j + 1),
-                            slug: ep.slug || "",
-                            subtitles: subtitles
+                    if (serverEps.length > 0) {
+                        sName = sName.replace(/[\r\n\t]+/g, ' ').trim();
+                        servers.push({
+                            name: sName,
+                            episodes: serverEps
                         });
                     }
                 }
-
-                if (serverEps.length > 0) {
-                    sName = sName.replace(/[\r\n\t]+/g, ' ').trim();
-                    servers.push({
-                        name: sName,
-                        episodes: serverEps
-                    });
-                }
-            }
+            } catch (jsonErr) {}
         }
 
         return JSON.stringify({
@@ -235,25 +259,38 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// TRẢ VỀ CẤU HÌNH TRÌNH PHÁT NATIVE (CHỐNG TỰ ĐỘNG PHÁT VÀ CHỐNG TỰ ĐỘNG PHÓNG TO)
+// =============================================================================
+// INJECT CUSTOM-JS CHO WEBVIEW PLAYER
+// =============================================================================
 function parseDetailResponse(html, url) {
-    return JSON.stringify({
-        url: url,
-        isEmbed: false,
-        autoPlay: false,
-        fullscreen: false,
-        mimeType: "application/x-mpegURL",
-        headers: { 
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-            "Referer": "https://vsmov.com/",
-            "Origin": "https://vsmov.com"
-        },
-        subtitles: []
-    });
+    try {
+        var customJS = `
+            try {
+                var s = document.createElement('style');
+                s.innerHTML = 'html, body { margin:0!important; padding:0!important; width:100vw!important; height:100vh!important; overflow:hidden!important; background:#000!important; } ' +
+                              'header, footer, nav, aside, .ads, .sidebar { display:none!important; pointer-events:none!important; }';
+                document.head.appendChild(s);
+            } catch(e) {}
+        `;
+        
+        return JSON.stringify({
+            url: url,
+            isEmbed: true, 
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "Referer": "https://vsmov.com/",
+                "Custom-Js": customJS.replace(/\s+/g, ' ').trim()
+            },
+            subtitles: []
+        });
+    } catch (e) {
+        log("Lỗi parseDetailResponse: " + e);
+        return JSON.stringify({ url: url, isEmbed: true, headers: {} });
+    }
 }
 
 function parseEmbedResponse(html, url) {
-    return JSON.stringify({ url: url, isEmbed: false, autoPlay: false, fullscreen: false });
+    return JSON.stringify({ url: url, isEmbed: true });
 }
 
 function parseCategoriesResponse(apiResponseJson) {
