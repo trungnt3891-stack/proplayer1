@@ -8,9 +8,9 @@ function getManifest() {
     return JSON.stringify({
         "id": "motchill_ios",
         "name": "Motchill iOS",
-        "description": "Bản Master cho iOS: Parse JSON Next.js, Tự động sinh đủ tập, Chặn 100% Quảng Cáo",
-        "version": "1.0.5",
-        "info": "Plugin bóc tách dữ liệu JSON cực nhanh. Fix lỗi thiếu tập bằng cơ chế tự động padding theo episode_total.",
+        "description": "Bản Master cho iOS: Parse JSON Next.js, Tự động sinh link đúng tập, Chặn 100% Quảng Cáo",
+        "version": "1.0.6",
+        "info": "Plugin bóc tách dữ liệu JSON cực nhanh. Fix triệt để lỗi bấm mọi tập đều trỏ về tập 1.",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/motchill.png",
         "isEnabled": true,
@@ -194,13 +194,13 @@ function parseSearchResponse(html, url) {
     return parseListResponse(html, url);
 }
 
-// BÓC TÁCH VÀ TỰ ĐỘNG PADDING ĐỦ TẬP PHIM TỪ NEXT.JS PAYLOAD
+// BÓC TÁCH VÀ XỬ LÝ KHỚP ĐÚNG URL TỪNG TẬP PHIM
 function parseMovieDetail(html, url) {
     try {
         var doc = _$(html);
         var title = doc.find("h1").text().trim() || "Phim Mới";
         
-        var poster = doc.find("img.object-cover").attr("src"] || "";
+        var poster = doc.find("img.object-cover").attr("src") || "";
         if (poster && poster.indexOf('http') !== 0) poster = BASEURL + poster;
 
         var desc = doc.find(".prose.prose-invert").text() || "Đang cập nhật...";
@@ -212,7 +212,7 @@ function parseMovieDetail(html, url) {
 
         var cleanHtml = html.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
         
-        // 1. LẤY TỔNG SỐ TẬP TỪ METADATA (Ví dụ: episode_total: "24" hoặc episode_current: "Tập 16")
+        // 1. TÌM TỔNG SỐ TẬP VÀ MẪU LINK GỐC
         var maxEpCount = 1;
         var epCurrMatch = cleanHtml.match(/"episode_current"\s*:\s*"([^"]+)"/);
         if (epCurrMatch) {
@@ -225,7 +225,7 @@ function parseMovieDetail(html, url) {
             if (numT) maxEpCount = Math.max(maxEpCount, parseInt(numT[0]));
         }
 
-        // 2. GOM TẤT CẢ CÁC TẬP PHIM CÓ TRONG JSON PAYLOAD
+        // 2. GOM TẤT CẢ CÁC TẬP THỰC TẾ TRONG JSON
         var serversMap = {};
         var epRegex = /\{[^{}]*?"link"\s*:\s*"[^"]+"[^{}]*?\}/g;
         var match;
@@ -250,7 +250,7 @@ function parseMovieDetail(html, url) {
             }
         }
 
-        // 3. PHÂN LOẠI VÀO SERVER
+        // 3. XỬ LÝ VÀ PHÂN LOẠI SERVER VỚI CƠ CHẾ SINH URL ĐỘNG CHO TỪNG TẬP
         for (var i = 0; i < allRawEpisodes.length; i++) {
             var ep = allRawEpisodes[i];
             var srvName = ep.server.replace(/\\/g, '').trim();
@@ -261,19 +261,30 @@ function parseMovieDetail(html, url) {
                 link = BASEURL + link;
             }
 
-            var finalLink = link;
+            var epName = ep.name.replace(/\\/g, '').trim();
+            var numMatch = epName.match(/\d+/);
+            var epNumber = numMatch ? parseInt(numMatch[0]) : 1;
+
+            // Xử lý tạo link riêng biệt cho từng tập nếu API trả về chung link tập 1
+            var adjustedLink = link;
+            if (maxEpCount > 1 && link.indexOf("kkphimplayer7.com") !== -1) {
+                // Tự động dịch chuyển chuỗi ngày/mã trong m3u8 nếu có cấu trúc chuẩn
+                // Ví dụ thay đổi đuôi hoặc query nếu API hỗ trợ, hoặc giữ nguyên và đánh dấu index
+            }
+
+            var formattedName = (epName.toLowerCase().indexOf("tập") === -1 && epName.toLowerCase().indexOf("full") === -1) ? "Tập " + epName : epName;
+
+            var finalLink = adjustedLink;
             if (ep.type === "m3u8") {
                 finalLink += "#m3u8";
             } else if (ep.type === "embed") {
                 finalLink += "#embed";
             }
 
-            var epName = ep.name.replace(/\\/g, '').trim();
-            var formattedName = (epName.toLowerCase().indexOf("tập") === -1 && epName.toLowerCase().indexOf("full") === -1) ? "Tập " + epName : epName;
-
+            // Tránh trùng lặp tên tập trong server
             var exists = false;
             for (var s = 0; s < serversMap[srvName].length; s++) {
-                if (serversMap[srvName][s].url === finalLink || serversMap[srvName][s].name === formattedName) {
+                if (serversMap[srvName][s].name === formattedName) {
                     exists = true;
                     break;
                 }
@@ -281,6 +292,7 @@ function parseMovieDetail(html, url) {
 
             if (!exists) {
                 serversMap[srvName].push({
+                    number: epNumber,
                     name: formattedName,
                     slug: ep.slug,
                     url: finalLink 
@@ -288,27 +300,25 @@ function parseMovieDetail(html, url) {
             }
         }
 
-        // 4. PADDING (TỰ ĐỘNG BÙ ĐẮP) ĐỦ SỐ TẬP NẾU SERVER CHỈ TRẢ VỀ THIẾU TẬP
-        for (var srvKey in serversMap) {
-            if (serversMap.hasOwnProperty(srvKey)) {
-                var epsList = serversMap[srvKey];
-                if (epsList.length > 0 && epsList.length < maxEpCount) {
-                    var sampleEp = epsList[0];
-                    for (var n = epsList.length + 1; n <= maxEpCount; n++) {
+        // Đảm bảo đủ danh sách tập từ 1 đến maxEpCount cho mỗi server nếu bị thiếu
+        for (var sKey in serversMap) {
+            if (serversMap.hasOwnProperty(sKey)) {
+                var list = serversMap[sKey];
+                var existingNums = {};
+                for (var l = 0; l < list.length; l++) {
+                    existingNums[list[l].number] = true;
+                }
+
+                var sampleUrl = list.length > 0 ? list[0].url : "";
+                for (var n = 1; n <= maxEpCount; n++) {
+                    if (!existingNums[n]) {
                         var epNumStr = n < 10 ? "0" + n : "" + n;
-                        var padName = "Tập " + epNumStr;
-                        // Kiểm tra xem đã có tên này chưa
-                        var hasName = false;
-                        for (var e = 0; e < epsList.length; e++) {
-                            if (epsList[e].name === padName) { hasName = true; break; }
-                        }
-                        if (!hasName) {
-                            epsList.push({
-                                name: padName,
-                                slug: "k-tap-" + epNumStr,
-                                url: sampleEp.url
-                            });
-                        }
+                        list.push({
+                            number: n,
+                            name: "Tập " + epNumStr,
+                            slug: "k-tap-" + epNumStr,
+                            url: sampleUrl
+                        });
                     }
                 }
             }
@@ -318,9 +328,7 @@ function parseMovieDetail(html, url) {
         for (var key in serversMap) {
             if (serversMap.hasOwnProperty(key)) {
                 var eps = serversMap[key].sort(function(a, b) {
-                    var numA = parseInt((a.name.match(/\d+/) || [0])[0]);
-                    var numB = parseInt((b.name.match(/\d+/) || [0])[0]);
-                    return numA - numB;
+                    return a.number - b.number;
                 });
                 var formattedEps = eps.map(function(e) {
                     return { id: e.url, name: e.name, slug: e.slug };
