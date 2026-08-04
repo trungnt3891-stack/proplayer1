@@ -9,14 +9,14 @@ function getManifest() {
         "id": "motchill_ios",
         "name": "Motchill iOS",
         "description": "Bản Master cho iOS: Parse JSON Next.js, Bắt m3u8 trực tiếp, Chặn 100% Quảng Cáo",
-        "version": "1.0.3",
-        "info": "Plugin bóc tách dữ liệu JSON cực nhanh. Fix lỗi hiển thị 1 tập. Không dùng Webview giúp chặn tuyệt đối Popup.",
+        "version": "1.0.4",
+        "info": "Plugin bóc tách dữ liệu JSON cực nhanh. Fix lỗi hiển thị toàn bộ tập phim từ Next.js Payload.",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/motchill.png",
         "isEnabled": true,
         "type": "MOVIE",
         "layoutType": "HORIZONTAL",
-        "playerType": "embedtoexoplay" // Ép hệ thống ưu tiên link m3u8 trực tiếp
+        "playerType": "embedtoexoplay"
     });
 }
 
@@ -114,7 +114,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSERS MẠNH MẼ CHO IOS (KHÔNG DÙNG REGEX LOOKBEHIND)
+// PARSERS MẠNH MẼ CHO IOS (BÓC TÁCH NEXT.JS PAYLOAD)
 // =============================================================================
 
 function decodeHTMLEntities(text) {
@@ -130,7 +130,6 @@ function parseListResponse(html, $url) {
     try {
         var items = [];
         var seen = {};
-        
         var doc = _$(html);
         
         doc.find("div.movie-card, div.group.relative.overflow-hidden").each(function() {
@@ -195,6 +194,7 @@ function parseSearchResponse(html, url) {
     return parseListResponse(html, url);
 }
 
+// BÓC TÁCH TOÀN BỘ TẬP PHIM CHUẨN XÁC TỪ NEXT.JS STATE HOẶC JSON TRONG HTML
 function parseMovieDetail(html, url) {
     try {
         var doc = _$(html);
@@ -212,86 +212,59 @@ function parseMovieDetail(html, url) {
 
         var cleanHtml = html.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
         
-        var currentSlug = "";
-        var sm = url.match(/\/phim\/([^/?#]+)/);
-        if(sm) currentSlug = sm[1];
-        
-        var targetMovieId = "";
-        if (currentSlug) {
-            var slugPos = cleanHtml.indexOf('"slug":"' + currentSlug + '"');
-            if (slugPos !== -1) {
-                var chunk = cleanHtml.substring(Math.max(0, slugPos - 500), slugPos);
-                var idMatches = chunk.match(/"id":"?(\d+)"?/g);
-                if (idMatches && idMatches.length > 0) {
-                    var lastMatch = idMatches[idMatches.length - 1];
-                    targetMovieId = lastMatch.match(/"id":"?(\d+)"?/)[1];
-                }
-            }
-        }
-
-        var epsByMovieId = {};
-        var flatObjRegex = /\{[^{}]*"link"\s*:\s*"[^"]+"[^{}]*\}/g;
-        var epM;
-        
-        while ((epM = flatObjRegex.exec(cleanHtml)) !== null) {
-            var block = epM[0];
-            var mIdMatch = block.match(/"movie_id"\s*:\s*"?([^",}]+)"?/);
-            if (!mIdMatch) continue;
-            var mId = mIdMatch[1];
-            
-            var srvMatch = block.match(/"server"\s*:\s*"([^"]+)"/);
-            var server = srvMatch ? srvMatch[1] : "Vietsub";
-            
-            var nameMatch = block.match(/"name"\s*:\s*"([^"]+)"/);
-            var name = nameMatch ? nameMatch[1] : "Tập";
-            
-            var slugMatch = block.match(/"slug"\s*:\s*"([^"]+)"/);
-            var slug = slugMatch ? slugMatch[1] : "";
-            
-            var typeMatch = block.match(/"type"\s*:\s*"([^"]+)"/);
-            var type = typeMatch ? typeMatch[1] : "m3u8";
-            
-            var linkMatch = block.match(/"link"\s*:\s*"([^"]+)"/);
-            var link = linkMatch ? linkMatch[1] : "";
-            
-            if (mId && link) {
-                if (!epsByMovieId[mId]) epsByMovieId[mId] = [];
-                var exists = false;
-                for (var j = 0; j < epsByMovieId[mId].length; j++) {
-                    if (epsByMovieId[mId][j].link === link) {
-                        exists = true; 
-                        break;
-                    }
-                }
-                if (!exists) {
-                    epsByMovieId[mId].push({
-                        server: server,
-                        name: name,
-                        slug: slug,
-                        type: type,
-                        link: link
-                    });
-                }
-            }
-        }
-
-        var targetEps = [];
-        if (targetMovieId && epsByMovieId[targetMovieId]) {
-            targetEps = epsByMovieId[targetMovieId];
-        } else {
-            var maxLen = 0;
-            for (var k in epsByMovieId) {
-                if (epsByMovieId[k].length > maxLen) {
-                    maxLen = epsByMovieId[k].length;
-                    targetEps = epsByMovieId[k];
-                }
-            }
-        }
-
+        // Trích xuất toàn bộ các object tập phim (thường nằm ở dạng mảng JSON trong Next.js payload hoặc thuộc tính episodes)
         var serversMap = {};
-        for (var i = 0; i < targetEps.length; i++) {
-            var ep = targetEps[i];
-            var srvName = ep.server.replace(/\\/g, '');
+        
+        // Quét tìm tất cả các block json có chứa trường "server", "name", "link"
+        var epRegex = /\{[^{}]*"(?:server|name)"\s*:\s*"[^"]+"[^{}]*\}/g;
+        var match;
+        var allRawEpisodes = [];
+
+        while ((match = epRegex.exec(cleanHtml)) !== null) {
+            var block = match[0];
+            var linkMatch = block.match(/"link"\s*:\s*"([^"]+)"/);
+            var nameMatch = block.match(/"name"\s*:\s*"([^"]+)"/);
+            var serverMatch = block.match(/"server"\s*:\s*"([^"]+)"/);
+            var slugMatch = block.match(/"slug"\s*:\s*"([^"]+)"/);
+            var typeMatch = block.match(/"type"\s*:\s*"([^"]+)"/);
+
+            if (linkMatch && linkMatch[1]) {
+                allRawEpisodes.push({
+                    server: serverMatch ? serverMatch[1] : "Vietsub",
+                    name: nameMatch ? nameMatch[1] : "Tập",
+                    slug: slugMatch ? slugMatch[1] : "",
+                    type: typeMatch ? typeMatch[1] : "m3u8",
+                    link: linkMatch[1]
+                });
+            }
+        }
+
+        // Nếu không tìm thấy bằng regex block, thử tìm cụm mảng episodes: [...]
+        if (allRawEpisodes.length === 0) {
+            var jsonArrMatch = cleanHtml.match(/"episodes"\s*:\s*(\[[\s\S]*?\])/);
+            if (jsonArrMatch) {
+                try {
+                    var parsedArray = JSON.parse(jsonArrMatch[1]);
+                    for (var a = 0; a < parsedArray.length; a++) {
+                        var epItem = parsedArray[a];
+                        if (epItem.link) {
+                            allRawEpisodes.push({
+                                server: epItem.server || "Vietsub",
+                                name: epItem.name || "Tập",
+                                slug: epItem.slug || "",
+                                type: epItem.type || "m3u8",
+                                link: epItem.link
+                            });
+                        }
+                    }
+                } catch(ex){}
+            }
+        }
+
+        // Phân loại vào các server tương ứng
+        for (var i = 0; i < allRawEpisodes.length; i++) {
+            var ep = allRawEpisodes[i];
+            var srvName = ep.server.replace(/\\/g, '').trim();
             if (!serversMap[srvName]) serversMap[srvName] = [];
             
             var link = ep.link.replace(/\\/g, '');
@@ -306,12 +279,25 @@ function parseMovieDetail(html, url) {
                 finalLink += "#embed";
             }
 
-            var epName = ep.name.replace(/\\/g, '');
-            serversMap[srvName].push({
-                name: (epName.toLowerCase().indexOf("tập") === -1 && epName.toLowerCase().indexOf("full") === -1) ? "Tập " + epName : epName,
-                slug: ep.slug,
-                url: finalLink 
-            });
+            var epName = ep.name.replace(/\\/g, '').trim();
+            var formattedName = (epName.toLowerCase().indexOf("tập") === -1 && epName.toLowerCase().indexOf("full") === -1) ? "Tập " + epName : epName;
+
+            // Chống trùng lặp tập trong cùng server
+            var exists = false;
+            for (var s = 0; s < serversMap[srvName].length; s++) {
+                if (serversMap[srvName][s].url === finalLink || serversMap[srvName][s].name === formattedName) {
+                    exists = true;
+                    break;
+                }
+            }
+
+            if (!exists) {
+                serversMap[srvName].push({
+                    name: formattedName,
+                    slug: ep.slug,
+                    url: finalLink 
+                });
+            }
         }
 
         var servers = [];
