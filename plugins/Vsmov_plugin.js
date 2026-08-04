@@ -1,5 +1,5 @@
 // =============================================================================
-// PLUGIN MOVIE SCRAPER: VSMOV.COM (NATIVE EPISODE SELECTOR + FULL WEBVIEW SUB)
+// PLUGIN MOVIE SCRAPER: VSMOV.COM (NATIVE STREAM & EMBED PLAYER)
 // AUTHOR: JAVASCRIPT EXPERT
 // =============================================================================
 
@@ -7,7 +7,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.2.2",
+        "version": "1.2.3",
         "baseUrl": "https://vsmov.com",
         "iconUrl": "https://vsmov.com/favicon-vsm.png",
         "isEnabled": true,
@@ -166,7 +166,7 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// BÓC TÁCH CHUẨN XÁC LINK TRANG TẬP PHIM CHO GIAO DIỆN CHỌN TẬP
+// BÓC TÁCH TRỰC TIẾP LINK EMBED / M3U8 TỪ JAVASCRIPT PAYLOAD
 function parseMovieDetail(html, url) {
     try {
         var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
@@ -203,21 +203,13 @@ function parseMovieDetail(html, url) {
 
                     for (var j = 0; j < sList.length; j++) {
                         var ep = sList[j];
-                        var watchSlug = ep.slug || "";
-                        
-                        var episodeWebLink = "";
-                        if (watchSlug.indexOf("http") === 0) {
-                            episodeWebLink = watchSlug;
-                        } else {
-                            var cleanBaseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
-                            episodeWebLink = cleanBaseUrl + "/" + (watchSlug.startsWith('/') ? watchSlug.slice(1) : watchSlug);
-                        }
-
-                        if (watchSlug) {
+                        // Lấy link embed chính xác do trang cung cấp
+                        var mediaLink = ep.embed || ep.link_embed || ep.m3u8 || ep.link || "";
+                        if (mediaLink) {
                             serverEps.push({
-                                id: episodeWebLink, 
+                                id: mediaLink, 
                                 name: ep.name || "Tập " + (j + 1),
-                                slug: watchSlug
+                                slug: ep.slug || ""
                             });
                         }
                     }
@@ -246,22 +238,14 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// ÉP BẬT WEBVIEW ĐẦY ĐỦ VỚI URL TUYỆT ĐỐI ĐỂ HIỆN TRÌNH DUYỆT XEM PHIM GỐC
+// TRẢ VỀ DẠNG EMBED ĐỂ APP RENDER TRỰC TIẾP TRONG PLAYER / WEBVIEW CONTAINER
 function parseDetailResponse(html, url) {
-    var targetUrl = url;
-    if (targetUrl.indexOf("http") !== 0) {
-        targetUrl = "https://vsmov.com" + (targetUrl.startsWith('/') ? targetUrl : '/' + targetUrl);
-    }
-
-    var customJs = "document.querySelectorAll('header, footer, nav, aside, .ads, .sidebar, iframe[sandbox]').forEach(function(e){e.style.display='none'});";
-    
     return JSON.stringify({
-        url: targetUrl, 
-        isEmbed: true, 
+        url: url,
+        isEmbed: true,
         headers: { 
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-            "Referer": "https://vsmov.com/",
-            "Custom-Js": customJs 
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://vsmov.com/" 
         }
     });
 }
