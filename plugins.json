@@ -45,11 +45,11 @@
             "iconUrl": "https://hoathinh3d.co/wp-content/uploads/2023/09/favicon.png"
     },
     {
-      "id": "motchill",
-      "name": "motchill Phim",
+      "id": "TikTokShort",
+      "name": "Shortfilm",
       "version": "1.7.6",
-      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/motchill_plugin.js",
-      "iconUrl": "https://motchille.tv/motchill.png"
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/Tiktokfilm_plugin.js",
+      "iconUrl": "https://static.vecteezy.com/system/resources/thumbnails/016/716/450/small/tiktok-icon-free-png.png"
     },
     {
       "id": "bilutv",
