@@ -10,8 +10,8 @@ function getManifest() {
       "id": "vsmov",
       "name": "VsMov",
       "description": "Nguồn phim VSMOV.COM",
-      "version": "1.2.5",
-      "info": "Tối ưu chuẩn giao diện Webview và fix hoàn toàn lỗi quét danh sách trang chủ.",
+      "version": "1.2.6",
+      "info": "Tối ưu hoàn chỉnh chuẩn giao diện Webview Native Player để hiển thị phụ đề và tuỳ chọn mượt mà.",
       "baseUrl": DOMAIN,
       "iconUrl": DOMAIN + "/favicon-vsm.png",
       "isEnabled": true,
@@ -162,14 +162,12 @@ function fixHref(href) {
     return BASEURL + "/" + cleanHref;
 }
 
-// BÓC TÁCH DANH SÁCH CHUẨN XÁC CHO VSMOV (HỖ TRỢ CẢ DẠNG BẢNG TR VÀ GRID CARD)
 function parseListResponse(html, $url) {
     log("parseListResponse: " + $url)
     try {
         var items = [];
         var doc = _$(html);
         
-        // Quét các đối tượng phim trên vsmov (thường là thẻ tr trong bảng hoặc các khối card)
         doc.find("tr, .movie-card, div.group, .item").each(function() {
             var aTag = this.find("a");
             var href = aTag.attr("href");
@@ -191,7 +189,6 @@ function parseListResponse(html, $url) {
                 cleanThumb = 'https:' + cleanThumb;
             }
 
-            // Tránh trùng lặp item
             var exists = false;
             for (var k = 0; k < items.length; k++) {
                 if (items[k].id === href) { exists = true; break; }
@@ -254,7 +251,7 @@ function sortEpisodesByName(data) {
     return data;
 }
 
-// BÓC TÁCH CHI TIẾT PHIM VÀ LẤY LINK WEBVIEW CHO TỪNG TẬP
+// BÓC TÁCH CHI TIẾT PHIM VÀ GÁN TRỰC TIẾP LINK WEBVIEW CHO TỪNG TẬP
 function parseMovieDetail(html, url) {
     log("parseMovieDetail: " + url)
     try {
@@ -277,7 +274,6 @@ function parseMovieDetail(html, url) {
 
         var servers = [];
         
-        // Quét mảng dữ liệu tập phim từ payload JavaScript của trang web vsmov
         var episodesJson = null;
         var matchEmbed = html.match(/var\s+embedEpisodes\s*=\s*(\[[\s\S]*?\]);\s*var\s+m3u8Episodes/i);
         if (matchEmbed && matchEmbed[1]) {
@@ -355,11 +351,14 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// BẬT WEBVIEW TOÀN TRANG ĐỂ HIỂN THỊ ĐỦ SUB, MENU VÀ CÁC CHẾ ĐỘ GỐC
+// BẬT WEBVIEW CHUẨN XÁC ĐỂ LOAD TRANG GỐC HIỆN ĐỦ SUB VÀ MENU ĐIỀU KHIỂN
 function parseDetailResponse(html, url) {
     try {
         var targetUrl = url;
-        if (targetUrl && targetUrl.indexOf("http") !== 0) {
+        if (!targetUrl) {
+            return JSON.stringify({ url: "", isEmbed: false, headers: {} });
+        }
+        if (targetUrl.indexOf("http") !== 0) {
             targetUrl = BASEURL + (targetUrl.startsWith('/') ? targetUrl : '/' + targetUrl);
         }
 
