@@ -6,12 +6,12 @@ function getManifest() {
     return JSON.stringify({
         "id": "nguoncnew",
         "name": "Phim NguonC Xoá Quảng Cáo",
-        "version": "1.35", // Áp dụng kỹ thuật Hook Blob M3U8 + EmbedToExoplay
+        "version": "1.36", // Sử dụng kỹ thuật Hook Blob M3U8 cực mạnh
         "baseUrl": "https://phim.nguonc.com",
         "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/nguonC.png",
         "isEnabled": true,
         "type": "MOVIE",
-        "playerType": "embedtoexoplay" // BẮT BUỘC: Kích hoạt WebView chạy ngầm dò link
+        "playerType": "embedtoexoplay" // BẮT BUỘC ĐỂ BẬT WEBVIEW TÀNG HÌNH DÒ LINK
     });
 }
 
@@ -163,11 +163,10 @@ function parseMovieDetail(apiResponseJson) {
 
                 if (Array.isArray(serverItems)) {
                     serverItems.forEach(function (ep) {
-                        // ƯU TIÊN LẤY LINK EMBED ĐỂ QUÉT BẰNG KỸ THUẬT HOOK
                         var embed = ep.embed || ep.link_embed || "";
                         var m3u8 = ep.m3u8 || ep.link_m3u8 || "";
                         
-                        var link = embed || m3u8;
+                        var link = m3u8 || embed;
 
                         if (link) {
                             episodes.push({
@@ -209,7 +208,7 @@ function parseMovieDetail(apiResponseJson) {
             description: (movie.description || movie.content || "").replace(/<[^>]*>/g, ""),
             year: parseInt(movie.year || extractedYear) || 0,
             rating: parseFloat(movie.view) || 0,
-            quality: movie.quality || "",
+            quality: movie.quality || "HD",
             servers: servers,
             episode_current: movie.current_episode || movie.episode_current || "",
             lang: movie.language || movie.lang || "",
@@ -226,50 +225,27 @@ function parseMovieDetail(apiResponseJson) {
 }
 
 // =============================================================================
-// [QUAN TRỌNG] SỬ DỤNG KỸ THUẬT HOOK BLOB ĐỂ BẮT M3U8 (TÀNG HÌNH)
+// [QUAN TRỌNG] ÁP DỤNG MÃ HOOK BLOB M3U8 THEO CHUẨN EMBEDTOEXOPLAY
 // =============================================================================
 function parseDetailResponse(html, apiUrl) {
     try {
         var url = apiUrl.split("|")[0];
 
-        // Nếu bản thân link đã là m3u8 thì báo ExoPlayer phát luôn khỏi cần dò
-        if (url.indexOf('.m3u8') !== -1 || url.indexOf('.mp4') !== -1) {
-            return JSON.stringify({
-                "url": url,
-                "isEmbed": false,
-                "mimeType": url.indexOf('.m3u8') !== -1 ? "application/x-mpegURL" : "video/mp4",
-                "headers": {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-                    "Referer": "https://phim.nguonc.com/"
-                }
-            });
-        }
-        
-        // MÃ JS HOOK: SẼ ĐƯỢC TIÊM VÀO WEBVIEW NGẦM CỦA APP ĐỂ CAN THIỆP VÀO RAM
+        // Mã JS này sẽ được tiêm vào WebView ẩn của App
         var hookJsCode = `
         (function initBlobSniffer() {
             if (window._vaapp_hooked) return;
             window._vaapp_hooked = true;
 
-            if (window.SnifferBridge) {
-                window.SnifferBridge.toast("Đang dò tìm luồng video gốc...");
-                window.SnifferBridge.log("Khởi động Hook URL.createObjectURL");
-            }
-
-            // 1. KỸ THUẬT HOOK: Chặn hàm tạo Blob URL của trình duyệt
             if (typeof URL !== 'undefined' && URL.createObjectURL) {
                 var originalCreateObjectURL = URL.createObjectURL;
                 URL.createObjectURL = function(blob) {
                     var blobUrl = originalCreateObjectURL.apply(this, arguments);
                     if (blob && (blob instanceof Blob || blob instanceof File)) {
-                        
                         var processContent = function(content) {
-                            // Nếu file blob chứa cú pháp M3U8
                             if (content && content.trim().indexOf('#EXTM3U') === 0) {
+                                // Gửi trực tiếp nội dung M3U8 thô và URL trang hiện tại về App
                                 if (window.SnifferBridge && typeof window.SnifferBridge.playM3u8Content === 'function') {
-                                    window.SnifferBridge.log("Đã bắt được nội dung M3U8 từ bộ nhớ RAM!");
-                                    window.SnifferBridge.toast("Đã bắt được luồng phim!");
-                                    // Truyền thẳng nội dung thô về cho App để khởi tạo Local Server phát
                                     window.SnifferBridge.playM3u8Content(content, window.location.href);
                                 }
                             }
@@ -287,19 +263,7 @@ function parseDetailResponse(html, apiUrl) {
                 };
             }
 
-            // 2. BACKUP: Bắt thêm nếu web dùng thẻ video nhúng link trực tiếp (không qua Blob)
-            var checkVideo = setInterval(function() {
-                var video = document.querySelector('video');
-                if (video && video.src && video.src.indexOf('blob:') !== 0) {
-                    if (window.SnifferBridge && typeof window.SnifferBridge.play === 'function') {
-                        window.SnifferBridge.log("Đã bắt được link trực tiếp từ thẻ Video!");
-                        window.SnifferBridge.play(video.src);
-                        clearInterval(checkVideo);
-                    }
-                }
-            }, 1000);
-            
-            // 3. Tự động click nút Play nếu trình phát yêu cầu tương tác để nhả link
+            // Tự động bấm play nếu có nút play to giữa màn hình
             var clickCount = 0;
             var autoClick = setInterval(function() {
                 var btn = document.querySelector('.jw-icon-display, .vjs-big-play-button, .plyr__control--overlaid, .play-btn');
@@ -309,20 +273,28 @@ function parseDetailResponse(html, apiUrl) {
                     if (clickCount > 5) clearInterval(autoClick);
                 }
             }, 1000);
+            
+            // Backup: Chộp URL video thông thường nếu trang không dùng Blob
+            var checkVideo = setInterval(function() {
+                var video = document.querySelector('video');
+                if (video && video.src && video.src.indexOf('blob:') !== 0) {
+                    if (window.SnifferBridge && typeof window.SnifferBridge.play === 'function') {
+                        window.SnifferBridge.play(video.src);
+                        clearInterval(checkVideo);
+                    }
+                }
+            }, 1000);
         })();
         `;
 
-        // Trả về cấu hình yêu cầu App bật EmbedSniffer ngầm
         return JSON.stringify({
             "url": url,
-            "isEmbed": true, // Yêu cầu App chạy WebView ngầm dò link
+            "isEmbed": true, // BẮT BUỘC TRẢ VỀ TRUE ĐỂ APP BẬT SNIFFER NGẦM
             "headers": {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                 "Referer": "https://phim.nguonc.com/",
-                // Bật khiên chặn quảng cáo mạng cấp thấp để Webview ngầm không tốn data tải rác
                 "Block-Ads": "true",
                 "Block-Redirects": "true",
-                // Chèn đoạn Script Hook vào thẳng lõi WebView
                 "Custom-Js": hookJsCode.replace(/\r\n|\r|\n/g, " ").trim()
             }
         });
