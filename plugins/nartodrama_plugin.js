@@ -1,5 +1,5 @@
 // =============================================================================
-// CẤU HÌNH DOMAIN NARTO DRAMA (WEBVIEW EMBED + AUTO BYPASS QUẢNG CÁO)
+// CẤU HÌNH DOMAIN NARTO DRAMA (FIX LỖI HIỆN DANH SÁCH TẬP PHIM)
 // =============================================================================
 var BASEURL = "https://edge.narto-drama.com"; 
 var DEV = false;
@@ -8,15 +8,15 @@ function getManifest() {
     return JSON.stringify({
         "id": "nartodrama",
         "name": "Phim Ngắn Narto",
-        "description": "Bản WebView VIP: Auto Click mở khóa/xem quảng cáo, Khóa dọc, Vuốt TikTok",
-        "version": "2.1.0",
-        "info": "Sử dụng WebView nguyên bản kết hợp Auto-Clicker vượt quảng cáo reward và mở khóa tập tự động.",
+        "description": "Bản WebView VIP: Đã fix lỗi hiện danh sách tập, Auto-Click mở khóa, Khóa dọc",
+        "version": "2.1.1",
+        "info": "Sử dụng WebView nguyên bản, bắt đúng danh sách tập từ class episode-item.",
         "baseUrl": BASEURL,
         "iconUrl": "https://narto-drama.com/narto-drama-logo-compressed.png",
         "isEnabled": true,
-        "type": "shortfilm",           // [QUAN TRỌNG] Kích hoạt chế độ phim ngắn và vuốt tập[cite: 1, 2]
-        "layoutType": "VERTICAL",      // Ép khung hiển thị dọc[cite: 1, 2]
-        "playerType": "embed",         // Mở bằng khung WebView để tương thích tuyệt đối với giao diện web[cite: 1, 2]
+        "type": "shortfilm",           // Kích hoạt chế độ phim ngắn và vuốt tập
+        "layoutType": "VERTICAL",      // Ép khung hiển thị dọc
+        "playerType": "embed",         // Mở bằng khung WebView để tương thích tuyệt đối với web
         "subtitleCat": false
     });
 }
@@ -199,7 +199,7 @@ function parseSearchResponse(html, url) {
 }
 
 // -----------------------------------------------------------------------------
-// XỬ LÝ TRANG CHI TIẾT PHIM (DÙNG ĐỂ HIỂN THỊ NÚT XEM HOẶC CHỌN TẬP TRÊN APP)
+// [ĐÃ SỬA] BÓC TÁCH CHUẨN XÁC DANH SÁCH TẬP PHIM TỪ CLASS episode-item
 // -----------------------------------------------------------------------------
 function parseMovieDetail(html, url) {
     try {
@@ -224,14 +224,47 @@ function parseMovieDetail(html, url) {
         var epMatch = html.match(/movie-sub[^>]*>([^<]+)/i);
         var episode_current = epMatch ? epMatch[1].trim() : "";
         
-        // Trả về URL gốc để mở giao diện Webview đầy đủ tính năng của trang web
-        var servers = [{
-            name: "Giao Diện Web Narto (Đầy Đủ Tính Năng)",
-            episodes: [{
+        // Quét toàn bộ danh sách tập dựa trên class="episode-item" và cấu trúc HTML bác gửi
+        var episodes = [];
+        var parts = html.split('class="episode-item"');
+        var addedSlugs = {};
+
+        for (var j = 1; j < parts.length; j++) {
+            var part = parts[j];
+            var hrefMatch = part.match(/href=["']([^"']+)["']/i);
+            var textMatch = part.match(/>([^<]+)<\/a>/i);
+            
+            if (hrefMatch) {
+                var epUrl = hrefMatch[1].replace(/&amp;/g, '&');
+                if (epUrl.indexOf("http") === -1) epUrl = BASEURL + epUrl;
+                
+                if (!addedSlugs[epUrl]) {
+                    addedSlugs[epUrl] = true;
+                    var epName = textMatch ? textMatch[1].trim() : ("Tập " + (episodes.length + 1));
+                    var epNumMatch = epUrl.match(/\/(\d+)(?:\?|$)/);
+                    var uniqueSlug = "ep-" + (epNumMatch ? epNumMatch[1] : (episodes.length + 1));
+
+                    episodes.push({
+                        id: epUrl,
+                        name: epName,
+                        slug: uniqueSlug // Slug duy nhất giúp App quản lý tiến trình và vuốt tập chuẩn xác
+                    });
+                }
+            }
+        }
+
+        // Dự phòng nếu không tìm thấy thẻ episode-item
+        if (episodes.length === 0) {
+            episodes.push({
                 id: url,
-                name: "Mở Trang Xem Phim",
-                slug: "webview-player"
-            }]
+                name: "Xem Tập 1",
+                slug: "ep-1"
+            });
+        }
+
+        var servers = [{
+            name: "Danh Sách Tập Phim",
+            episodes: episodes
         }];
 
         return JSON.stringify({
@@ -264,7 +297,6 @@ function parseMovieDetail(html, url) {
 // -----------------------------------------------------------------------------
 function parseDetailResponse(html, url) {
     try {
-        // Script chuyên dụng cho Narto Drama: Ẩn rác, tự động bấm "Xem quảng cáo", "Unlock", "Tiếp tục"
         var autoBypassAndLockPortrait = 
             "var s = document.createElement('style');" +
             "s.innerHTML = 'header, .topbar, .site-footer-wrap, .detail-adsterra-top, .detail-inline-banners, .detail-native-ad, .you-may-like, .detail-seo-block, .share-buttons { display: none !important; } " +
@@ -273,7 +305,6 @@ function parseDetailResponse(html, url) {
             "document.head.appendChild(s);" +
             
             "setInterval(function() {" +
-                // 1. Ép thẻ video luôn chạy inline (playsinline) để không bị bung toàn màn hình ngang
                 "var vids = document.querySelectorAll('video');" +
                 "for(var k=0; k<vids.length; k++) {" +
                     "if(!vids[k].hasAttribute('playsinline')) {" +
@@ -282,11 +313,9 @@ function parseDetailResponse(html, url) {
                     "}" +
                 "}" +
                 
-                // 2. Tự động click xác nhận popup thông báo / hộp thoại
                 "var swalBtn = document.querySelector('.swal2-confirm');" +
                 "if(swalBtn) { try { swalBtn.click(); } catch(e){} }" +
                 
-                // 3. Tự động bấm các nút yêu cầu xem quảng cáo hoặc mở khóa tập phim
                 "var clickables = document.querySelectorAll('button, a, div, span');" +
                 "for(var i=0; i<clickables.length; i++) {" +
                     "var txt = (clickables[i].innerText || clickables[i].textContent || '').toLowerCase();" +
@@ -295,13 +324,12 @@ function parseDetailResponse(html, url) {
                     "}" +
                 "}" +
                 
-                // 4. Dọn dẹp modal đăng nhập bắt buộc nếu có
                 "var modal = document.getElementById('nd-auth-modal'); if(modal) modal.classList.remove('open');" +
             "}, 400);";
 
         return JSON.stringify({
             "url": url,
-            "isEmbed": true, // Mở hoàn toàn bằng WebView nội tại của App
+            "isEmbed": true, 
             "headers": {
                 "Referer": BASEURL,
                 "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15",
@@ -314,7 +342,6 @@ function parseDetailResponse(html, url) {
     }
 }
 
-// Giữ chuẩn chống lỗi 404 cho WebView
 function parseEmbedResponse(htmlContent, url) {
     return JSON.stringify({ url: "", isEmbed: false });
 }
