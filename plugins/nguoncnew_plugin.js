@@ -6,12 +6,12 @@ function getManifest() {
     return JSON.stringify({
         "id": "nguoncnew",
         "name": "Phim NguonC Xoá Quảng Cáo",
-        "version": "1.36", // Sử dụng kỹ thuật Hook Blob M3U8 cực mạnh
+        "version": "1.38", // Tối ưu hóa tối đa: Dùng Stream-Regex bắt link tầng Network
         "baseUrl": "https://phim.nguonc.com",
         "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/nguonC.png",
         "isEnabled": true,
         "type": "MOVIE",
-        "playerType": "embedtoexoplay" // BẮT BUỘC ĐỂ BẬT WEBVIEW TÀNG HÌNH DÒ LINK
+        "playerType": "embedtoexoplay" // Bắt buộc dùng để kích hoạt EmbedSniffer
     });
 }
 
@@ -225,63 +225,36 @@ function parseMovieDetail(apiResponseJson) {
 }
 
 // =============================================================================
-// [QUAN TRỌNG] ÁP DỤNG MÃ HOOK BLOB M3U8 THEO CHUẨN EMBEDTOEXOPLAY
+// SỨC MẠNH TỐI THƯỢNG: STREAM-REGEX NETWORK INTERCEPT
 // =============================================================================
 function parseDetailResponse(html, apiUrl) {
     try {
         var url = apiUrl.split("|")[0];
 
-        // Mã JS này sẽ được tiêm vào WebView ẩn của App
-        var hookJsCode = `
-        (function initBlobSniffer() {
-            if (window._vaapp_hooked) return;
-            window._vaapp_hooked = true;
-
-            if (typeof URL !== 'undefined' && URL.createObjectURL) {
-                var originalCreateObjectURL = URL.createObjectURL;
-                URL.createObjectURL = function(blob) {
-                    var blobUrl = originalCreateObjectURL.apply(this, arguments);
-                    if (blob && (blob instanceof Blob || blob instanceof File)) {
-                        var processContent = function(content) {
-                            if (content && content.trim().indexOf('#EXTM3U') === 0) {
-                                // Gửi trực tiếp nội dung M3U8 thô và URL trang hiện tại về App
-                                if (window.SnifferBridge && typeof window.SnifferBridge.playM3u8Content === 'function') {
-                                    window.SnifferBridge.playM3u8Content(content, window.location.href);
-                                }
-                            }
-                        };
-
-                        if (typeof blob.text === 'function') {
-                            blob.text().then(processContent).catch(function(){});
-                        } else {
-                            var reader = new FileReader();
-                            reader.onload = function(e) { processContent(e.target.result); };
-                            reader.readAsText(blob);
-                        }
-                    }
-                    return blobUrl;
-                };
-            }
-
-            // Tự động bấm play nếu có nút play to giữa màn hình
-            var clickCount = 0;
-            var autoClick = setInterval(function() {
-                var btn = document.querySelector('.jw-icon-display, .vjs-big-play-button, .plyr__control--overlaid, .play-btn');
-                if (btn) {
-                    btn.click();
-                    clickCount++;
-                    if (clickCount > 5) clearInterval(autoClick);
+        // 1. Nếu API nhả thẳng file stream thì múc luôn không dài dòng
+        if (url.indexOf('.m3u8') !== -1 || url.indexOf('.mp4') !== -1) {
+            return JSON.stringify({
+                "url": url,
+                "isEmbed": false,
+                "mimeType": url.indexOf('.m3u8') !== -1 ? "application/x-mpegURL" : "video/mp4",
+                "headers": {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                    "Referer": "https://phim.nguonc.com/"
                 }
-            }, 1000);
-            
-            // Backup: Chộp URL video thông thường nếu trang không dùng Blob
-            var checkVideo = setInterval(function() {
-                var video = document.querySelector('video');
-                if (video && video.src && video.src.indexOf('blob:') !== 0) {
-                    if (window.SnifferBridge && typeof window.SnifferBridge.play === 'function') {
-                        window.SnifferBridge.play(video.src);
-                        clearInterval(checkVideo);
-                    }
+            });
+        }
+        
+        // 2. Nếu là Embed -> Giao cho App quét tầng mạng với Stream-Regex
+        // Đồng thời kèm một đoạn JS siêu nhỏ để tự động bấm nút Play kích hoạt luồng tải
+        var autoClickJs = `
+        (function() {
+            var c = 0;
+            var i = setInterval(function() {
+                var b = document.querySelector('.jw-icon-display, .vjs-big-play-button, .plyr__control--overlaid, .play-btn');
+                if (b) {
+                    b.click();
+                    c++;
+                    if (c > 5) clearInterval(i);
                 }
             }, 1000);
         })();
@@ -289,13 +262,16 @@ function parseDetailResponse(html, apiUrl) {
 
         return JSON.stringify({
             "url": url,
-            "isEmbed": true, // BẮT BUỘC TRẢ VỀ TRUE ĐỂ APP BẬT SNIFFER NGẦM
+            "isEmbed": true, // Bật Sniffer ngầm
             "headers": {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Referer": "https://phim.nguonc.com/",
                 "Block-Ads": "true",
                 "Block-Redirects": "true",
-                "Custom-Js": hookJsCode.replace(/\r\n|\r|\n/g, " ").trim()
+                // Bắt gọn bất kỳ request tải file .m3u8 nào phát sinh từ WebView
+                "Stream-Regex": "https?:\\/\\/[^\"'\\s]+\\.m3u8[^\"'\\s]*",
+                // JS kích hoạt nút Play
+                "Custom-Js": autoClickJs.replace(/\r\n|\r|\n/g, " ").trim()
             }
         });
     } catch (e) {
