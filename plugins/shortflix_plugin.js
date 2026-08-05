@@ -16,16 +16,16 @@ function getManifest() {
     return JSON.stringify({
         "id": "shortflix",
         "name": "Phim Ngắn Shortflix",
-        "description": "Load Webview gốc, Auto-Login, Cố định dọc 100%.",
-        "version": "1.5.0", 
+        "description": "Bản Webview: Cấm tuyệt đối xoay ngang, Auto-Login.",
+        "version": "1.6.0", // Nâng cấp: Tiêu diệt API Fullscreen của Webview
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/shortflix.png",
         "isEnabled": true,
         "hasLogin": true,                     
         "loginUrl": BASEURL + "/vi/login",    
-        "type": "shortfilm",                  // Ép UI dọc
+        "type": "shortfilm",                  // Báo cho App đây là dạng Tiktok
         "layoutType": "VERTICAL",             
-        "playerType": "webview"               // Dùng webview nguyên bản, tránh EmbedPlayer xoay ngang của App
+        "playerType": "embed"                 // [CHUẨN TÀI LIỆU] Dùng 'embed' để mở Webview
     });
 }
 
@@ -247,7 +247,7 @@ function parseMovieDetail(html, url) {
             name: "Lướt Chuyển Tập Tự Động",
             episodes: [{
                 id: url,
-                name: "Bấm vào đây để Xem & Chọn Tập",
+                name: "Bấm vào đây để Xem & Vuốt",
                 slug: "webview-player"
             }]
         }];
@@ -274,28 +274,47 @@ function parseMovieDetail(html, url) {
 }
 
 // =============================================================================
-// WEBVIEW LOADER: ÉP DỌC BẰNG PLAYSINLINE & ẨN NÚT FULLSCREEN
+// WEBVIEW LOADER: "THIẾN" FULLSCREEN API CHỐNG XOAY NGANG 100%
 // =============================================================================
 function parseDetailResponse(html, url) {
     try {
         var autoLoginAndKillAdsJs = `
             (function() {
+                // =============================================================
+                // 1. "THIẾN" TÍNH NĂNG FULLSCREEN CỦA TRÌNH DUYỆT (CHỐNG XOAY NGANG)
+                // =============================================================
+                try {
+                    Object.defineProperty(document, 'fullscreenEnabled', {get: function() { return false; }});
+                    Object.defineProperty(document, 'webkitFullscreenEnabled', {get: function() { return false; }});
+                    Element.prototype.requestFullscreen = function() { return Promise.resolve(); };
+                    Element.prototype.webkitRequestFullscreen = function() { return Promise.resolve(); };
+                    Element.prototype.mozRequestFullScreen = function() { return Promise.resolve(); };
+                    Element.prototype.msRequestFullscreen = function() { return Promise.resolve(); };
+                    if (window.HTMLVideoElement) {
+                        HTMLVideoElement.prototype.webkitEnterFullscreen = function() {};
+                        HTMLVideoElement.prototype.enterFullscreen = function() {};
+                    }
+                } catch(e) {}
+
                 var EMAIL = "iamwilliamm6@gmail.com";
                 var PASS = "trung@123";
 
-                // CSS Ẩn sạch quảng cáo & Ẩn TOÀN BỘ nút Fullscreen của trình phát
+                // =============================================================
+                // 2. CSS ẨN QUẢNG CÁO & XÓA CÁC NÚT BẤM FULLSCREEN TRÊN UI
+                // =============================================================
                 var style = document.createElement('style');
                 style.innerHTML = 'header, .header, nav, footer, .footer, .download-app, .app-download, [class*="ad-"], [id*="ad-"], .popup, .modal, .google-auto-placed, iframe[src*="ads"], .bottom-nav, .navigation, .sidebar, .comments, .vjs-fullscreen-control, .plyr__controls [data-plyr="fullscreen"], .jw-fullscreen, .fullscreen-btn, video::-webkit-media-controls-fullscreen-button { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } body, html { margin: 0 !important; padding: 0 !important; overflow-x: hidden !important; background: #000 !important; overscroll-behavior-y: none; }';
                 document.head.appendChild(style);
 
+                // =============================================================
+                // 3. VÒNG LẶP ÉP QUYỀN PLAYSINLINE CHO THẺ VIDEO
+                // =============================================================
                 setInterval(function() {
-                    // [CHÌA KHÓA VÀNG] Bơm playsinline vào thẻ video để ngăn Android tự phóng to xoay ngang
                     var vids = document.querySelectorAll('video');
                     for(var k = 0; k < vids.length; k++){
-                        if (!vids[k].hasAttribute('playsinline')) {
-                            vids[k].setAttribute('playsinline', 'true');
-                            vids[k].setAttribute('webkit-playsinline', 'true');
-                        }
+                        vids[k].setAttribute('playsinline', 'true');
+                        vids[k].setAttribute('webkit-playsinline', 'true');
+                        vids[k].removeAttribute('controls'); // Tháo cả control mặc định nếu nó tự mọc ra
                     }
 
                     var appBanners = document.querySelectorAll('div[class*="download"], div[class*="banner"]');
@@ -308,6 +327,9 @@ function parseDetailResponse(html, url) {
                     }
                 }, 500);
 
+                // =============================================================
+                // 4. AUTO LOGIN LOGIC
+                // =============================================================
                 if (sessionStorage.getItem('vax_autologin_done')) return;
 
                 function doLogin() {
@@ -357,11 +379,11 @@ function parseDetailResponse(html, url) {
 
         return JSON.stringify({
             "url": url,
-            "isEmbed": true, 
+            "isEmbed": true, // Trả về true để mở WebView
             "headers": {
                 "Referer": BASEURL,
                 "Block-Ads": "true",
-                "Block-Redirects": "false", 
+                "Block-Redirects": "false", // Chấp nhận redirect để auto-login hoạt động
                 "Custom-Js": autoLoginAndKillAdsJs.replace(/\r\n|\r|\n/g, " ").trim()
             }
         });
