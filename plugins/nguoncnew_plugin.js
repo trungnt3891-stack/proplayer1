@@ -6,12 +6,12 @@ function getManifest() {
     return JSON.stringify({
         "id": "nguoncnew",
         "name": "Phim NguonC Xoá Quảng Cáo",
-        "version": "1.30", // Đã xóa sạch Webview rác, ưu tiên bắt gọn link M3U8
+        "version": "1.32", // Xóa sạch Webview rác, cưỡng chế phát Native Player (ExoPlayer)
         "baseUrl": "https://phim.nguonc.com",
         "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/nguonC.png",
         "isEnabled": true,
         "type": "MOVIE",
-        "playerType": "exoplayer" // Bắt buộc dùng ExoPlayer để xem Native không quảng cáo
+        "playerType": "auto" // Dùng auto để App linh hoạt mở Native Player
     });
 }
 
@@ -52,30 +52,19 @@ function getUrlList(slug, filtersJson) {
     try {
         var filters = JSON.parse(filtersJson || "{}");
         var page = filters.page || 1;
-        var sort = filters.sort || "updated"; // updated, view, year
+        var sort = filters.sort || "updated";
 
         if (slug === 'phim-moi-cap-nhat' && !filters.category && !filters.country && !filters.year) {
             return "https://phim.nguonc.com/api/films/phim-moi-cap-nhat?page=" + page;
         }
 
-        if (filters.category) {
-            return "https://phim.nguonc.com/api/films/the-loai/" + filters.category + "?page=" + page + "&sort=" + sort;
-        }
+        if (filters.category) return "https://phim.nguonc.com/api/films/the-loai/" + filters.category + "?page=" + page + "&sort=" + sort;
+        if (filters.country) return "https://phim.nguonc.com/api/films/quoc-gia/" + filters.country + "?page=" + page + "&sort=" + sort;
+        if (filters.year) return "https://phim.nguonc.com/api/films/nam-phat-hanh/" + filters.year + "?page=" + page + "&sort=" + sort;
 
-        if (filters.country) {
-            return "https://phim.nguonc.com/api/films/quoc-gia/" + filters.country + "?page=" + page + "&sort=" + sort;
-        }
-
-        if (filters.year) {
-            return "https://phim.nguonc.com/api/films/nam-phat-hanh/" + filters.year + "?page=" + page + "&sort=" + sort;
-        }
-
-        if (/^\d{4}$/.test(slug)) {
-            return "https://phim.nguonc.com/api/films/nam-phat-hanh/" + slug + "?page=" + page + "&sort=" + sort;
-        }
+        if (/^\d{4}$/.test(slug)) return "https://phim.nguonc.com/api/films/nam-phat-hanh/" + slug + "?page=" + page + "&sort=" + sort;
 
         var listSlugs = ['phim-le', 'phim-bo', 'phim-dang-chieu', 'tv-shows', 'subteam'];
-
         if (listSlugs.indexOf(slug) >= 0) {
             if (slug !== 'hoat-hinh') {
                 return "https://phim.nguonc.com/api/films/danh-sach/" + slug + "?page=" + page + "&sort=" + sort;
@@ -87,12 +76,9 @@ function getUrlList(slug, filtersJson) {
             'han-quoc', 'nhat-ban', 'thai-lan', 'dai-loan', 'nga', 'ha-lan',
             'philippines', 'an-do', 'quoc-gia-khac'
         ];
-        if (countrySlugs.indexOf(slug) >= 0) {
-            return "https://phim.nguonc.com/api/films/quoc-gia/" + slug + "?page=" + page + "&sort=" + sort;
-        }
+        if (countrySlugs.indexOf(slug) >= 0) return "https://phim.nguonc.com/api/films/quoc-gia/" + slug + "?page=" + page + "&sort=" + sort;
 
         return "https://phim.nguonc.com/api/films/the-loai/" + slug + "?page=" + page + "&sort=" + sort;
-
     } catch (e) {
         return "https://phim.nguonc.com/api/films/phim-moi-cap-nhat?page=1";
     }
@@ -103,7 +89,8 @@ function getUrlSearch(keyword, filtersJson) {
 }
 
 function getUrlDetail(slug) {
-    if (slug.indexOf("http") === 0) return slug;
+    var realSlug = slug.split("|")[0];
+    if (realSlug.indexOf("http") === 0) return slug;
     return "https://phim.nguonc.com/api/film/" + slug;
 }
 
@@ -117,17 +104,13 @@ function getUrlYears() { return "https://phim.nguonc.com"; }
 
 function parseListResponse(apiResponseJson) {
     try {
-        var response = JSON.parse(apiResponseJson);
+        var response = typeof apiResponseJson === "string" ? JSON.parse(apiResponseJson) : apiResponseJson;
         var data = response.data || {};
         var items = [];
 
-        if (Array.isArray(data)) {
-            items = data;
-        } else if (Array.isArray(response.items)) {
-            items = response.items;
-        } else if (data.items && Array.isArray(data.items)) {
-            items = data.items;
-        }
+        if (Array.isArray(data)) items = data;
+        else if (Array.isArray(response.items)) items = response.items;
+        else if (data.items && Array.isArray(data.items)) items = data.items;
 
         var paginate = response.paginate || response.pagination || (data.params && data.params.pagination) || {};
 
@@ -149,19 +132,12 @@ function parseListResponse(apiResponseJson) {
         var itemsPerPage = paginate.items_per_page || paginate.itemsPerPage || paginate.totalItemsPerPage || 24;
 
         var totalPages = paginate.total_page || paginate.totalPages || 0;
-        if (totalPages === 0 && itemsPerPage > 0) {
-            totalPages = Math.ceil(totalItems / itemsPerPage);
-        }
+        if (totalPages === 0 && itemsPerPage > 0) totalPages = Math.ceil(totalItems / itemsPerPage);
         if (totalPages === 0) totalPages = 1;
 
         return JSON.stringify({
             items: movies,
-            pagination: {
-                currentPage: currentPage,
-                totalPages: totalPages,
-                totalItems: totalItems,
-                itemsPerPage: itemsPerPage
-            }
+            pagination: { currentPage: currentPage, totalPages: totalPages, totalItems: totalItems, itemsPerPage: itemsPerPage }
         });
     } catch (error) {
         return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
@@ -174,7 +150,7 @@ function parseSearchResponse(apiResponseJson) {
 
 function parseMovieDetail(apiResponseJson) {
     try {
-        var response = JSON.parse(apiResponseJson);
+        var response = typeof apiResponseJson === "string" ? JSON.parse(apiResponseJson) : apiResponseJson;
         var movie = response.movie || response.data?.item || response.data || {};
 
         var rawEpisodes = movie.episodes || response.episodes || response.data?.item?.episodes || [];
@@ -189,13 +165,22 @@ function parseMovieDetail(apiResponseJson) {
                     serverItems.forEach(function (ep) {
                         var embed = ep.embed || ep.link_embed || "";
                         var m3u8 = ep.m3u8 || ep.link_m3u8 || "";
+                        
+                        var link = "";
+                        var type = "";
 
-                        // ĐÃ SỬA: Ưu tiên bắt link m3u8 để phát Native, chỉ dùng embed nếu bất đắc dĩ
-                        var link = m3u8 || embed;
+                        // ĐÁNH DẤU CHUẨN LOẠI LINK VÀO ID BẰNG CÚ PHÁP |data:
+                        if (m3u8) {
+                            link = m3u8;
+                            type = "direct"; // Link trực tiếp phát Native
+                        } else if (embed) {
+                            link = embed;
+                            type = "embed";  // Bất đắc dĩ mới dùng webview
+                        }
 
                         if (link) {
                             episodes.push({
-                                id: link,
+                                id: link + "|data:" + type,
                                 name: ep.name || ep.episode_name || "",
                                 slug: ep.slug || ep.episode_slug || ""
                             });
@@ -249,14 +234,27 @@ function parseMovieDetail(apiResponseJson) {
     }
 }
 
-// ĐÃ SỬA: Bắt thẳng link m3u8/mp4 cho vào Native Player thay vì load iFrame nhúng CustomJS
-function parseDetailResponse(html, url) {
+// Helper lấy dữ liệu Plugin từ URL
+function getPipeData(url) {
+    var i = url.indexOf("|");
+    if (i < 0) return "";
+    var s = url.substring(i + 1).replace(/^\s+/, "").trim();
+    if (s.toLowerCase().indexOf("data:") === 0) s = s.substring(5);
+    return s;
+}
+
+// BẮT LINK CHUẨN - XÓA QUẢNG CÁO TẬN GỐC
+function parseDetailResponse(html, apiUrl) {
     try {
-        if (url.indexOf('.m3u8') !== -1 || url.indexOf('.mp4') !== -1) {
+        var dataType = getPipeData(apiUrl);
+        var url = apiUrl.split("|")[0];
+
+        // NẾU LÀ LINK M3U8 GỐC (DÙNG NATIVE PLAYER)
+        if (dataType === "direct" || url.indexOf('.m3u8') !== -1 || url.indexOf('.mp4') !== -1) {
             return JSON.stringify({
                 "url": url,
-                "isEmbed": false, // Phát thẳng, tuyệt đối không webview
-                "mimeType": url.indexOf('.m3u8') !== -1 ? "application/x-mpegURL" : "video/mp4",
+                "isEmbed": false, // Tuyệt đối KHÔNG Webview
+                "mimeType": (url.indexOf('.m3u8') !== -1 || dataType === "direct") ? "application/x-mpegURL" : "video/mp4",
                 "headers": {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                     "Origin": "https://phim.nguonc.com",
@@ -265,17 +263,33 @@ function parseDetailResponse(html, url) {
             });
         }
         
-        // Backup an toàn nếu bắt buộc phải dùng Embed
+        // NẾU XUI XẺO PHẢI MỞ BẰNG NHÚNG WEBVIEW (BẬT 4 KHIÊN CHẶN QUẢNG CÁO)
+        var killAdsJs = `
+            (function() {
+                var style = document.createElement('style');
+                style.innerHTML = 'header, footer, nav, [class*="ad-"], [id*="ad-"], .popup, .modal, .google-auto-placed, iframe[src*="ads"] { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } body, html { margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: #000 !important; }';
+                document.head.appendChild(style);
+                setInterval(function() {
+                    var closeBtns = document.querySelectorAll('.close, .btn-close, [aria-label="Close"]');
+                    for (var j = 0; j < closeBtns.length; j++) { try { closeBtns[j].click(); } catch(e){} }
+                }, 500);
+            })();
+        `;
+
         return JSON.stringify({
             "url": url,
             "isEmbed": true,
             "headers": {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Referer": "https://phim.nguonc.com/"
+                "Referer": "https://phim.nguonc.com/",
+                "Block-Ads": "true",
+                "Block-Redirects": "true",
+                "Block-Keywords": "adserv, popunder, popup.js, ads.js, tracking.js, banner.js",
+                "Custom-Js": killAdsJs.replace(/\r/g, "").replace(/\n/g, " ").replace(/\t/g, "  ").trim()
             }
         });
     } catch (e) {
-        return JSON.stringify({ "url": url, "isEmbed": true });
+        return JSON.stringify({ "url": apiUrl.split("|")[0], "isEmbed": true });
     }
 }
 
