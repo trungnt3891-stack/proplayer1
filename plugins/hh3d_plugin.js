@@ -6,7 +6,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "yanhh3d",
         "name": "YanHH3D",
-        "version": "4.3.1", // Đã update: Bộ lọc bắt số tập và link phim chuẩn 100%
+        "version": "4.3.2", // Đã tối ưu hóa bộ quét link & bắt tập phim thông minh
         "baseUrl": "https://yanhh3d.love", 
         "iconUrl": "https://yanhh3d.love/storage/settings/August2024/YOoAwtlobLbwKhiFwRZv.png",
         "isEnabled": true,
@@ -101,6 +101,7 @@ var PluginUtils = {
             .replace(/&amp;/g, "&")
             .replace(/&quot;/g, '"')
             .replace(/&#039;/g, "'")
+            .replace(/&nbsp;/g, " ")
             .replace(/\s+/g, " ")
             .trim();
     }
@@ -128,7 +129,6 @@ function parseListResponse(html) {
             var urlMatch = block.match(/href=["']([^"']+)["']/i);
             var imgMatch = block.match(/data-src=["']([^"']+)["']/i) || block.match(/src=["']([^"']+)["']/i);
             var titleMatch = block.match(/title=["']([^"']+)["']/i) || block.match(/alt=["']([^"']+)["']/i) || block.match(/<h[234][^>]*>([^<]+)<\/h[234]>/i);
-            
             var epMatch = block.match(/class=["'][^"']*(tick-rate|ep|episode|label|status)[^"']*["'][^>]*>([^<]+)</i);
 
             if (urlMatch && imgMatch && titleMatch) {
@@ -225,11 +225,10 @@ function parseSearchResponse(html) {
 }
 
 // =============================================================================
-// HÀM PARSE MOVIE DETAIL - ĐÃ UPDATE CHUẨN XÁC
+// HÀM PARSE MOVIE DETAIL - TỐI ƯU HÓA AN TOÀN
 // =============================================================================
 function parseMovieDetail(html) {
     try {
-        // [PHẦN NÀY GIỮ NGUYÊN CODE CỦA BẠN]
         var titleM = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([^<]+)<\/title>/i);
         var title = titleM ? PluginUtils.cleanText(titleM[1]) : "";
         title = title.split('|')[0].replace(/Phim /gi, "").trim(); 
@@ -247,55 +246,53 @@ function parseMovieDetail(html) {
             baseSlug = urlObj.substring(urlObj.lastIndexOf("/") + 1);
         }
 
-        // =========================================================================
-        // [BẮT ĐẦU PHẦN CẬP NHẬT TÌM TẬP THỰC TẾ & LINK CHUẨN]
-        // =========================================================================
         var servers = [];
         
         // 1. Lọc Tabs (Nhận diện TM / Vietsub)
         var navTabsMatch = html.match(/<ul[^>]*nav-tabs[^>]*>([\s\S]*?)<\/ul>/i);
         var tabs = [];
         if (navTabsMatch) {
-            var aTagRegex = /<a[^>]*href="#([^"]+)"[^>]*>([^<]+)<\/a>/gi;
+            var aTagRegex = /<a[^>]*href="#([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
             var aMatch;
             while ((aMatch = aTagRegex.exec(navTabsMatch[1])) !== null) {
-                var tabName = aMatch[2].replace(/<[^>]+>/g, '').trim();
-                // Rename tab theo đúng yêu cầu custom của bạn
-                if(tabName.toLowerCase().indexOf('vietsub') !== -1) tabName = "Phim Vietsub (Bản 4K)";
-                else if(tabName.toLowerCase().indexOf('thuyết minh') !== -1 || tabName.toLowerCase().indexOf('tm') !== -1) tabName = "Thuyết Minh (Bản 4K)";
+                var tabName = PluginUtils.cleanText(aMatch[2]);
+                if (tabName.toLowerCase().indexOf('vietsub') !== -1) {
+                    tabName = "Phim Vietsub (Bản 4K)";
+                } else if (tabName.toLowerCase().indexOf('thuyết minh') !== -1 || tabName.toLowerCase().indexOf('tm') !== -1) {
+                    tabName = "Thuyết Minh (Bản 4K)";
+                }
                 tabs.push({ id: aMatch[1].trim(), name: tabName });
             }
         }
 
-        // 2. Thuật toán lấy trực tiếp link tập phim đang hiện hữu
+        // 2. Thuật toán quét tập phim robust bằng RegEx exec
         function getActualEps(blockHtml) {
             var eps = [];
-            var splits = blockHtml.split('ep-item'); 
-            for (var i = 1; i < splits.length; i++) {
-                var block = splits[i].substring(0, 500); 
-                var urlMatch = block.match(/href=["']([^"']+)["']/i);
-                var orderMatch = block.match(/ssli-order[^>]*>([^<]+)/i);
-                var titleMatch = block.match(/title=["']([^"']+)["']/i);
+            var seenEps = {};
+            var epRegex = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+            var match;
+            
+            while ((match = epRegex.exec(blockHtml)) !== null) {
+                var epUrl = match[1];
+                var innerHtml = match[2];
+                var cleanInner = PluginUtils.cleanText(innerHtml);
                 
-                if (urlMatch) {
-                    var epUrl = urlMatch[1];
-                    // Tạo chuẩn ID Slug tuyệt đối (không bị lỗi đường dẫn)
-                    var uniqueSlug = epUrl.replace(/^https?:\/\/[^\/]+\//i, "").replace(/^\//, "");
-                    
-                    var epName = "N/A";
-                    if (orderMatch) epName = orderMatch[1].trim();
-                    else if (titleMatch) epName = titleMatch[1].trim();
-                    else epName = uniqueSlug.split('/').pop().replace('tap-', 'Tập ');
-
-                    var exists = false;
-                    for (var j = 0; j < eps.length; j++) {
-                        if (eps[j].id === uniqueSlug) { exists = true; break; }
-                    }
-                    if (!exists) eps.push({ id: uniqueSlug, name: epName, slug: uniqueSlug });
+                if (epUrl.indexOf('javascript:') !== -1 || epUrl.indexOf('#') === 0) continue;
+                
+                var uniqueSlug = epUrl.replace(/^https?:\/\/[^\/]+\//i, "").replace(/^\//, "").replace(/\/$/, "");
+                
+                var orderMatch = innerHtml.match(/class=["'][^"']*ssli-order[^"']*["'][^>]*>([^<]+)</i) ||
+                                 innerHtml.match(/class=["'][^"']*ep-name[^"']*["'][^>]*>([^<]+)</i);
+                
+                var epName = orderMatch ? PluginUtils.cleanText(orderMatch[1]) : (cleanInner || uniqueSlug.split('/').pop().replace('tap-', 'Tập '));
+                
+                if (!seenEps[uniqueSlug]) {
+                    eps.push({ id: uniqueSlug, name: epName, slug: uniqueSlug });
+                    seenEps[uniqueSlug] = true;
                 }
             }
             
-            // 3. Ép kiểu sắp xếp số (Bất chấp các tập như "186 TL")
+            // Sắp xếp số tập chuẩn xác
             eps.sort(function(a, b) {
                 var numA = parseInt((a.name.match(/\d+/) || ["0"])[0], 10);
                 var numB = parseInt((b.name.match(/\d+/) || ["0"])[0], 10);
@@ -305,7 +302,7 @@ function parseMovieDetail(html) {
             return eps;
         }
 
-        // 4. Đẩy tập phim vào danh sách
+        // 3. Đẩy tập phim vào danh sách theo Tab
         if (tabs.length > 0) {
             for (var i = 0; i < tabs.length; i++) {
                 var startStr = 'id="' + tabs[i].id + '"';
@@ -332,19 +329,15 @@ function parseMovieDetail(html) {
             }
         }
 
-        // Fallback: Backup cuối cùng phòng khi website giấu mã
+        // Fallback cuối cùng
         if (servers.length === 0 && baseSlug) {
              servers.push({ name: "Hệ Thống", episodes: [{ id: baseSlug + "/tap-1", name: "Đang Cập Nhật / Full", slug: baseSlug + "/tap-1" }] });
         }
         
-        // Đếm lại tổng số tập chuẩn xác
         var totalEps = 0;
         if (servers.length > 0 && servers[0].episodes.length > 0) {
             totalEps = servers[0].episodes.length;
         }
-        // =========================================================================
-        // [KẾT THÚC PHẦN CẬP NHẬT]
-        // =========================================================================
 
         return JSON.stringify({
             id: "",
@@ -366,7 +359,7 @@ function parseMovieDetail(html) {
 }
 
 // =============================================================================
-// STREAM / EMBED EXTRACTORS (Giữ nguyên)
+// STREAM / EMBED EXTRACTORS
 // =============================================================================
 
 function parseDetailResponse(html) {
@@ -442,6 +435,7 @@ function parseEmbedResponse(html, sourceUrl) {
         return JSON.stringify({ url: "", isEmbed: false });
     }
 }
+
 function parseCategoriesResponse(html) { return "[]"; }
 function parseCountriesResponse(html) { return "[]"; }
 function parseYearsResponse(html) { return "[]"; }
