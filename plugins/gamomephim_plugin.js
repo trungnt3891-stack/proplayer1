@@ -1,5 +1,5 @@
 // =============================================================================
-// PLUGIN MOVIE SCRAPER: GAMOMEPHIM.COM (STABLE & FAST)
+// PLUGIN MOVIE SCRAPER: GAMOMEPHIM.COM (NEXT.JS SSR OPTIMIZED)
 // =============================================================================
 
 var BASEURL = "https://gamomephim.com";
@@ -9,7 +9,7 @@ function getManifest() {
         "id": "gamomephim",
         "name": "Gà Mờ Mê Phim",
         "description": "Nguồn Phim Ngắn Hay & Tốc Độ Cao",
-        "version": "2.1.0",
+        "version": "3.0.0",
         "baseUrl": BASEURL,
         "iconUrl": "https://r2.gamomephim.com/site/logo-1784305321242.png",
         "isEnabled": true,
@@ -110,8 +110,62 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSERS (QUÉT KHỐI GIAO DIỆN CHUẨN XÁC)
+// PARSERS
 // =============================================================================
+
+function parseNextPayload(raw) {
+    try {
+        var match = raw.match(/self\.__next_f\.push\((.*)\)/);
+        if (!match) return null;
+        var pushArgs = JSON.parse(match[1]);
+        var rawString = pushArgs[1];
+        var cleanJsonStr = rawString.replace(/^\w+:/, '').replace(/\n$/, '');
+        return JSON.parse(cleanJsonStr);
+    } catch (e) {
+        return null;
+    }
+}
+
+function extractItemsFromPayload(data) {
+    var items = [];
+    function traverse(node) {
+        if (!node) return;
+        if (typeof node === 'object' && !Array.isArray(node)) {
+            if (node.slug && node.title && (node.thumbnailUrl || node.img)) {
+                var slug = node.slug;
+                var href = BASEURL + (slug.startsWith('/') ? slug : '/' + slug);
+                var poster = node.thumbnailUrl || node.img || "";
+                var title = node.title || "";
+                
+                var exists = false;
+                for (var i = 0; i < items.length; i++) {
+                    if (items[i].id === href) { exists = true; break; }
+                }
+                
+                if (!exists && title && href) {
+                    items.push({
+                        "id": href,
+                        "title": title.trim(),
+                        "posterUrl": poster,
+                        "backdropUrl": poster,
+                        "quality": "FULL",
+                        "lang": "Vietsub",
+                        "episode_current": "Full"
+                    });
+                }
+            }
+            for (var key in node) {
+                if (node.hasOwnProperty(key)) traverse(node[key]);
+            }
+        } else if (Array.isArray(node)) {
+            for (var i = 0; i < node.length; i++) {
+                traverse(node[i]);
+            }
+        }
+    }
+    traverse(data);
+    return items;
+}
 
 function parseListResponse(html, $url) {
     try {
@@ -122,55 +176,57 @@ function parseListResponse(html, $url) {
             if (matchPage) calculatedPage = parseInt(matchPage[1]) || 1;
         }
 
-        // Quét các khối phần tử nhóm phim trên trang gamomephim
-        _$(html).find(".group, a").each(function() {
-            var href = this.attr("href") || "";
-            if (href.indexOf("/phim/") === -1) {
-                var parentA = this.find("a");
-                href = parentA.attr("href") || "";
-            }
-            
-            if (href.indexOf("/phim/") > -1) {
-                var cleanHref = href;
-                if (cleanHref.indexOf("http") === -1) {
-                    cleanHref = BASEURL + (cleanHref.startsWith('/') ? cleanHref : '/' + cleanHref);
-                }
-
-                var imgTag = this.find("img");
-                var poster = imgTag.attr("src") || imgTag.attr("data-src") || "";
-                if (poster && poster.indexOf("http") === -1) {
-                    poster = BASEURL + (poster.startsWith('/') ? poster : '/' + poster);
-                }
-
-                var title = imgTag.attr("alt") || "";
-                if (!title) {
-                    var h3 = this.find("h3");
-                    title = h3.text().trim();
-                }
-                if (!title) {
-                    title = this.attr("title") || "";
-                }
-
-                if (title && cleanHref && cleanHref !== BASEURL + "/") {
-                    var exists = false;
-                    for (var k = 0; k < items.length; k++) {
-                        if (items[k].id === cleanHref) { exists = true; break; }
-                    }
-
-                    if (!exists) {
-                        items.push({
-                            "id": cleanHref,
-                            "title": title.replace(/Poster phim/i, '').trim(),
-                            "posterUrl": poster,
-                            "backdropUrl": poster,
-                            "quality": "FULL",
-                            "lang": "Vietsub",
-                            "episode_current": "Full"
-                        });
+        // Quét toàn bộ các thẻ script next_f chứa dữ liệu phim SSR
+        var scripts = _$(html).find("script").elements;
+        for (var i = 0; i < scripts.length; i++) {
+            var content = _$(scripts[i]).text();
+            if (content && content.indexOf("__next_f.push") > -1) {
+                var rawData = parseNextPayload(content);
+                if (rawData) {
+                    var extracted = extractItemsFromPayload(rawData);
+                    for (var j = 0; j < extracted.length; j++) {
+                        var exItem = extracted[j];
+                        var dup = false;
+                        for (var k = 0; k < items.length; k++) {
+                            if (items[k].id === exItem.id) { dup = true; break; }
+                        }
+                        if (!dup) items.push(exItem);
                     }
                 }
             }
-        });
+        }
+
+        // Dự phòng quét qua thẻ a nếu payload không đủ
+        if (items.length === 0) {
+            _$(html).find("a").each(function() {
+                var href = this.attr("href") || "";
+                if (href.indexOf("/phim/") > -1) {
+                    var cleanHref = href.indexOf("http") === -1 ? BASEURL + (href.startsWith('/') ? href : '/' + href) : href;
+                    var imgTag = this.find("img");
+                    var poster = imgTag.attr("src") || "";
+                    if (poster && poster.indexOf("http") === -1) poster = BASEURL + (poster.startsWith('/') ? poster : '/' + poster);
+                    var title = imgTag.attr("alt") || this.attr("title") || "";
+
+                    if (title && cleanHref) {
+                        var exists = false;
+                        for (var k = 0; k < items.length; k++) {
+                            if (items[k].id === cleanHref) { exists = true; break; }
+                        }
+                        if (!exists) {
+                            items.push({
+                                "id": cleanHref,
+                                "title": title.replace(/Poster phim/i, '').trim(),
+                                "posterUrl": poster,
+                                "backdropUrl": poster,
+                                "quality": "FULL",
+                                "lang": "Vietsub",
+                                "episode_current": "Full"
+                            });
+                        }
+                    }
+                }
+            });
+        }
 
         return JSON.stringify({
             "items": items,
@@ -190,19 +246,6 @@ function parseListResponse(html, $url) {
 
 function parseSearchResponse(html, url) {
     return parseListResponse(html, url);
-}
-
-function parseNextPayload(raw) {
-    try {
-        var match = raw.match(/self\.__next_f\.push\((.*)\)/);
-        if (!match) return null;
-        var pushArgs = JSON.parse(match[1]);
-        var rawString = pushArgs[1];
-        var cleanJsonStr = rawString.replace(/^\w+:/, '').replace(/\n$/, '');
-        return JSON.parse(cleanJsonStr);
-    } catch (e) {
-        return null;
-    }
 }
 
 function extractCleanData(data) {
