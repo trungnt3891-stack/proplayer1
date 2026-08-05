@@ -1,12 +1,12 @@
 // =============================================================================
-// CONFIGURATION & METADATA (TỐI ƯU HIỆU NĂNG QUICKJS)
+// CONFIGURATION & METADATA
 // =============================================================================
 
 function getManifest() {
     return JSON.stringify({
         "id": "yanhh3d",
         "name": "YanHH3D",
-        "version": "4.3.1", // Bản tối ưu tốc độ xử lý
+        "version": "4.3.2", // Bản fix lỗi quét danh sách tập triệt để
         "baseUrl": "https://yanhh3d.love", 
         "iconUrl": "https://yanhh3d.love/storage/settings/August2024/YOoAwtlobLbwKhiFwRZv.png",
         "isEnabled": true,
@@ -91,7 +91,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSERS (TỐI ƯU HÓA TỐC ĐỘ BẰNG MỘT VÒNG LẶP EXEC DUY NHẤT)
+// PARSERS
 // =============================================================================
 
 var PluginUtils = {
@@ -111,8 +111,6 @@ function parseListResponse(html) {
         var movies = [];
         var seen = {};
 
-        // Sử dụng Regex kết hợp Global Exec Loop thay vì .split() nhiều lần
-        // Giúp giảm tải tối đa bộ nhớ RAM và tăng tốc độ xử lý cho QuickJS
         var regex = /<a[^>]+href=["']([^"']+)["'][^>]*>[\s\S]*?(?:data-src|src)=["']([^"']+)["'][\s\S]*?(?:title|alt)=["']([^"']+)["']/gi;
         var match;
 
@@ -184,33 +182,46 @@ function parseMovieDetail(html) {
             baseSlug = urlObj.substring(urlObj.lastIndexOf("/") + 1);
         }
 
-        var maxEp = 1;
-        var epMatch1 = html.match(/Tập mới nhất:.*?Tập\s*(\d+)/i);
-        var epMatch2 = html.match(/Thời lượng:.*?(\d+)\//i);
-        
-        if (epMatch1) {
-            maxEp = parseInt(epMatch1[1], 10);
-        } else if (epMatch2) {
-            maxEp = parseInt(epMatch2[1], 10);
-        } else {
+        // [CẢI TIẾN] Quét trực tiếp tất cả các số tập xuất hiện trong link tập phim của HTML
+        var episodeNumbers = {};
+        var episodeRegex = /href=["'][^"']*?(?:tap-|episode-)(\d+)["']/gi;
+        var epMatch;
+        while ((epMatch = episodeRegex.exec(html)) !== null) {
+            var num = parseInt(epMatch[1], 10);
+            if (num > 0) episodeNumbers[num] = true;
+        }
+
+        var epList = [];
+        for (var k in episodeNumbers) {
+            if (episodeNumbers.hasOwnProperty(k)) epList.push(parseInt(k, 10));
+        }
+        epList.sort(function(a, b) { return a - b; });
+
+        // Nếu quét link không ra, fallback quét chuỗi thông thường
+        if (epList.length === 0) {
+            var maxEp = 1;
             var linkRegex = /tap-(\d+)/gi;
             var lM;
             while ((lM = linkRegex.exec(html)) !== null) {
                 var n = parseInt(lM[1], 10);
                 if (n > maxEp) maxEp = n;
             }
+            for (var j = 1; j <= maxEp; j++) {
+                epList.push(j);
+            }
         }
 
         var lowerHtml = html.toLowerCase();
         var hasTM = lowerHtml.indexOf('xem thuyết minh') !== -1;
         var hasSub = lowerHtml.indexOf('xem vietsub') !== -1 || lowerHtml.indexOf('/sever2/') !== -1;
-        if (!hasTM && !hasSub) hasTM = true;
+        if (!hasTM && !hasSub) hasTM = true; // Fallback
 
         var vietsubEpisodes = [];
         var thuyetMinhEpisodes = [];
 
-        if (baseSlug && maxEp > 0) {
-            for (var i = 1; i <= maxEp; i++) {
+        if (baseSlug && epList.length > 0) {
+            for (var idx = 0; idx < epList.length; idx++) {
+                var i = epList[idx];
                 var epName = "Tập " + i;
                 if (hasTM) {
                     thuyetMinhEpisodes.push({
@@ -254,7 +265,7 @@ function parseMovieDetail(html) {
             year: 0,
             rating: 0,
             category: "Hoạt Hình 3D",
-            status: maxEp + " Tập"
+            status: epList.length + " Tập"
         });
     } catch (e) {
         return JSON.stringify({});
