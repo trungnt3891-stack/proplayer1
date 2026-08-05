@@ -6,12 +6,13 @@ function getManifest() {
     return JSON.stringify({
         "id": "nguoncnew",
         "name": "Phim NguonC Xoá Quảng Cáo",
-        "version": "4.0.0", // Hoàn hảo: Ưu tiên Embed + Hook Blob + Tự click resumeBtn
+        "version": "5.0.0", // Hoàn hảo: Khôi phục Headers gốc + embedtoexoplay + Hook Blob
         "baseUrl": "https://phim.nguonc.com",
         "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/nguonC.png",
         "isEnabled": true,
         "type": "MOVIE",
-        "playerType": "embedtoexoplay" // Kích hoạt Webview tàng hình dò link
+        "playerType": "embedtoexoplay", // Kích hoạt Webview dò link ngầm
+        "debug": true // Bật Console Toast để bác dễ dàng theo dõi tiến trình bắt link
     });
 }
 
@@ -166,7 +167,7 @@ function parseMovieDetail(apiResponseJson) {
                         var embed = ep.embed || ep.link_embed || "";
                         var m3u8 = ep.m3u8 || ep.link_m3u8 || "";
                         
-                        // [QUAN TRỌNG] Ưu tiên lấy EMBED vì m3u8 gốc của NguonC hay bị lỗi / chặn IP
+                        // Lấy link giống hệt bản gốc của bác
                         var link = embed || m3u8;
 
                         if (link) {
@@ -226,23 +227,19 @@ function parseMovieDetail(apiResponseJson) {
 }
 
 // =============================================================================
-// KỸ THUẬT EMBEDTOEXOPLAY KẾT HỢP HOOK BLOB VÀ AUTO-CLICK RESUME
+// SỨC MẠNH TỐI THƯỢNG: HEADERS GỐC KẾT HỢP CUSTOM-JS HOOK CHUẨN
 // =============================================================================
 function parseDetailResponse(html, apiUrl) {
     try {
         var url = apiUrl.split("|")[0];
 
-        // Mã JS tiêm vào Webview ngầm: Kết hợp Hook Blob M3U8 + Auto Click resumeBtn
-        var hookJsCode = `
-        (function initBlobSniffer() {
+        // Mã CustomJS đúng chuẩn tài liệu kết hợp Hook M3U8 và quét thẻ Video
+        var customJsCode = `
+        (function() {
             if (window._vaapp_hooked) return;
             window._vaapp_hooked = true;
 
-            if (window.SnifferBridge) {
-                window.SnifferBridge.toast("Đang dò tìm luồng video...");
-            }
-
-            // 1. Hook URL.createObjectURL để bắt file M3U8 ẩn trong RAM
+            // 1. Kỹ thuật Hook Blob M3U8
             if (typeof URL !== 'undefined' && URL.createObjectURL) {
                 var originalCreateObjectURL = URL.createObjectURL;
                 URL.createObjectURL = function(blob) {
@@ -251,12 +248,11 @@ function parseDetailResponse(html, apiUrl) {
                         var processContent = function(content) {
                             if (content && content.trim().indexOf('#EXTM3U') === 0) {
                                 if (window.SnifferBridge && typeof window.SnifferBridge.playM3u8Content === 'function') {
-                                    window.SnifferBridge.toast("Bắt thành công Blob M3U8!");
+                                    window.SnifferBridge.log("✅ Đã bắt được Blob M3U8!");
                                     window.SnifferBridge.playM3u8Content(content, window.location.href);
                                 }
                             }
                         };
-
                         if (typeof blob.text === 'function') {
                             blob.text().then(processContent).catch(function(){});
                         } else {
@@ -269,55 +265,76 @@ function parseDetailResponse(html, apiUrl) {
                 };
             }
 
-            // 2. Vòng lặp siêu tốc (500ms): Tự động click nút Play/Resume và kiểm tra thẻ video
-            var loopCount = 0;
-            var snifferInterval = setInterval(function() {
+            // 2. Kỹ thuật quét thẻ video và tự động click
+            var checkCount = 0;
+            var checkInterval = setInterval(function() {
                 try {
-                    // Click nút Resumeặc thù của embed.streamc.xyz
-                    var resumeBtn = document.getElementById("resumeBtn");
-                    if (resumeBtn && resumeBtn.style.display !== 'none' && resumeBtn.style.visibility !== 'hidden') {
-                        resumeBtn.click();
+                    // Tự động click nút xem tiếp
+                    var skipBtn = document.getElementById("resumeBtn");
+                    if (skipBtn) {
+                        var style = window.getComputedStyle(skipBtn);
+                        if (style.display !== 'none' && style.visibility !== 'hidden') {
+                            if (window.SnifferBridge) window.SnifferBridge.log("👉 Đang click nút Xem Tiếp (resumeBtn)...");
+                            skipBtn.click();
+                        }
                     }
 
-                    // Click nút Play chuẩn
                     var playBtn = document.querySelector('.jw-icon-display, .vjs-big-play-button, .plyr__control--overlaid, .play-btn');
                     if (playBtn) playBtn.click();
 
-                    // Bắt Backup nếu video hiện thẳng src không qua Blob
+                    // Bắt link video
                     var video = document.querySelector('video');
-                    if (video && video.src && video.src.indexOf('blob:') !== 0) {
-                        if (window.SnifferBridge && typeof window.SnifferBridge.play === 'function') {
-                            window.SnifferBridge.toast("Bắt thành công Video.src!");
-                            window.SnifferBridge.play(video.src);
+                    if (video && video.src) {
+                        // Nếu là blob thì hook ở trên đã xử lý, không truyền blob cho ExoPlayer vì sẽ lỗi
+                        if (video.src.indexOf('blob:') !== 0) {
+                            if (window.SnifferBridge) window.SnifferBridge.log("✅ Đã bắt được link video: " + video.src);
+                            if (window.SnifferBridge) window.SnifferBridge.play(video.src);
+                            clearInterval(checkInterval);
+                        } else {
+                            if (window.SnifferBridge) window.SnifferBridge.log("⏳ Đang chờ bắt Blob...");
                         }
-                        clearInterval(snifferInterval);
+                    } else {
+                        if (window.SnifferBridge) window.SnifferBridge.log("⏳ Đang chờ thẻ video xuất hiện... (" + checkCount + ")");
                     }
 
-                    loopCount++;
-                    if (loopCount > 30) clearInterval(snifferInterval); // Dừng sau 15 giây (30 x 500ms) để giải phóng RAM
-                } catch (err) {}
-            }, 500);
+                    checkCount++;
+                    if (checkCount > 30) {
+                        clearInterval(checkInterval);
+                        if (window.SnifferBridge) window.SnifferBridge.log("❌ Hết thời gian chờ 30s.");
+                    }
+                } catch (err) {
+                    if (window.SnifferBridge) window.SnifferBridge.log("❌ Lỗi CustomJS: " + err.message);
+                }
+            }, 1000);
         })();
         `;
 
         return JSON.stringify({
             "url": url,
-            "isEmbed": true, // Bật Sniffer chạy ngầm
+            "isEmbed": true, // Bật WebView tàng hình để dò link
             "headers": {
-                // Giả lập Trình duyệt Chrome Android mới nhất
-                "User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
-                // Thiết lập Referer bằng chính URL embed để đánh lừa server
-                "Referer": url, 
-                // Khiên chặn quảng cáo mạng cấp thấp để Webview ngầm load siêu tốc
+                // [ĐÃ KHÔI PHỤC 100%] Bộ Headers giả lập Chrome y hệt như bản gốc của bác
+                "Referer": "https://embed.streamc.xyz/",
+                "Origin": "https://embed.streamc.xyz/",
+                "User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+                "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+                "Sec-Ch-Ua-Mobile": "?1",
+                "Sec-Ch-Ua-Platform": '"Android"',
+                "Accept": "*/*",
+                "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+                "X-Requested-With": "com.android.chrome",
+                
+                // Khiên chặn quảng cáo mạng
                 "Block-Ads": "true",
                 "Block-Redirects": "true",
-                "Block-Keywords": "adserv, popunder, popup.js, ads.js, vast.xml",
-                // Mã JS Hook siêu việt
-                "Custom-Js": hookJsCode.replace(/\r\n|\r|\n/g, " ").trim()
-            }
+                
+                // Chèn mã JS dò link
+                "Custom-Js": customJsCode.replace(/\r\n|\r|\n/g, " ").trim()
+            },
+            "subtitles": []
         });
     } catch (e) {
-        return JSON.stringify({ "url": apiUrl.split("|")[0], "isEmbed": true });
+        return JSON.stringify({ "url": apiUrl.split("|")[0], "isEmbed": true, "headers": {} });
     }
 }
 
