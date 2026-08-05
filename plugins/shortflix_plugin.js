@@ -16,16 +16,17 @@ function getManifest() {
     return JSON.stringify({
         "id": "shortflix",
         "name": "Phim Ngắn Shortflix",
-        "description": "Bản Webview VIP: Auto Click Xem Ngay Siêu Tốc, Cố định dọc.",
-        "version": "4.0.0", 
+        "description": "Native Shortfilm: Vuốt TikTok, Khóa Dọc 100%, Auto Bắt Link M3U8.",
+        "version": "5.0.0", 
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/shortflix.png",
         "isEnabled": true,
         "hasLogin": true,                     
         "loginUrl": BASEURL + "/vi/login",    
-        "type": "shortfilm",                  // [CHUẨN] Ép giao diện vuốt Tiktok
+        "type": "shortfilm",                  // [CHUẨN TÀI LIỆU] Ép UI dọc & vuốt TikTok[cite: 2]
         "layoutType": "VERTICAL",             
-        "playerType": "webview"               // [CHUẨN] Chỉ mở Webview, không dùng Player của App
+        "playerType": "embedtoexoplay",       // [CHUẨN TÀI LIỆU] Dùng Webview ngầm bắt link ném sang ExoPlayer[cite: 2]
+        "debug": true                         // Bật để theo dõi tiến trình bắt link ngầm[cite: 2]
     });
 }
 
@@ -60,7 +61,7 @@ function getFilterConfig() { return JSON.stringify({}); }
 // =============================================================================
 function encodeBase64(str) {
     var utf8Str = unescape(encodeURIComponent(str));
-    return encodeURIComponent(utf8Str); // [CHUẨN] Dùng encodeURIComponent thay cho btoa trong QuickJS[cite: 1]
+    return encodeURIComponent(utf8Str); 
 }
 
 function decodeBase64(str) {
@@ -227,13 +228,72 @@ function parseMovieDetail(html, url) {
         var ldirec = _$(html).find("span:content('Đạo diễn:')").parent().text().trim().replace("Đạo diễn:", "");
         var status = _$(html).find("span:content('Trạng thái:')").parent().text().trim().replace("Trạng thái:", "");
         
+        // =====================================================================
+        // TRÍCH XUẤT DANH SÁCH TẬP ĐỂ KÍCH HOẠT TÍNH NĂNG VUỐT LÊN XUỐNG[cite: 2]
+        // =====================================================================
+        var episodes = [];
+        
+        // Thử tìm mảng dữ liệu JSON chứa danh sách tập bị giấu trong HTML
+        try {
+            var jsonMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/);
+            if (jsonMatch) {
+                var nextData = JSON.parse(jsonMatch[1]);
+                var searchEps = function(obj) {
+                    if (typeof obj !== 'object' || obj === null) return;
+                    if (Array.isArray(obj) && obj.length > 0 && obj[0].id && (obj[0].episode || obj[0].name || obj[0].slug)) {
+                        if (episodes.length === 0) {
+                            for(var i = 0; i < obj.length; i++) {
+                                var ep = obj[i];
+                                var epSlug = ep.slug || ep.id;
+                                episodes.push({
+                                    id: BASEURL + "/vi/videos/" + epSlug,
+                                    name: ep.name || ep.title || "Tập " + (ep.episode || (i+1)),
+                                    slug: "ep-" + epSlug // [CHUẨN TÀI LIỆU] Bắt buộc duy nhất cho từng tập[cite: 2]
+                                });
+                            }
+                        }
+                        return;
+                    }
+                    if (Array.isArray(obj)) {
+                        for(var j=0; j<obj.length; j++) searchEps(obj[j]);
+                    } else {
+                        var keys = Object.keys(obj);
+                        for(var k=0; k<keys.length; k++) searchEps(obj[keys[k]]);
+                    }
+                };
+                searchEps(nextData);
+            }
+        } catch(e) {}
+
+        // Nếu không có JSON, dùng Regex cào các thẻ <a> có chữ "Tập"
+        if (episodes.length === 0) {
+            var epRegex = /<a[^>]+href=["']([^"']+\/(?:videos|play)\/[^"']+)["'][^>]*>(?:<[^>]+>)*\s*(Tập \d+)/gi;
+            var match;
+            var count = 1;
+            while ((match = epRegex.exec(html)) !== null) {
+                var epUrl = match[1];
+                if (epUrl.indexOf('http') !== 0) epUrl = BASEURL + epUrl;
+                episodes.push({
+                    id: epUrl,
+                    name: match[2].trim(),
+                    slug: "tap-" + count // [CHUẨN TÀI LIỆU] Bắt buộc duy nhất[cite: 2]
+                });
+                count++;
+            }
+        }
+
+        // Dự phòng: Nếu cào thất bại, tạo ít nhất 1 tập để phát ExoPlayer
+        if (episodes.length === 0) {
+            episodes.push({
+                id: url,
+                name: "Tập Hiện Tại",
+                slug: "tap-current"
+            });
+        }
+        
         var servers = [{
-            name: "Lướt Chuyển Tập Tự Động",
-            episodes: [{
-                id: url, // TRUYỀN URL GỐC (Trang Chi Tiết) ĐỂ WEB KHÔNG BỊ LỖI PLAYER
-                name: "Bấm vào để Xem & Vuốt",
-                slug: "webview-player"
-            }]
+            name: "Luồng Phát Nhanh (Vuốt Chuyển Tập)",
+            episodes: episodes
         }];
         
         return JSON.stringify({
@@ -258,73 +318,74 @@ function parseMovieDetail(html, url) {
 }
 
 // =============================================================================
-// WEBVIEW LOADER: CHỐNG XOAY NGANG + AUTO CLICK "XEM NGAY" SIÊU TỐC
+// SNIFFER: AUTO LOGIN, AUTO CLICK "XEM NGAY" & BẮT LINK GỬI EXOPLAYER
 // =============================================================================
 function parseDetailResponse(html, url) {
     try {
-        // [QUAN TRỌNG] Chuỗi JS được viết liền khối, không có // comment để tránh lỗi khi minify
-        var webviewVIPScript = `
+        // [CHUẨN TÀI LIỆU] Mã JS tiêm vào Webview ngầm (Sniffer) để bắt link .m3u8[cite: 2]
+        var snifferJsCode = `
         (function() {
-            try {
-                Object.defineProperty(document, 'fullscreenEnabled', {get: function() { return false; }});
-                Object.defineProperty(document, 'webkitFullscreenEnabled', {get: function() { return false; }});
-                if(Element.prototype.requestFullscreen) Element.prototype.requestFullscreen = function() { return Promise.resolve(); };
-                if(Element.prototype.webkitRequestFullscreen) Element.prototype.webkitRequestFullscreen = function() { return Promise.resolve(); };
-            } catch(e) {}
+            if (window._vax_hooked) return;
+            window._vax_hooked = true;
 
             var EMAIL = "iamwilliamm6@gmail.com";
             var PASS = "trung@123";
 
-            var style = document.createElement('style');
-            style.innerHTML = 'header, nav, footer, .download-app, [class*="ad-"], .popup, .bottom-nav, .vjs-fullscreen-control, .plyr__controls [data-plyr="fullscreen"], .jw-fullscreen, video::-webkit-media-controls-fullscreen-button { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } body, html { margin: 0 !important; padding: 0 !important; overflow-x: hidden !important; overscroll-behavior-y: none; }';
-            document.head.appendChild(style);
-
-            var fastLoop = setInterval(function() {
-                var vids = document.querySelectorAll('video');
-                for(var k = 0; k < vids.length; k++) {
-                    vids[k].setAttribute('playsinline', 'true');
-                    vids[k].setAttribute('webkit-playsinline', 'true');
-                }
-
-                var playLinks = document.querySelectorAll('a[href*="/play/"]');
-                if (playLinks && playLinks.length > 0) {
-                    for(var p = 0; p < playLinks.length; p++) {
-                        playLinks[p].click();
+            // 1. Kỹ Thuật Hook Blob M3U8 từ bộ nhớ RAM (Chống giấu link)[cite: 2]
+            if (typeof URL !== 'undefined' && URL.createObjectURL) {
+                var orig = URL.createObjectURL;
+                URL.createObjectURL = function(b) {
+                    var u = orig.apply(this, arguments);
+                    if (b && (b instanceof Blob || b instanceof File)) {
+                        var fr = new FileReader();
+                        fr.onload = function(e) {
+                            if (e.target.result && e.target.result.indexOf('#EXTM3U') === 0) {
+                                if (window.SnifferBridge) {
+                                    window.SnifferBridge.toast("Bắt thành công luồng phim M3U8!");
+                                    window.SnifferBridge.playM3u8Content(e.target.result, window.location.href);
+                                }
+                            }
+                        };
+                        fr.readAsText(b);
                     }
-                } else {
-                    var btns = document.querySelectorAll('button, div');
-                    for(var b = 0; b < btns.length; b++) {
-                        if (btns[b].innerText && (btns[b].innerText.indexOf('Xem ngay') > -1 || btns[b].innerText.indexOf('Xem Tiếp') > -1)) {
-                            btns[b].click();
+                    return u;
+                };
+            }
+
+            // 2. Vòng lặp siêu tốc: Bắt link gốc & Click tự động
+            setInterval(function() {
+                // Quét bắt thẻ video src trực tiếp[cite: 2]
+                var vids = document.querySelectorAll('video');
+                for(var i=0; i<vids.length; i++) {
+                    if (vids[i].src && vids[i].src.indexOf('blob:') !== 0) {
+                        if (window.SnifferBridge) {
+                            window.SnifferBridge.play(vids[i].src);
                         }
                     }
                 }
 
-                var closeBtns = document.querySelectorAll('.close, .btn-close, [aria-label="Close"]');
-                for (var j = 0; j < closeBtns.length; j++) {
-                    try { closeBtns[j].click(); } catch(e){}
+                // Tự động Click "Xem ngay" để kích hoạt luồng tải phim
+                var btns = document.querySelectorAll('button, div, a');
+                for(var b=0; b<btns.length; b++) {
+                    var txt = btns[b].innerText || "";
+                    if (txt.includes('Xem ngay') || txt.includes('Xem Tiếp') || txt.includes('Play')) {
+                        btns[b].click();
+                    }
                 }
-            }, 200);
+            }, 500);
 
-            if (sessionStorage.getItem('vax_autologin_done')) return;
-            function doLogin() {
+            // 3. Module Tự Động Đăng Nhập ngầm
+            if (!sessionStorage.getItem('vax_autologin_done')) {
                 var loginBtn = document.querySelector('a[href*="/login"]');
-                if (loginBtn) {
+                if (loginBtn && window.location.href.indexOf('/login') === -1) {
                     sessionStorage.setItem('vax_redirect_back', window.location.href);
-                    window.location.href = loginBtn.href; 
-                } else {
-                    sessionStorage.setItem('vax_autologin_done', 'true');
-                }
-            }
-
-            if (window.location.href.indexOf('/login') > -1) {
-                var checkForm = setInterval(function() {
+                    window.location.href = loginBtn.href;
+                } else if (window.location.href.indexOf('/login') > -1) {
                     var emailInput = document.querySelector('input[type="email"], input[name="email"]');
                     var passInput = document.querySelector('input[type="password"], input[name="password"]');
                     var submitBtn = document.querySelector('button[type="submit"]');
-
+                    
                     if (emailInput && passInput && submitBtn) {
-                        clearInterval(checkForm);
                         var setVal = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
                         setVal.call(emailInput, EMAIL); emailInput.dispatchEvent(new Event('input', { bubbles: true }));
                         setVal.call(passInput, PASS); passInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -338,9 +399,7 @@ function parseDetailResponse(html, url) {
                             }, 2000);
                         }, 500);
                     }
-                }, 500);
-            } else {
-                setTimeout(doLogin, 1500);
+                }
             }
         })();
         `;
@@ -351,8 +410,10 @@ function parseDetailResponse(html, url) {
             "headers": {
                 "Referer": BASEURL,
                 "Block-Ads": "true",
-                "Block-Redirects": "false", // Chấp nhận redirect để auto-login & nút Xem Ngay hoạt động
-                "Custom-Js": webviewVIPScript.replace(/\r\n|\r|\n/g, " ").trim()
+                "Block-Redirects": "false", 
+                // [CHUẨN TÀI LIỆU] Sử dụng Stream-Regex để bồi thêm một lớp bắt link mạng[cite: 2]
+                "Stream-Regex": "https?:\\/\\/[^\"'\\s]+\\.m3u8[^\"'\\s]*",
+                "Custom-Js": snifferJsCode.replace(/\r\n|\r|\n/g, " ").trim()
             }
         });
     } catch (e) {
