@@ -1,5 +1,5 @@
 // =============================================================================
-// PLUGIN MOVIE SCRAPER: GAMOMEPHIM.COM (OPTIMIZED & FAST)
+// PLUGIN MOVIE SCRAPER: GAMOMEPHIM.COM (STABLE & FAST)
 // =============================================================================
 
 var BASEURL = "https://gamomephim.com";
@@ -9,7 +9,7 @@ function getManifest() {
         "id": "gamomephim",
         "name": "Gà Mờ Mê Phim",
         "description": "Nguồn Phim Ngắn Hay & Tốc Độ Cao",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "baseUrl": BASEURL,
         "iconUrl": "https://r2.gamomephim.com/site/logo-1784305321242.png",
         "isEnabled": true,
@@ -110,7 +110,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSERS (TỐI ƯU TỐC ĐỘ & BẮT ĐÚNG LINK PHIM)
+// PARSERS (QUÉT KHỐI GIAO DIỆN CHUẨN XÁC)
 // =============================================================================
 
 function parseListResponse(html, $url) {
@@ -122,32 +122,36 @@ function parseListResponse(html, $url) {
             if (matchPage) calculatedPage = parseInt(matchPage[1]) || 1;
         }
 
-        // Quét các thẻ a chứa link phim chuẩn xác trên trang
-        _$(html).find("a").each(function() {
+        // Quét các khối phần tử nhóm phim trên trang gamomephim
+        _$(html).find(".group, a").each(function() {
             var href = this.attr("href") || "";
-            if (href.indexOf("/phim/") === -1 && href.indexOf("http") === -1) return;
-            
-            var cleanHref = href;
-            if (cleanHref.indexOf("http") === -1) {
-                cleanHref = BASEURL + (cleanHref.startsWith('/') ? cleanHref : '/' + cleanHref);
+            if (href.indexOf("/phim/") === -1) {
+                var parentA = this.find("a");
+                href = parentA.attr("href") || "";
             }
+            
+            if (href.indexOf("/phim/") > -1) {
+                var cleanHref = href;
+                if (cleanHref.indexOf("http") === -1) {
+                    cleanHref = BASEURL + (cleanHref.startsWith('/') ? cleanHref : '/' + cleanHref);
+                }
 
-            // Chỉ lấy các link trỏ về trang chi tiết phim
-            if (cleanHref.indexOf("/phim/") > -1) {
                 var imgTag = this.find("img");
                 var poster = imgTag.attr("src") || imgTag.attr("data-src") || "";
                 if (poster && poster.indexOf("http") === -1) {
                     poster = BASEURL + (poster.startsWith('/') ? poster : '/' + poster);
                 }
 
-                var title = imgTag.attr("alt") || this.attr("title") || "";
+                var title = imgTag.attr("alt") || "";
                 if (!title) {
                     var h3 = this.find("h3");
                     title = h3.text().trim();
                 }
+                if (!title) {
+                    title = this.attr("title") || "";
+                }
 
-                if (title && cleanHref) {
-                    // Tránh trùng lặp item
+                if (title && cleanHref && cleanHref !== BASEURL + "/") {
                     var exists = false;
                     for (var k = 0; k < items.length; k++) {
                         if (items[k].id === cleanHref) { exists = true; break; }
@@ -156,7 +160,7 @@ function parseListResponse(html, $url) {
                     if (!exists) {
                         items.push({
                             "id": cleanHref,
-                            "title": title.trim(),
+                            "title": title.replace(/Poster phim/i, '').trim(),
                             "posterUrl": poster,
                             "backdropUrl": poster,
                             "quality": "FULL",
@@ -225,7 +229,6 @@ function extractCleanData(data) {
     return result;
 }
 
-// BÓC TÁCH CHI TIẾT VÀ FIX DỨT ĐIỂM LỖI BẮT NHẦM LINK LIVE
 function parseMovieDetail(html, url) {
     try {
         var id = url;
@@ -256,7 +259,6 @@ function parseMovieDetail(html, url) {
             status = video.status || status;
         }
 
-        // Dự phòng lấy meta nếu không quét được qua next_f payload
         if (!lname || lname === "Đang cập nhật...") {
             var ogTitle = html.match(/<meta property="og:title" content="([^"]+)"/i);
             if (ogTitle) lname = ogTitle[1].replace(/- Gà Mờ Mê Phim/i, '').trim();
@@ -274,7 +276,6 @@ function parseMovieDetail(html, url) {
             var name = ep.audioType ? ep.audioType.replace(/VIETSUB/i, "Việt Sub").replace(/THUYET_MINH/i, "Thuyết Minh") : "Tập " + (j + 1);
             var link = ep.m3u8Url || "";
             
-            // Lọc cực kỳ nghiêm ngặt: Chỉ lấy link video stream hợp lệ (.mp4 / .m3u8), loại bỏ hoàn toàn link live rác
             if (link && link.indexOf("http") > -1 && link.indexOf("live") === -1) {
                 items.push({
                     "name": name,
@@ -284,7 +285,6 @@ function parseMovieDetail(html, url) {
             }
         }
 
-        // Dự phòng nếu không bắt được mảng episodes qua payload
         if (items.length === 0) {
             var videoMatch = html.match(/"m3u8Url":"([^"]+)"/i);
             if (videoMatch && videoMatch[1]) {
@@ -350,7 +350,6 @@ function parseCategoriesResponse(apiResponseJson) {
 function parseCountriesResponse(html) { return "[]"; }
 function parseYearsResponse(html) { return "[]"; }
 
-// CẬP NHẬT CHUẨN 100% DANH MỤC KHỚP VỚI HÌNH ẢNH GIAO DIỆN MỚI
 function getLISTmenu() {
     return '[{"link":"/phim-moi","name":"Phim Mới"},{"link":"/the-loai/chua-lanh","name":"Chữa Lành"},{"link":"/the-loai/co-trang","name":"Cổ Trang"},{"link":"/the-loai/cuoi-truoc-yeu-sau","name":"Cưới Trước Yêu Sau"},{"link":"/the-loai/dan-quoc","name":"Dân Quốc"},{"link":"/the-loai/guong-vo-lai-lanh","name":"Gương Vỡ Lại Lành"},{"link":"/the-loai/hai-huoc","name":"Hài Hước"},{"link":"/the-loai/hien-dai","name":"Hiện Đại"},{"link":"/the-loai/nien-dai","name":"Niên Đại"},{"link":"/the-loai/thanh-xuan","name":"Thanh Xuân"},{"link":"/the-loai/tra-xanh-nam","name":"Trà Xanh Nam"},{"link":"/the-loai/trong-sinh","name":"Trọng Sinh"},{"link":"/the-loai/xuyen-khong","name":"Xuyên Không"},{"link":"/the-loai/yeu-tham","name":"Yêu Thầm"}]';
 }
