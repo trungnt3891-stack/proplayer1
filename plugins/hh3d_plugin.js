@@ -6,14 +6,14 @@ function getManifest() {
     return JSON.stringify({
         "id": "yanhh3d",
         "name": "YanHH3D",
-        "version": "4.3.4", // Tối giản: 1 Nút xem phim, Mở khóa vuốt cuộn tuyệt đối
+        "version": "5.0.0", // Nâng cấp: Bắt link m3u8 trực tiếp, bắt đúng tập thực tế 100%
         "baseUrl": "https://yanhh3d.love", 
         "iconUrl": "https://yanhh3d.love/storage/settings/August2024/YOoAwtlobLbwKhiFwRZv.png",
         "isEnabled": true,
         "isAdult": false,
         "type": "MOVIE",
         "layoutType": "VERTICAL",
-        "playerType": "embed" // Ép mở Webview
+        "playerType": "auto" // Trở lại dùng Trình phát video nội bộ của App
     });
 }
 
@@ -176,9 +176,9 @@ function parseSearchResponse(html) {
 }
 
 // =============================================================================
-// RÚT GỌN CHỈ CÒN ĐÚNG 1 NÚT ĐỂ VÀO THẲNG WEBVIEW
+// THUẬT TOÁN QUÉT TẬP THỰC TẾ (SMART EPISODE SCANNER)
 // =============================================================================
-function parseMovieDetail(html, currentUrl) {
+function parseMovieDetail(html) {
     try {
         var titleM = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([^<]+)<\/title>/i);
         var title = titleM ? PluginUtils.cleanText(titleM[1]) : "";
@@ -190,25 +190,116 @@ function parseMovieDetail(html, currentUrl) {
         var descM = html.match(/<meta property="og:description" content="([^"]+)"/i) || html.match(/<div[^>]*class=["'][^"']*desc[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
         var desc = descM ? PluginUtils.cleanText(descM[1]) : "";
 
-        // Tìm link gốc của bộ phim để nhét vào nút bấm
-        var watchUrl = currentUrl;
-        if (!watchUrl) {
-            var ogUrl = html.match(/<meta property="og:url" content="([^"]+)"/i) || html.match(/<link rel="canonical" href="([^"]+)"/i);
-            watchUrl = ogUrl ? ogUrl[1] : "https://yanhh3d.love";
+        var baseSlug = "";
+        var ogUrl = html.match(/<meta property="og:url" content="([^"]+)"/i) || html.match(/<link rel="canonical" href="([^"]+)"/i);
+        if (ogUrl) {
+            var urlObj = ogUrl[1].replace(/\/$/, "");
+            baseSlug = urlObj.substring(urlObj.lastIndexOf("/") + 1);
         }
 
         var servers = [];
-        servers.push({
-            name: "Trình Phát Toàn Tập (Webview)",
-            episodes: [{
-                id: watchUrl, 
-                name: "Bấm vào để xem phim",
-                slug: "xem-phim-ngay"
-            }]
-        });
+        
+        // Bóc tách Tab (Nếu phim chia server Thuyết Minh / Vietsub)
+        var navTabsMatch = html.match(/<ul[^>]*nav-tabs[^>]*>([\s\S]*?)<\/ul>/i);
+        var tabs = [];
+        if (navTabsMatch) {
+            var aTagRegex = /<a[^>]*href="#([^"]+)"[^>]*>([^<]+)<\/a>/gi;
+            var aMatch;
+            while ((aMatch = aTagRegex.exec(navTabsMatch[1])) !== null) {
+                var tabName = aMatch[2].replace(/<[^>]+>/g, '').trim();
+                if(tabName.toLowerCase().indexOf('vietsub') !== -1) tabName = "Phim Vietsub (Bản 4K)";
+                else if(tabName.toLowerCase().indexOf('thuyết minh') !== -1 || tabName.toLowerCase().indexOf('tm') !== -1) tabName = "Thuyết Minh (Bản 4K)";
+                tabs.push({ id: aMatch[1].trim(), name: tabName });
+            }
+        }
+
+        // Hàm bắt đúng các tập đang có sẵn trên web và nhặt thông tin sạch sẽ
+        function getActualEps(blockHtml) {
+            var eps = [];
+            // Regex lấy trực tiếp toàn bộ thẻ link phim trong block HTML
+            var aTagRegex = /<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+            var match;
+            
+            while ((match = aTagRegex.exec(blockHtml)) !== null) {
+                var epUrl = match[1];
+                if (epUrl.indexOf('javascript') !== -1 || epUrl.indexOf('#') === 0) continue;
+                if (epUrl.indexOf("http") === -1) epUrl = "https://yanhh3d.love" + (epUrl.charAt(0) === '/' ? "" : "/") + epUrl;
+
+                var uniqueSlug = epUrl.replace(/^https?:\/\/[^\/]+\//i, "").replace(/^\//, "");
+                
+                // Tránh bắt nhầm link chuyên mục
+                if(uniqueSlug.indexOf('the-loai') !== -1 || uniqueSlug.indexOf('dien-vien') !== -1) continue;
+
+                var innerHtml = match[2];
+                var epName = "N/A";
+                var orderMatch = innerHtml.match(/ssli-order[^>]*>([^<]+)/i);
+                var titleMatch = match[0].match(/title=["']([^"']+)["']/i);
+
+                if (orderMatch && orderMatch[1].trim()) {
+                    epName = orderMatch[1].trim();
+                } else if (titleMatch && titleMatch[1].trim()) {
+                    epName = titleMatch[1].trim();
+                } else {
+                    var cleanInner = innerHtml.replace(/<[^>]+>/g, "").trim();
+                    if (cleanInner) epName = cleanInner;
+                    else epName = uniqueSlug.split('/').pop().replace('tap-', 'Tập ');
+                }
+
+                // Nếu tên tập chỉ là con số trần trụi (VD: 43), thêm chữ "Tập " vào trước
+                if (/^\d+$/.test(epName)) epName = "Tập " + epName;
+
+                var exists = false;
+                for (var j = 0; j < eps.length; j++) {
+                    if (eps[j].id === uniqueSlug) { exists = true; break; }
+                }
+                if (!exists) eps.push({ id: uniqueSlug, name: epName, slug: uniqueSlug });
+            }
+
+            // Sắp xếp cưỡng chế bằng con số ẩn bên trong (tự xử đẹp "186 TL" > "185")
+            eps.sort(function(a, b) {
+                var numA = parseInt((a.name.match(/\d+/) || ["0"])[0], 10);
+                var numB = parseInt((b.name.match(/\d+/) || ["0"])[0], 10);
+                if (numA === numB) return a.name.length - b.name.length;
+                return numA - numB;
+            });
+            return eps;
+        }
+
+        // Tách tập theo từng Server
+        if (tabs.length > 0) {
+            for (var i = 0; i < tabs.length; i++) {
+                var startStr = 'id="' + tabs[i].id + '"';
+                var startIdx = html.indexOf(startStr);
+                if (startIdx !== -1) {
+                    var endIdx = html.length;
+                    if (i + 1 < tabs.length) {
+                        var nextStartIdx = html.indexOf('id="' + tabs[i+1].id + '"', startIdx);
+                        if (nextStartIdx !== -1) endIdx = nextStartIdx;
+                    }
+                    var blockHtml = html.substring(startIdx, endIdx);
+                    var eps = getActualEps(blockHtml);
+                    if (eps.length > 0) servers.push({ name: tabs[i].name, episodes: eps });
+                }
+            }
+        }
+
+        // Nếu phim không có Tab, cào thẳng toàn bộ trang
+        if (servers.length === 0) {
+            var eps = getActualEps(html);
+            if (eps.length > 0) {
+                var isSub = html.toLowerCase().indexOf('xem vietsub') !== -1 || html.toLowerCase().indexOf('/sever2/') !== -1;
+                servers.push({ name: (isSub ? "Phim Vietsub (Bản 4K)" : "Thuyết Minh (Bản 4K)"), episodes: eps });
+            }
+        }
+
+        if (servers.length === 0 && baseSlug) {
+             servers.push({ name: "Hệ Thống", episodes: [{ id: baseSlug + "/tap-1", name: "Đang Cập Nhật / Full", slug: baseSlug + "/tap-1" }] });
+        }
+        
+        var totalEps = servers.length > 0 && servers[0].episodes.length > 0 ? servers[0].episodes.length : 0;
 
         return JSON.stringify({
-            id: watchUrl,
+            id: "",
             title: title,
             posterUrl: poster,
             backdropUrl: poster,
@@ -219,7 +310,7 @@ function parseMovieDetail(html, currentUrl) {
             year: 0,
             rating: 0,
             category: "Hoạt Hình 3D",
-            status: "Full Tập"
+            status: totalEps > 0 ? totalEps + " Tập" : "Đang Cập Nhật"
         });
     } catch (e) {
         return JSON.stringify({});
@@ -227,75 +318,83 @@ function parseMovieDetail(html, currentUrl) {
 }
 
 // =============================================================================
-// WEBVIEW LOADER VỚI LỆNH MỞ KHÓA CUỘN TUYỆT ĐỐI (TOUCH-ACTION: AUTO)
+// THUẬT TOÁN BẮT LINK PHIM GỐC (NATIVE STREAM EXTRACTOR)
 // =============================================================================
-function parseDetailResponse(html, url) {
+function parseDetailResponse(html) {
     try {
-        var streamUrl = url || "https://yanhh3d.love";
+        var streamUrl = "";
+        var isEmbed = false;
+        var mimeType = "";
+        
+        // 1. Quét tìm đuôi video .m3u8 hoặc .mp4 giấu trong mã nguồn Javascript/Config
+        var m3u8Match = html.match(/(https?:\/\/[^"'\s<>]*\.m3u8[^"'\s<>]*)/i);
+        if (m3u8Match) streamUrl = m3u8Match[1].replace(/\\/g, "");
+        
+        if (!streamUrl) {
+            var mp4Match = html.match(/(https?:\/\/[^"'\s<>]*\.mp4[^"'\s<>]*)/i);
+            if (mp4Match) streamUrl = mp4Match[1].replace(/\\/g, "");
+        }
 
-        // Đoạn Custom-Js bơm vào Webview
-        var pureWebviewJs = `
-            (function() {
-                // 1. Chặn Fullscreen văng App
-                try {
-                    var noop = function() { return Promise.resolve(); };
-                    Object.defineProperty(document, 'fullscreenEnabled', {get: function() { return false; }});
-                    Object.defineProperty(document, 'webkitFullscreenEnabled', {get: function() { return false; }});
-                } catch(e) {}
-
-                // 2. CSS Giấu rác & Ép khôi phục Thanh cuộn 
-                var style = document.createElement('style');
-                style.innerHTML = 
-                    'header, .header, nav, footer, .footer, .download-app, .app-download, ' +
-                    '[class*="ad-"], [id*="ad-"], .popup, .modal, .google-auto-placed, iframe[src*="ads"], ' +
-                    '.bottom-nav, .navigation, .sidebar, .comments { ' +
-                        'display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; ' +
-                    '} ' +
-                    'html, body { ' +
-                        'overflow: auto !important; overflow-y: auto !important; ' +
-                        '-webkit-overflow-scrolling: touch !important; touch-action: pan-y auto !important; ' +
-                        'height: auto !important; min-height: 100vh !important; background: #1a1a1a !important; ' +
-                        'position: static !important; ' +
-                    '} ' +
-                    '* { ' +
-                        'touch-action: pan-y auto !important; ' + // Đòn quyết định: Cấm các plugin khóa vuốt ngón tay
-                    '}';
-                document.head.appendChild(style);
-
-                // 3. Xử lý video In-line & Dọn dẹp Popup sau mỗi 0.5s
-                setInterval(function() {
-                    var vids = document.querySelectorAll('video');
-                    for (var k = 0; k < vids.length; k++) {
-                        if (!vids[k].hasAttribute('playsinline')) {
-                            vids[k].setAttribute('playsinline', 'true');
-                            vids[k].setAttribute('webkit-playsinline', 'true');
-                        }
-                    }
-                    var closeBtns = document.querySelectorAll('.close, .btn-close, [aria-label="Close"], .close-ads');
-                    for (var j = 0; j < closeBtns.length; j++) {
-                        try { closeBtns[j].click(); } catch(e){}
-                    }
-                }, 500);
-            })();
-        `;
-
-        return JSON.stringify({
-            "url": streamUrl,
-            "isEmbed": true, 
-            "headers": {
-                "Referer": "https://yanhh3d.love/",
-                "Block-Ads": "true",
-                "Block-Redirects": "false", 
-                "Custom-Js": pureWebviewJs.replace(/\r\n|\r|\n/g, " ").trim()
+        // 2. Dự phòng: Tìm thẻ Iframe
+        if (!streamUrl) {
+            var iframeMatch = html.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+            if (iframeMatch) {
+                streamUrl = iframeMatch[1];
+                if (streamUrl.indexOf("//") === 0) streamUrl = "https:" + streamUrl;
+                isEmbed = true; // Trả về dạng embed nếu là iframe youtube/dailymotion
             }
-        });
+        }
+
+        // Đẩy thẳng link cho Vax nhai
+        if (streamUrl) {
+            if (!isEmbed) {
+                mimeType = streamUrl.indexOf(".m3u8") !== -1 ? "application/x-mpegURL" : "video/mp4";
+            }
+            return JSON.stringify({
+                url: streamUrl,
+                isEmbed: isEmbed,
+                mimeType: mimeType,
+                headers: { 
+                    "Referer": "https://yanhh3d.love/",
+                    "Origin": "https://yanhh3d.love",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+                }
+            });
+        }
+        
+        return JSON.stringify({});
     } catch (e) {
-        return JSON.stringify({ "url": url, "isEmbed": true, "headers": {} });
+        return JSON.stringify({});
     }
 }
 
-function parseEmbedResponse(htmlContent, url) {
-    return JSON.stringify({ url: "", isEmbed: false });
+function parseEmbedResponse(htmlContent, sourceUrl) {
+    try {
+        var streamUrl = "";
+        var m3u8Match = htmlContent.match(/(https?:\/\/[^"'\s<>]*\.m3u8[^"'\s<>]*)/i);
+        if (m3u8Match) streamUrl = m3u8Match[1].replace(/\\/g, "");
+
+        if (!streamUrl) {
+            var mp4Match = htmlContent.match(/(https?:\/\/[^"'\s<>]*\.mp4[^"'\s<>]*)/i);
+            if (mp4Match) streamUrl = mp4Match[1].replace(/\\/g, "");
+        }
+
+        if (streamUrl) {
+            return JSON.stringify({
+                url: streamUrl,
+                isEmbed: false,
+                mimeType: streamUrl.indexOf(".m3u8") !== -1 ? "application/x-mpegURL" : "video/mp4",
+                headers: {
+                    "Referer": sourceUrl,
+                    "Origin": sourceUrl.split('/').slice(0, 3).join('/'),
+                    "User-Agent": "Mozilla/5.0"
+                }
+            });
+        }
+        return JSON.stringify({ url: "", isEmbed: false });
+    } catch (e) {
+        return JSON.stringify({ url: "", isEmbed: false });
+    }
 }
 
 function parseCategoriesResponse(html) { return "[]"; }
