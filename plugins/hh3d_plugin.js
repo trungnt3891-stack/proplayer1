@@ -1,12 +1,12 @@
 // =============================================================================
-// CONFIGURATION & METADATA
+// CONFIGURATION & METADATA (TỐI ƯU HIỆU NĂNG QUICKJS)
 // =============================================================================
 
 function getManifest() {
     return JSON.stringify({
         "id": "yanhh3d",
         "name": "YanHH3D",
-        "version": "4.3.0", // Bản cập nhật: Domain yanhh3d.love, Giữ Vietsub & Thuyết Minh 4K
+        "version": "4.3.1", // Bản tối ưu tốc độ xử lý
         "baseUrl": "https://yanhh3d.love", 
         "iconUrl": "https://yanhh3d.love/storage/settings/August2024/YOoAwtlobLbwKhiFwRZv.png",
         "isEnabled": true,
@@ -91,7 +91,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSERS
+// PARSERS (TỐI ƯU HÓA TỐC ĐỘ BẰNG MỘT VÒNG LẶP EXEC DUY NHẤT)
 // =============================================================================
 
 var PluginUtils = {
@@ -110,52 +110,36 @@ function parseListResponse(html) {
     try {
         var movies = [];
         var seen = {};
-        var allBlocks = [];
 
-        var swiperBlocks = html.split('class="swiper-slide');
-        for (var i = 1; i < swiperBlocks.length; i++) allBlocks.push(swiperBlocks[i]);
+        // Sử dụng Regex kết hợp Global Exec Loop thay vì .split() nhiều lần
+        // Giúp giảm tải tối đa bộ nhớ RAM và tăng tốc độ xử lý cho QuickJS
+        var regex = /<a[^>]+href=["']([^"']+)["'][^>]*>[\s\S]*?(?:data-src|src)=["']([^"']+)["'][\s\S]*?(?:title|alt)=["']([^"']+)["']/gi;
+        var match;
 
-        var flwBlocks = html.split('class="flw-item');
-        for (var i = 1; i < flwBlocks.length; i++) allBlocks.push(flwBlocks[i]);
+        while ((match = regex.exec(html)) !== null) {
+            var url = match[1];
+            var img = match[2];
+            var title = PluginUtils.cleanText(match[3]);
 
-        var topBlocks = html.split('class="item-top');
-        for (var i = 1; i < topBlocks.length; i++) allBlocks.push(topBlocks[i]);
+            if (!url || !img || !title) continue;
+            if (url.indexOf('the-loai') !== -1 || url.indexOf('page') !== -1 || url.indexOf('search') !== -1) continue;
+            if (img.indexOf('avatar') !== -1 || img.indexOf('logo') !== -1) continue;
+            if (url === '/' || url.indexOf('javascript:') !== -1 || url.indexOf('#') === 0) continue;
 
-        for (var i = 0; i < allBlocks.length; i++) {
-            var block = allBlocks[i];
-            if (!block || block.length < 50) continue;
+            var slug = url.replace(/https?:\/\/[^\/]+\//i, "").replace(/^\//, "").replace(/\/$/, "");
             
-            var urlMatch = block.match(/href=["']([^"']+)["']/i);
-            var imgMatch = block.match(/data-src=["']([^"']+)["']/i) || block.match(/src=["']([^"']+)["']/i);
-            var titleMatch = block.match(/title=["']([^"']+)["']/i) || block.match(/alt=["']([^"']+)["']/i) || block.match(/<h[234][^>]*>([^<]+)<\/h[234]>/i);
-            
-            var epMatch = block.match(/class=["'][^"']*(tick-rate|ep|episode|label|status)[^"']*["'][^>]*>([^<]+)</i);
-
-            if (urlMatch && imgMatch && titleMatch) {
-                var url = urlMatch[1];
-                var img = imgMatch[1];
-                var title = PluginUtils.cleanText(titleMatch[1]);
-                var episode = epMatch ? PluginUtils.cleanText(epMatch[2]) : "HD";
-
-                if (url.indexOf('the-loai') !== -1 || url.indexOf('page') !== -1 || url.indexOf('search') !== -1) continue;
-                if (img.indexOf('avatar') !== -1 || img.indexOf('logo') !== -1) continue;
-                if (url === '/' || url.indexOf('javascript:') !== -1 || url.indexOf('#') === 0) continue;
-
-                var slug = url.replace(/https?:\/\/[^\/]+\//i, "").replace(/^\//, "").replace(/\/$/, "");
-                
-                if (title && slug && !seen[slug]) {
-                    movies.push({
-                        id: slug,
-                        title: title,
-                        posterUrl: img,
-                        backdropUrl: img,
-                        quality: "4K / HD",
-                        episode_current: episode,
-                        lang: "Vietsub / TM",
-                        year: 0
-                    });
-                    seen[slug] = true; 
-                }
+            if (slug && !seen[slug]) {
+                movies.push({
+                    id: slug,
+                    title: title,
+                    posterUrl: img,
+                    backdropUrl: img,
+                    quality: "4K / HD",
+                    episode_current: "HD",
+                    lang: "Vietsub / TM",
+                    year: 0
+                });
+                seen[slug] = true; 
             }
         }
 
@@ -178,50 +162,7 @@ function parseListResponse(html) {
 }
 
 function parseSearchResponse(html) {
-    try {
-        var movies = [];
-        var seen = {};
-
-        var blocks = html.split('class="flw-item');
-        for (var i = 1; i < blocks.length; i++) {
-            var block = blocks[i];
-            
-            var urlMatch = block.match(/href=["']([^"']+)["']/i);
-            var imgMatch = block.match(/data-src=["']([^"']+)["']/i) || block.match(/src=["']([^"']+)["']/i);
-            var titleMatch = block.match(/title=["']([^"']+)["']/i) || block.match(/alt=["']([^"']+)["']/i);
-            var epMatch = block.match(/class=["'][^"']*(tick-rate|ep|episode|label)[^"']*["'][^>]*>([^<]+)</i);
-
-            if (urlMatch && imgMatch && titleMatch) {
-                var url = urlMatch[1];
-                var img = imgMatch[1];
-                var title = PluginUtils.cleanText(titleMatch[1]);
-                var episode = epMatch ? PluginUtils.cleanText(epMatch[2]) : "HD";
-
-                var slug = url.replace(/https?:\/\/[^\/]+\//i, "").replace(/^\//, "").replace(/\/$/, "");
-                
-                if (title && slug && !seen[slug]) {
-                    movies.push({
-                        id: slug,
-                        title: title,
-                        posterUrl: img,
-                        backdropUrl: img,
-                        quality: "4K / HD",
-                        episode_current: episode,
-                        lang: "Vietsub / TM",
-                        year: 0
-                    });
-                    seen[slug] = true; 
-                }
-            }
-        }
-
-        return JSON.stringify({
-            items: movies,
-            pagination: { currentPage: 1, totalPages: 100, totalItems: 9999, itemsPerPage: 20 }
-        });
-    } catch (e) {
-        return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
-    }
+    return parseListResponse(html);
 }
 
 function parseMovieDetail(html) {
@@ -263,7 +204,7 @@ function parseMovieDetail(html) {
         var lowerHtml = html.toLowerCase();
         var hasTM = lowerHtml.indexOf('xem thuyết minh') !== -1;
         var hasSub = lowerHtml.indexOf('xem vietsub') !== -1 || lowerHtml.indexOf('/sever2/') !== -1;
-        if (!hasTM && !hasSub) hasTM = true; // Fallback
+        if (!hasTM && !hasSub) hasTM = true;
 
         var vietsubEpisodes = [];
         var thuyetMinhEpisodes = [];
