@@ -45,13 +45,6 @@
       "iconUrl": "https://phimhdcss.com/favicon.ico"
     },
     {
-            "id": "nartodrama",
-            "name": "Phim Ngắn Narto",
-            "version": "1.1.6",
-            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/nartodrama_plugin.js",
-            "iconUrl": "https://narto-drama.com/narto-drama-logo-compressed.png",
-    },
-    {
             "id": "hh3d",
             "name": "HH3D - Hoạt Hình 3D",
             "version": "1.0.5",
@@ -64,6 +57,13 @@
       "version": "1.7.6",
       "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/Tiktokfilm_plugin.js",
       "iconUrl": "https://static.vecteezy.com/system/resources/thumbnails/016/716/450/small/tiktok-icon-free-png.png"
+    },
+    {
+            "id": "Onflix",
+            "name": "Onflix",
+            "version": "1.1.6",
+            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/Onflix_plugin.js",
+            "iconUrl": "https://onflix.lat/app/asset/logo.png",
     },
     {
       "id": "bilutv",
