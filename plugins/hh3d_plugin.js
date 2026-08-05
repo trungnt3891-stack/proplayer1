@@ -2,12 +2,12 @@ function getManifest() {
     return JSON.stringify({
         id: "yanhh3d_love",
         name: "YanHH3D",
-        version: "2.0.2",
+        version: "2.0.4",
         description: "Hoạt Hình Trung Quốc Thuyết Minh 3D",
         author: "Gemini",
         baseUrl: "https://yanhh3d.love",
         type: "MOVIE",
-        playerType: "embedtoexoplay", // Đổi thành embedtoexoplay để tự động bắt mọi loại link stream ẩn
+        playerType: "auto", // Tự động giao m3u8/mp4 cho ExoPlayer, ép link lạ (abysscdn) cho WebView
         adblock: true,
         debug: false
     });
@@ -39,6 +39,10 @@ function getPrimaryCategories() {
     ]);
 }
 
+// ===================================================================
+// CÁC HÀM TẠO URL
+// ===================================================================
+
 function getUrlList(slug, filtersJson) {
     var filters = {};
     if (filtersJson) {
@@ -69,35 +73,58 @@ function getUrlDetail(slug) {
     return slug; 
 }
 
+// ===================================================================
+// CÁC HÀM PARSE DỮ LIỆU HTML BẰNG KỸ THUẬT SPLIT VÔ KHUYẾT
+// ===================================================================
+
 function parseListResponse(html, apiUrl) {
     var items = [];
     
-    // Regex tối ưu: Quét trực tiếp khối thông tin hình ảnh để bất chấp class div bao ngoài
-    var regex = /tick-rate">([^<]*)<\/div>[\s\S]*?data-src="([^"]*)"[\s\S]*?href="([^"]*)"[^>]*title="([^"]*)"/g;
-    var match;
-    
-    while ((match = regex.exec(html)) !== null) {
-        items.push({
-            episode_current: match[1].trim(),
-            posterUrl: match[2].trim(),
-            id: match[3].trim(), 
-            title: match[4].trim()
-        });
+    // Cắt vụn HTML bất chấp cấu trúc thẻ
+    var splits = html.split('flw-item');
+    for (var i = 1; i < splits.length; i++) {
+        var block = splits[i].substring(0, 1500); // Khoanh vùng quét 1500 ký tự để không liếm sang thẻ khác
+        
+        var urlMatch = block.match(/href="([^"]+)"/i);
+        var titleMatch = block.match(/title="([^"]+)"/i);
+        var posterMatch = block.match(/data-src="([^"]+)"/i);
+        var epMatch = block.match(/tick-rate[^>]*>([^<]+)<\/div>/i);
+
+        if (urlMatch && titleMatch) {
+            var url = urlMatch[1];
+            if (url.indexOf("http") === -1) url = "https://yanhh3d.love" + url;
+            
+            // Chống trùng lặp danh sách
+            var exists = false;
+            for(var j = 0; j < items.length; j++) {
+                if(items[j].id === url) { exists = true; break; }
+            }
+            if(!exists) {
+                items.push({
+                    id: url, 
+                    title: titleMatch[1].trim(),
+                    posterUrl: posterMatch ? posterMatch[1] : "",
+                    episode_current: epMatch ? epMatch[1].trim() : ""
+                });
+            }
+        }
     }
 
+    // Xử lý Pagination tự động bằng cách bóc con số to nhất
     var totalPages = 1;
-    var pageMatch = html.match(/href="[^"]+page=(\d+)"[^>]*>>/);
+    var pageMatch = html.match(/href="[^"]+page=(\d+)"/g);
     if (pageMatch) {
-        totalPages = parseInt(pageMatch[1]);
+        for (var i = 0; i < pageMatch.length; i++) {
+            var num = parseInt(pageMatch[i].match(/page=(\d+)/)[1]);
+            if (num > totalPages) totalPages = num;
+        }
     } else if (html.indexOf('class="pagination"') > -1 || html.indexOf('Xem thêm') > -1) {
         totalPages = 2; 
     }
 
     return JSON.stringify({
         items: items,
-        pagination: {
-            totalPages: totalPages
-        }
+        pagination: { totalPages: totalPages }
     });
 }
 
@@ -106,66 +133,100 @@ function parseSearchResponse(html, apiUrl) {
 }
 
 function parseMovieDetail(html, apiUrl) {
-    var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/);
-    var posterMatch = html.match(/<meta property="og:image" content="([^"]+)"/);
-    var descMatch = html.match(/<div class="film-description m-hide">\s*<div class="text">([\s\S]*?)<\/div>/);
-    
+    // 1. Nhặt Title và Poster bằng Tag Meta tĩnh nhất
     var title = "Không xác định";
-    if (titleMatch) {
-        // Lọc bỏ cụm "Tập X Thuyết Minh" để lấy đúng tên phim
-        title = titleMatch[1].replace("Xem phim ", "").split(" Tập ")[0].trim();
-    }
+    var posterUrl = "";
     
-    var posterUrl = posterMatch ? posterMatch[1] : "";
+    var metaRegex = /<meta\s+([^>]*)>/gi;
+    var metaMatch;
+    while ((metaMatch = metaRegex.exec(html)) !== null) {
+        var attrs = metaMatch[1];
+        if (attrs.indexOf('og:title') !== -1) {
+            var m = attrs.match(/content="([^"]+)"/i);
+            // Cắt sạch sẽ các đuôi rườm rà "Xem phim..." hay " Tập 1..."
+            if (m) title = m[1].replace("Xem phim ", "").split(" Tập ")[0].trim();
+        }
+        if (attrs.indexOf('og:image') !== -1) {
+            var m = attrs.match(/content="([^"]+)"/i);
+            if (m && !posterUrl) posterUrl = m[1];
+        }
+    }
+
+    var descMatch = html.match(/class="[^"]*film-description[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
     var description = descMatch ? descMatch[1].replace(/<[^>]+>/g, '').trim() : "";
 
-    function parseEpisodes(htmlBlock) {
-        var eps = [];
-        var epRegex = /<a[^>]*class="[^"]*ssl-item ep-item[^"]*"[^>]*href="([^"]+)"[^>]*title="([^"]+)"/g;
-        var m;
-        while ((m = epRegex.exec(htmlBlock)) !== null) {
-            var epUrl = m[1];
-            var epTitle = m[2].trim();
-            var uniqueSlug = epUrl.replace("https://yanhh3d.love/", "").replace(/\//g, "-");
-            
-            eps.push({
-                id: epUrl, 
-                name: epTitle,
-                slug: uniqueSlug 
-            });
+    // 2. Nhặt tên các Tab Server hiện hành (Thuyết Minh / Vietsub)
+    var tabs = [];
+    var ulStart = html.indexOf('sever-ep'); 
+    if (ulStart !== -1) {
+        var ulEnd = html.indexOf('</ul>', ulStart);
+        if (ulEnd !== -1) {
+            var ulHtml = html.substring(ulStart, ulEnd);
+            var aTagRegex = /<a\s+([^>]*)>([\s\S]*?)<\/a>/gi;
+            var aMatch;
+            while ((aMatch = aTagRegex.exec(ulHtml)) !== null) {
+                var attrs = aMatch[1];
+                var name = aMatch[2].replace(/<[^>]+>/g, '').trim();
+                var hrefMatch = attrs.match(/href="#([^"]+)"/i);
+                if (hrefMatch) {
+                    tabs.push({ id: hrefMatch[1], name: name });
+                }
+            }
         }
-        return eps.reverse(); 
+    }
+
+    // 3. Hàm nội bộ chẻ từng tập phim (Cốt lõi chống xịt tập)
+    function extractEps(blockHtml) {
+        var eps = [];
+        // Cắt bằng class gốc "ep-item", mặc kệ code HTML bên trong ra sao
+        var splits = blockHtml.split('ep-item'); 
+        for (var i = 1; i < splits.length; i++) {
+            var block = splits[i].substring(0, 500); 
+            var urlMatch = block.match(/href="([^"]+)"/i);
+            var orderMatch = block.match(/ssli-order[^>]*>([^<]+)/i);
+            
+            if (urlMatch) {
+                var epUrl = urlMatch[1];
+                if (epUrl.indexOf("http") === -1) epUrl = "https://yanhh3d.love" + epUrl;
+                
+                var epName = orderMatch ? orderMatch[1].trim() : epUrl.split('/').pop().replace('tap-', '');
+                var uniqueSlug = epUrl.replace(/^https?:\/\/[^\/]+\//i, "").replace(/\//g, "-");
+                
+                var exists = false;
+                for(var j = 0; j < eps.length; j++) {
+                    if(eps[j].id === epUrl) { exists = true; break; }
+                }
+                if (!exists) {
+                    eps.push({ id: epUrl, name: epName, slug: uniqueSlug });
+                }
+            }
+        }
+        // Đảo ngược tập từ 10->1 sang 1->10
+        return eps.reverse();
     }
 
     var servers = [];
-    var tabRegex = /<a[^>]*data-toggle="tab"[^>]*href="#([^"]+)"[^>]*>([^<]+)<\/a>/g;
-    var tabs = [];
-    var tabMatch;
     
-    while ((tabMatch = tabRegex.exec(html)) !== null) {
-        tabs.push({ id: tabMatch[1], name: tabMatch[2].trim() });
-    }
-
+    // 4. Chia bánh HTML theo từng Tab để bóc tập
     if (tabs.length > 0) {
         for (var i = 0; i < tabs.length; i++) {
             var startIdx = html.indexOf('id="' + tabs[i].id + '"');
-            if (startIdx > -1) {
+            if (startIdx !== -1) {
                 var endIdx = html.length;
-                if (i < tabs.length - 1) {
+                if (i + 1 < tabs.length) {
                     var nextIdx = html.indexOf('id="' + tabs[i+1].id + '"', startIdx);
-                    if (nextIdx > -1) endIdx = nextIdx;
+                    if (nextIdx !== -1) endIdx = nextIdx;
                 }
-                
                 var blockHtml = html.substring(startIdx, endIdx);
-                var eps = parseEpisodes(blockHtml);
-                
+                var eps = extractEps(blockHtml);
                 if (eps.length > 0) {
                     servers.push({ name: tabs[i].name, episodes: eps });
                 }
             }
         }
     } else {
-        var eps = parseEpisodes(html);
+        // Dự phòng nếu phim chỉ có 1 luồng ko cần Tab
+        var eps = extractEps(html);
         if (eps.length > 0) {
             servers.push({ name: "Mặc Định", episodes: eps });
         }
@@ -182,21 +243,31 @@ function parseMovieDetail(html, apiUrl) {
 
 function parseDetailResponse(html, apiUrl) {
     var links = [];
-    var regex = /data-src="([^"]+)"[^>]*>([^<]+)<\/a>/g;
-    var match;
+    
+    // Trích link trực tiếp bằng phương pháp Split siêu an toàn
+    var splits = html.split('btn3dsv');
+    for (var i = 1; i < splits.length; i++) {
+        var block = splits[i].substring(0, 500);
+        var srcMatch = block.match(/data-src="([^"]+)"/i);
+        var labelMatch = block.match(/>([^<]+)<\/a>/i);
+        if (srcMatch && labelMatch) {
+            links.push({ url: srcMatch[1], label: labelMatch[1].trim() });
+        }
+    }
 
-    while ((match = regex.exec(html)) !== null) {
-        links.push({
-            url: match[1],
-            label: match[2].trim()
-        });
+    // Nếu không có nút Link, truy quét iframe ẩn
+    if (links.length === 0) {
+        var iframeMatch = html.match(/<iframe[^>]*src="([^"]+)"/i);
+        if (iframeMatch) {
+            links.push({ url: iframeMatch[1], label: "Iframe" });
+        }
     }
 
     if (links.length === 0) {
         return JSON.stringify({ url: "", isEmbed: false });
     }
 
-    // Lấy link đầu tiên làm mặc định, nếu có m3u8 thì ưu tiên
+    // Cân nhắc chọn link ưu tiên (Ưu tiên tóm gọn m3u8)
     var finalUrl = links[0].url;
     for (var i = 0; i < links.length; i++) {
         if (links[i].url.indexOf('.m3u8') !== -1 || links[i].url.indexOf('.mp4') !== -1) {
@@ -205,19 +276,16 @@ function parseDetailResponse(html, apiUrl) {
         }
     }
 
-    var isEmbed = true;
+    var isEmbed = false;
     var mimeType = "";
 
-    // Phân tích định dạng link để quyết định đẩy vào WebView hay ExoPlayer
+    // Phân tích định dạng link để chỉ đạo cho Trình Phát VAAPP
     if (finalUrl.indexOf('.m3u8') !== -1) {
-        isEmbed = false;
         mimeType = "application/x-mpegURL";
     } else if (finalUrl.indexOf('.mp4') !== -1) {
-        isEmbed = false;
         mimeType = "video/mp4";
-    } else if (finalUrl.indexOf('fbcdn.cloud') !== -1) {
-        // Xử lý riêng biệt cho các link stream trực tiếp từ Facebook
-        isEmbed = false; 
+    } else {
+        isEmbed = true; // Link iframe hoặc abysscdn sẽ tự động đẩy sang WebView Sniffer 
     }
 
     return JSON.stringify({
