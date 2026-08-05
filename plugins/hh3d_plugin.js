@@ -6,14 +6,14 @@ function getManifest() {
     return JSON.stringify({
         "id": "yanhh3d",
         "name": "YanHH3D",
-        "version": "4.3.1", // Bản cập nhật: Ép chạy chế độ Web View Player
+        "version": "4.3.2", // Bản cập nhật: Kích hoạt Webview Nâng cao (Khóa Sniffer, nhúng Custom JS)
         "baseUrl": "https://yanhh3d.love", 
         "iconUrl": "https://yanhh3d.love/storage/settings/August2024/YOoAwtlobLbwKhiFwRZv.png",
         "isEnabled": true,
         "isAdult": false,
         "type": "MOVIE",
         "layoutType": "VERTICAL",
-        "playerType": "webview" // Đã chuyển sang Web View
+        "playerType": "embed" // [QUAN TRỌNG] Dùng 'embed' để vô hiệu hóa hoàn toàn trình bắt link của App
     });
 }
 
@@ -178,50 +178,7 @@ function parseListResponse(html) {
 }
 
 function parseSearchResponse(html) {
-    try {
-        var movies = [];
-        var seen = {};
-
-        var blocks = html.split('class="flw-item');
-        for (var i = 1; i < blocks.length; i++) {
-            var block = blocks[i];
-            
-            var urlMatch = block.match(/href=["']([^"']+)["']/i);
-            var imgMatch = block.match(/data-src=["']([^"']+)["']/i) || block.match(/src=["']([^"']+)["']/i);
-            var titleMatch = block.match(/title=["']([^"']+)["']/i) || block.match(/alt=["']([^"']+)["']/i);
-            var epMatch = block.match(/class=["'][^"']*(tick-rate|ep|episode|label)[^"']*["'][^>]*>([^<]+)</i);
-
-            if (urlMatch && imgMatch && titleMatch) {
-                var url = urlMatch[1];
-                var img = imgMatch[1];
-                var title = PluginUtils.cleanText(titleMatch[1]);
-                var episode = epMatch ? PluginUtils.cleanText(epMatch[2]) : "HD";
-
-                var slug = url.replace(/https?:\/\/[^\/]+\//i, "").replace(/^\//, "").replace(/\/$/, "");
-                
-                if (title && slug && !seen[slug]) {
-                    movies.push({
-                        id: slug,
-                        title: title,
-                        posterUrl: img,
-                        backdropUrl: img,
-                        quality: "4K / HD",
-                        episode_current: episode,
-                        lang: "Vietsub / TM",
-                        year: 0
-                    });
-                    seen[slug] = true; 
-                }
-            }
-        }
-
-        return JSON.stringify({
-            items: movies,
-            pagination: { currentPage: 1, totalPages: 100, totalItems: 9999, itemsPerPage: 20 }
-        });
-    } catch (e) {
-        return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
-    }
+    return parseListResponse(html);
 }
 
 function parseMovieDetail(html) {
@@ -263,7 +220,7 @@ function parseMovieDetail(html) {
         var lowerHtml = html.toLowerCase();
         var hasTM = lowerHtml.indexOf('xem thuyết minh') !== -1;
         var hasSub = lowerHtml.indexOf('xem vietsub') !== -1 || lowerHtml.indexOf('/sever2/') !== -1;
-        if (!hasTM && !hasSub) hasTM = true; // Fallback
+        if (!hasTM && !hasSub) hasTM = true; 
 
         var vietsubEpisodes = [];
         var thuyetMinhEpisodes = [];
@@ -321,57 +278,83 @@ function parseMovieDetail(html) {
 }
 
 // =============================================================================
-// STREAM / EMBED EXTRACTORS (Cập nhật ưu tiên Web View)
+// WEBVIEW LOADER: KHÓA BẮT LINK VÀ ÉP PLAYSINLINE CHO PLAYER CỦA WEB
 // =============================================================================
-
-function parseDetailResponse(html) {
+function parseDetailResponse(html, url) {
     try {
         var streamUrl = "";
         
-        // Chỉ bắt iframe Web Player gốc để nạp vào Web View
+        // Cố gắng tìm iframe player gốc trên web trước
         var iframeMatch = html.match(/<iframe[^>]+src=["']([^"']+)["']/i);
         if (iframeMatch) {
             streamUrl = iframeMatch[1];
             if (streamUrl.indexOf("//") === 0) streamUrl = "https:" + streamUrl;
-            
-            return JSON.stringify({
-                url: streamUrl,
-                headers: { "Referer": "https://yanhh3d.love/" },
-                isEmbed: true // Bắt buộc mở bằng Web View thay vì Trình phát nội bộ
-            });
-        }
+        } 
         
-        // Nếu không lấy được iframe, trả về URL hiện tại để nó load thẳng trang phim vào Web View
-        var ogUrl = html.match(/<meta property="og:url" content="([^"]+)"/i);
-        if (ogUrl) {
-            return JSON.stringify({
-                url: ogUrl[1],
-                headers: { "Referer": "https://yanhh3d.love/" },
-                isEmbed: true
-            });
+        // Nếu không có iframe, tự động dùng url hiện tại để load toàn trang
+        if (!streamUrl) {
+            streamUrl = url || "https://yanhh3d.love";
         }
-        
-        return JSON.stringify({});
-    } catch (e) {
-        return JSON.stringify({});
-    }
-}
 
-function parseEmbedResponse(html, sourceUrl) {
-    try {
-        // Trong chế độ Web View, bỏ qua việc cào m3u8. 
-        // Trả về chính link đó để Web View tự xử lý player gốc.
-        return JSON.stringify({ 
-            url: sourceUrl, 
-            isEmbed: true,
-            headers: {
+        // Đoạn Custom-Js chạy ngầm can thiệp vào CSS và DOM của website
+        var pureWebviewJs = `
+            (function() {
+                // 1. Vô hiệu hóa tính năng Fullscreen của Web Player để Android không bốc ra ngoài khung
+                try {
+                    var noop = function() { return Promise.resolve(); };
+                    Object.defineProperty(document, 'fullscreenEnabled', {get: function() { return false; }});
+                    Object.defineProperty(document, 'webkitFullscreenEnabled', {get: function() { return false; }});
+                    if(Element.prototype.requestFullscreen) Element.prototype.requestFullscreen = noop;
+                    if(Element.prototype.webkitRequestFullscreen) Element.prototype.webkitRequestFullscreen = noop;
+                    if(Element.prototype.mozRequestFullScreen) Element.prototype.mozRequestFullScreen = noop;
+                    if(Element.prototype.msRequestFullscreen) Element.prototype.msRequestFullscreen = noop;
+                    if(window.HTMLVideoElement) {
+                        HTMLVideoElement.prototype.webkitEnterFullscreen = noop;
+                        HTMLVideoElement.prototype.enterFullscreen = noop;
+                    }
+                } catch(e) {}
+
+                // 2. Ép CSS Giấu rác, quảng cáo, header, footer và ẩn nút phóng to của trình phát web
+                var style = document.createElement('style');
+                style.innerHTML = 'header, .header, nav, footer, .footer, .download-app, .app-download, [class*="ad-"], [id*="ad-"], .popup, .modal, .google-auto-placed, iframe[src*="ads"], .bottom-nav, .navigation, .sidebar, .comments, .vjs-fullscreen-control, .plyr__controls [data-plyr="fullscreen"], .jw-fullscreen, .fullscreen-btn, video::-webkit-media-controls-fullscreen-button { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } body, html { margin: 0 !important; padding: 0 !important; overflow-x: hidden !important; background: #000 !important; overscroll-behavior-y: none; }';
+                document.head.appendChild(style);
+
+                // 3. Vòng lặp dọn dẹp liên tục các Popup sinh ra chậm và ép video chạy In-line
+                setInterval(function() {
+                    var vids = document.querySelectorAll('video');
+                    for (var k = 0; k < vids.length; k++) {
+                        if (!vids[k].hasAttribute('playsinline')) {
+                            vids[k].setAttribute('playsinline', 'true');
+                            vids[k].setAttribute('webkit-playsinline', 'true');
+                        }
+                    }
+
+                    var closeBtns = document.querySelectorAll('.close, .btn-close, [aria-label="Close"], .close-ads');
+                    for (var j = 0; j < closeBtns.length; j++) {
+                        try { closeBtns[j].click(); } catch(e){}
+                    }
+                }, 500);
+            })();
+        `;
+
+        return JSON.stringify({
+            "url": streamUrl,
+            "isEmbed": true, // Luôn bật true để kích hoạt Webview thay vì nội soi link
+            "headers": {
                 "Referer": "https://yanhh3d.love/",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+                "Block-Ads": "true",
+                "Block-Redirects": "false", 
+                "Custom-Js": pureWebviewJs.replace(/\r\n|\r|\n/g, " ").trim()
             }
         });
     } catch (e) {
-        return JSON.stringify({ url: "", isEmbed: false });
+        return JSON.stringify({ "url": url, "isEmbed": true, "headers": {} });
     }
+}
+
+// Disable chế độ Embed rườm rà do luồng trên đã bao gọn
+function parseEmbedResponse(htmlContent, url) {
+    return JSON.stringify({ url: "", isEmbed: false });
 }
 
 function parseCategoriesResponse(html) { return "[]"; }
