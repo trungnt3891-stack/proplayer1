@@ -6,13 +6,13 @@ function getManifest() {
     return JSON.stringify({
         "id": "nguoncnew",
         "name": "Phim NguonC Xoá Quảng Cáo",
-        "version": "6.0.0", // TRÙM CUỐI: Tách Server VIP & Áp dụng Hook Blob M3U8 chuẩn
+        "version": "7.0.0", // Đã fix lỗi chí mạng JS Comment. Sniffer siêu tốc.
         "baseUrl": "https://phim.nguonc.com",
         "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/nguonC.png",
         "isEnabled": true,
         "type": "MOVIE",
-        "playerType": "embedtoexoplay", // Kích hoạt Webview Sniffer chạy ngầm
-        "debug": true // Bật Console Toast để xem Hook hoạt động
+        "playerType": "embedtoexoplay", // Kích hoạt Webview chạy ngầm
+        "debug": true 
     });
 }
 
@@ -153,50 +153,37 @@ function parseMovieDetail(apiResponseJson) {
     try {
         var response = typeof apiResponseJson === "string" ? JSON.parse(apiResponseJson) : apiResponseJson;
         var movie = response.movie || response.data?.item || response.data || {};
-        var rawEpisodes = movie.episodes || response.episodes || response.data?.item?.episodes || [];
-        var servers = [];
 
+        var rawEpisodes = movie.episodes || response.episodes || response.data?.item?.episodes || [];
+
+        var servers = [];
         if (Array.isArray(rawEpisodes)) {
             rawEpisodes.forEach(function (server) {
-                var m3u8Episodes = [];
-                var embedEpisodes = [];
+                var episodes = [];
                 var serverItems = server.items || server.server_data || [];
 
                 if (Array.isArray(serverItems)) {
                     serverItems.forEach(function (ep) {
                         var m3u8 = ep.m3u8 || ep.link_m3u8 || "";
                         var embed = ep.embed || ep.link_embed || "";
-                        var name = ep.name || ep.episode_name || "";
-                        var slug = ep.slug || ep.episode_slug || "";
-
-                        // Tạo luồng phát M3U8 Native Siêu Tốc
-                        if (m3u8) {
-                            m3u8Episodes.push({
-                                id: m3u8 + "|data:direct",
-                                name: name,
-                                slug: slug + "-m3u8"
-                            });
-                        }
                         
-                        // Tạo luồng dự phòng bắt bằng Hook Blob (embedtoexoplay)
-                        if (embed) {
-                            embedEpisodes.push({
-                                id: embed + "|data:embed",
-                                name: name,
-                                slug: slug + "-embed"
+                        var link = embed || m3u8;
+
+                        if (link) {
+                            episodes.push({
+                                id: link,
+                                name: ep.name || ep.episode_name || "",
+                                slug: ep.slug || ep.episode_slug || ""
                             });
                         }
                     });
                 }
 
-                var sName = server.server_name || server.name || "Server";
-                
-                // Xuất ra 2 Server để người dùng chọn
-                if (m3u8Episodes.length > 0) {
-                    servers.push({ name: sName + " (VIP Siêu Tốc)", episodes: m3u8Episodes });
-                }
-                if (embedEpisodes.length > 0) {
-                    servers.push({ name: sName + " (Dự Phòng Hook)", episodes: embedEpisodes });
+                if (episodes.length > 0) {
+                    servers.push({
+                        name: server.server_name || server.name || "Server",
+                        episodes: episodes
+                    });
                 }
             });
         }
@@ -238,47 +225,24 @@ function parseMovieDetail(apiResponseJson) {
     }
 }
 
-// Hàm lấy dữ liệu ẩn sau dấu |
-function getPipeData(url) {
-    var i = url.indexOf("|");
-    if (i < 0) return "";
-    var s = url.substring(i + 1).replace(/^\s+/, "").trim();
-    if (s.toLowerCase().indexOf("data:") === 0) s = s.substring(5);
-    return s;
-}
-
 // =============================================================================
-// [TRÙM CUỐI] HOOK BLOB M3U8 & AUTO-CLICK NGẦM
+// [TRÙM CUỐI] HOOK BLOB M3U8 + AUTO CLICK + QUÉT THẺ VIDEO (KHÔNG COMMENT JS)
 // =============================================================================
 function parseDetailResponse(html, apiUrl) {
     try {
-        var dataType = getPipeData(apiUrl);
         var url = apiUrl.split("|")[0];
 
-        // 1. NHÁNH VIP: Đẩy thẳng link M3U8 cho App phát (0s Loading)
-        if (dataType === "direct") {
-            return JSON.stringify({
-                "url": url,
-                "isEmbed": false,
-                "mimeType": "application/x-mpegURL",
-                "headers": {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    "Referer": "https://phim.nguonc.com/"
-                }
-            });
-        }
-        
-        // 2. NHÁNH HOOK: Inject Script chuẩn tài liệu vào WebView ngầm
-        var hookJsCode = `
-        (function initBlobSniffer() {
+        // MÃ JS HOOK - XÓA SẠCH MỌI DẤU CHÚ THÍCH // ĐỂ TRÁNH LỖI KHI MINIFY
+        var customJsCode = `
+        (function() {
             if (window._vaapp_hooked) return;
             window._vaapp_hooked = true;
 
-            if (window.SnifferBridge) {
-                window.SnifferBridge.log("🚀 Khởi chạy quá trình Hook Blob & Dò link ngầm...");
-            }
+            var playerHeaders = JSON.stringify({
+                "Referer": "https://embed.streamc.xyz/",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            });
 
-            // KỸ THUẬT 1: Hook Blob M3U8 từ bộ nhớ RAM
             if (typeof URL !== 'undefined' && URL.createObjectURL) {
                 var originalCreateObjectURL = URL.createObjectURL;
                 URL.createObjectURL = function(blob) {
@@ -287,13 +251,11 @@ function parseDetailResponse(html, apiUrl) {
                         var processContent = function(content) {
                             if (content && content.trim().indexOf('#EXTM3U') === 0) {
                                 if (window.SnifferBridge && typeof window.SnifferBridge.playM3u8Content === 'function') {
-                                    window.SnifferBridge.toast("✅ Đã bắt được Blob M3U8!");
-                                    window.SnifferBridge.log("Phát hiện mã M3U8, truyền về App phát Local!");
-                                    window.SnifferBridge.playM3u8Content(content, window.location.href);
+                                    window.SnifferBridge.log("Da bat Blob M3U8 thanh cong!");
+                                    window.SnifferBridge.playM3u8Content(content, window.location.href, playerHeaders);
                                 }
                             }
                         };
-
                         if (typeof blob.text === 'function') {
                             blob.text().then(processContent).catch(function(){});
                         } else {
@@ -306,41 +268,37 @@ function parseDetailResponse(html, apiUrl) {
                 };
             }
 
-            // KỸ THUẬT 2: Quét thẻ Video + Auto Click resumeBtn
             var checkCount = 0;
             var checkInterval = setInterval(function() {
                 try {
-                    // Click nút Xem Tiếp bị giấu
                     var skipBtn = document.getElementById("resumeBtn");
-                    if (skipBtn && window.getComputedStyle(skipBtn).display !== 'none') {
-                        skipBtn.click();
-                        if (window.SnifferBridge) window.SnifferBridge.log("👉 Đã click nút resumeBtn.");
+                    if (skipBtn) {
+                        var style = window.getComputedStyle(skipBtn);
+                        if (style.display !== 'none' && style.visibility !== 'hidden') {
+                            skipBtn.click();
+                        }
                     }
 
-                    // Click Play
                     var playBtn = document.querySelector('.jw-icon-display, .vjs-big-play-button, .plyr__control--overlaid, .play-btn');
                     if (playBtn) playBtn.click();
 
-                    // Bắt Link Video thuần túy (Nếu web không xài Blob)
                     var video = document.querySelector('video');
-                    if (video && video.src && video.src.indexOf('blob:') !== 0) {
-                        if (window.SnifferBridge && typeof window.SnifferBridge.play === 'function') {
-                            window.SnifferBridge.toast("✅ Đã bắt được video.src trực tiếp!");
-                            window.SnifferBridge.log("Link stream: " + video.src);
-                            window.SnifferBridge.play(video.src);
+                    if (video && video.src && video.src.indexOf('http') === 0) {
+                        if (window.SnifferBridge) {
+                            window.SnifferBridge.log("Da bat duoc link video: " + video.src);
+                            window.SnifferBridge.play(video.src, playerHeaders);
                         }
                         clearInterval(checkInterval);
-                    } else if (!video) {
-                        if (window.SnifferBridge) window.SnifferBridge.log("⏳ Đang đợi thẻ Video... (" + checkCount + "s)");
+                    } else {
+                        if (window.SnifferBridge) window.SnifferBridge.log("Dang cho the video xuat hien... (" + checkCount + ")");
                     }
-                    
+
                     checkCount++;
-                    if (checkCount > 20) { // Timeout 20s
+                    if (checkCount > 30) {
                         clearInterval(checkInterval);
-                        if (window.SnifferBridge) window.SnifferBridge.log("❌ Timeout 20s, tắt bộ quét thẻ.");
                     }
-                } catch(e) {
-                    if (window.SnifferBridge) window.SnifferBridge.log("❌ Lỗi CustomJS: " + e.message);
+                } catch (err) {
+                    if (window.SnifferBridge) window.SnifferBridge.log("Loi CustomJS: " + err.message);
                 }
             }, 1000);
         })();
@@ -348,9 +306,9 @@ function parseDetailResponse(html, apiUrl) {
 
         return JSON.stringify({
             "url": url,
-            "isEmbed": true, // Gọi WebView ngầm
+            "isEmbed": true, 
             "headers": {
-                // Khôi phục y nguyên cấu trúc Header chống Cloudflare của bác
+                // Giữ lại Header chống Cloudflare của StreamC
                 "Referer": "https://embed.streamc.xyz/",
                 "Origin": "https://embed.streamc.xyz/",
                 "User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
@@ -361,17 +319,17 @@ function parseDetailResponse(html, apiUrl) {
                 "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
                 "X-Requested-With": "com.android.chrome",
                 
-                // Khiên chặn quảng cáo để Webview nhẹ và chạy Hook ngay lập tức
+                // Khiên chặn Webview tàng hình mở Popup quảng cáo
                 "Block-Ads": "true",
                 "Block-Redirects": "true",
                 
-                // Tiêm Hook
-                "Custom-Js": hookJsCode.replace(/\r\n|\r|\n/g, " ").trim()
+                // Gắn CustomJS đã XÓA DẤU CHÚ THÍCH // (Tránh lỗi gom dòng)
+                "Custom-Js": customJsCode.replace(/\n/g, " ").replace(/\r/g, "").trim()
             },
             "subtitles": []
         });
     } catch (e) {
-        return JSON.stringify({ "url": apiUrl.split("|")[0], "isEmbed": true });
+        return JSON.stringify({ "url": apiUrl.split("|")[0], "isEmbed": true, "headers": {} });
     }
 }
 
