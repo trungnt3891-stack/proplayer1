@@ -37,13 +37,6 @@
             "iconUrl": "https://m.media-amazon.com/images/I/61fJ78I23IL.png",
             "info": "Phim ngắn hay, đăng nhập ggacount phụ để xem."
     },
-     {
-      "id": "Shortphimhdcs",
-      "name": "ShortsHDCSS",
-      "version": "1.1.3",
-      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/shorthdc_plugin.js",
-      "iconUrl": "https://phimhdcss.com/favicon.ico"
-    },
     {
             "id": "hh3d",
             "name": "HH3D - Hoạt Hình 3D",
