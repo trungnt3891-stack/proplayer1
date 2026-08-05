@@ -6,21 +6,13 @@ function getManifest() {
     return JSON.stringify({
         "id": "nguoncnew",
         "name": "Phim NguonC Xoá Quảng Cáo",
-        "version": "3.0.0", // Bản Siêu Tốc: Khai tử Webview, dùng HTTP Parsing đệ quy
+        "version": "4.0.0", // Hoàn hảo: Ưu tiên Embed + Hook Blob + Tự click resumeBtn
         "baseUrl": "https://phim.nguonc.com",
         "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/nguonC.png",
         "isEnabled": true,
         "type": "MOVIE",
-        "playerType": "exoplayer" // 🔒 Khóa cứng ở ExoPlayer, cấm tiệt App gọi Webview
+        "playerType": "embedtoexoplay" // Kích hoạt Webview tàng hình dò link
     });
-}
-
-function log(msg) {
-    if (typeof nativeLog !== 'undefined') {
-        nativeLog("[PhimNguonC] " + msg);
-    } else if (typeof console !== 'undefined' && console.log) {
-        console.log("[PhimNguonC] " + msg);
-    }
 }
 
 function getHomeSections() {
@@ -171,16 +163,15 @@ function parseMovieDetail(apiResponseJson) {
 
                 if (Array.isArray(serverItems)) {
                     serverItems.forEach(function (ep) {
-                        var m3u8 = ep.m3u8 || ep.link_m3u8 || "";
                         var embed = ep.embed || ep.link_embed || "";
+                        var m3u8 = ep.m3u8 || ep.link_m3u8 || "";
                         
-                        // Luôn ưu tiên M3U8. Nếu không có mới dùng Embed
-                        var link = m3u8 || embed;
-                        var dataType = m3u8 ? "direct" : "embed";
+                        // [QUAN TRỌNG] Ưu tiên lấy EMBED vì m3u8 gốc của NguonC hay bị lỗi / chặn IP
+                        var link = embed || m3u8;
 
                         if (link) {
                             episodes.push({
-                                id: link + "|data:" + dataType,
+                                id: link,
                                 name: ep.name || ep.episode_name || "",
                                 slug: ep.slug || ep.episode_slug || ""
                             });
@@ -234,111 +225,104 @@ function parseMovieDetail(apiResponseJson) {
     }
 }
 
-// Hàm lấy dữ liệu ẩn sau dấu |
-function getPipeData(url) {
-    var i = url.indexOf("|");
-    if (i < 0) return "";
-    var s = url.substring(i + 1).replace(/^\s+/, "").trim();
-    if (s.toLowerCase().indexOf("data:") === 0) s = s.substring(5);
-    return s;
-}
-
 // =============================================================================
-// KỸ THUẬT XỬ LÝ SIÊU TỐC HTTP (0.5 GIÂY)
+// KỸ THUẬT EMBEDTOEXOPLAY KẾT HỢP HOOK BLOB VÀ AUTO-CLICK RESUME
 // =============================================================================
 function parseDetailResponse(html, apiUrl) {
     try {
-        var dataType = getPipeData(apiUrl);
         var url = apiUrl.split("|")[0];
 
-        // 1. NẾU LÀ LINK M3U8 TRỰC TIẾP TỪ API
-        if (dataType === "direct" || url.indexOf('.m3u8') !== -1 || url.indexOf('.mp4') !== -1) {
-            return JSON.stringify({
-                "url": url,
-                "isEmbed": false,
-                "mimeType": url.indexOf('.mp4') !== -1 ? "video/mp4" : "application/x-mpegURL",
-                "headers": {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    "Origin": "https://phim.nguonc.com",
-                    "Referer": "https://phim.nguonc.com/"
-                }
-            });
-        }
-        
-        // 2. NẾU LÀ EMBED -> TRẢ VỀ isEmbed: true
-        // ⚡ ĐIỂM KHÁC BIỆT: Do playerType = "exoplayer", App sẽ KHÔNG mở Webview.
-        // Thay vào đó, App sẽ tự động tạo một HTTP GET siêu tốc tải mã nguồn HTML của URL này,
-        // sau đó truyền HTML đó xuống hàm parseEmbedResponse bên dưới.
+        // Mã JS tiêm vào Webview ngầm: Kết hợp Hook Blob M3U8 + Auto Click resumeBtn
+        var hookJsCode = `
+        (function initBlobSniffer() {
+            if (window._vaapp_hooked) return;
+            window._vaapp_hooked = true;
+
+            if (window.SnifferBridge) {
+                window.SnifferBridge.toast("Đang dò tìm luồng video...");
+            }
+
+            // 1. Hook URL.createObjectURL để bắt file M3U8 ẩn trong RAM
+            if (typeof URL !== 'undefined' && URL.createObjectURL) {
+                var originalCreateObjectURL = URL.createObjectURL;
+                URL.createObjectURL = function(blob) {
+                    var blobUrl = originalCreateObjectURL.apply(this, arguments);
+                    if (blob && (blob instanceof Blob || blob instanceof File)) {
+                        var processContent = function(content) {
+                            if (content && content.trim().indexOf('#EXTM3U') === 0) {
+                                if (window.SnifferBridge && typeof window.SnifferBridge.playM3u8Content === 'function') {
+                                    window.SnifferBridge.toast("Bắt thành công Blob M3U8!");
+                                    window.SnifferBridge.playM3u8Content(content, window.location.href);
+                                }
+                            }
+                        };
+
+                        if (typeof blob.text === 'function') {
+                            blob.text().then(processContent).catch(function(){});
+                        } else {
+                            var reader = new FileReader();
+                            reader.onload = function(e) { processContent(e.target.result); };
+                            reader.readAsText(blob);
+                        }
+                    }
+                    return blobUrl;
+                };
+            }
+
+            // 2. Vòng lặp siêu tốc (500ms): Tự động click nút Play/Resume và kiểm tra thẻ video
+            var loopCount = 0;
+            var snifferInterval = setInterval(function() {
+                try {
+                    // Click nút Resumeặc thù của embed.streamc.xyz
+                    var resumeBtn = document.getElementById("resumeBtn");
+                    if (resumeBtn && resumeBtn.style.display !== 'none' && resumeBtn.style.visibility !== 'hidden') {
+                        resumeBtn.click();
+                    }
+
+                    // Click nút Play chuẩn
+                    var playBtn = document.querySelector('.jw-icon-display, .vjs-big-play-button, .plyr__control--overlaid, .play-btn');
+                    if (playBtn) playBtn.click();
+
+                    // Bắt Backup nếu video hiện thẳng src không qua Blob
+                    var video = document.querySelector('video');
+                    if (video && video.src && video.src.indexOf('blob:') !== 0) {
+                        if (window.SnifferBridge && typeof window.SnifferBridge.play === 'function') {
+                            window.SnifferBridge.toast("Bắt thành công Video.src!");
+                            window.SnifferBridge.play(video.src);
+                        }
+                        clearInterval(snifferInterval);
+                    }
+
+                    loopCount++;
+                    if (loopCount > 30) clearInterval(snifferInterval); // Dừng sau 15 giây (30 x 500ms) để giải phóng RAM
+                } catch (err) {}
+            }, 500);
+        })();
+        `;
+
         return JSON.stringify({
             "url": url,
-            "isEmbed": true,
+            "isEmbed": true, // Bật Sniffer chạy ngầm
             "headers": {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Referer": "https://phim.nguonc.com/"
+                // Giả lập Trình duyệt Chrome Android mới nhất
+                "User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+                // Thiết lập Referer bằng chính URL embed để đánh lừa server
+                "Referer": url, 
+                // Khiên chặn quảng cáo mạng cấp thấp để Webview ngầm load siêu tốc
+                "Block-Ads": "true",
+                "Block-Redirects": "true",
+                "Block-Keywords": "adserv, popunder, popup.js, ads.js, vast.xml",
+                // Mã JS Hook siêu việt
+                "Custom-Js": hookJsCode.replace(/\r\n|\r|\n/g, " ").trim()
             }
         });
     } catch (e) {
-        return JSON.stringify({ "url": apiUrl.split("|")[0], "isEmbed": false }); // Fail-safe
+        return JSON.stringify({ "url": apiUrl.split("|")[0], "isEmbed": true });
     }
 }
 
-// ⚡ HÀM NÀY SẼ CHẠY NGAY TỨC THÌ ĐỂ BÓC TÁCH M3U8 TỪ HTML CỦA EMBED
 function parseEmbedResponse(htmlContent, url) {
-    try {
-        // 1. Phá mã JS bị giấu (nếu có dùng thư viện Packer P,A,C,K)
-        var packedMatch = htmlContent.match(/eval\((function\(p,a,c,k,e,d\)[\s\S]+?split\('\|'\).*?)\)/);
-        if (packedMatch) {
-            try {
-                htmlContent += eval("(" + packedMatch[1] + ")");
-            } catch (e) {}
-        }
-
-        // 2. Dùng Regex chộp thẳng link m3u8 trong HTML
-        var m3u8Match = htmlContent.match(/(https?:\/\/[^"'\s<>]*\.m3u8[^"'\s<>]*)/i);
-        if (m3u8Match) {
-            return JSON.stringify({
-                "url": m3u8Match[1].replace(/\\/g, ""),
-                "isEmbed": false, // Trả về false -> Ra lệnh ExoPlayer phát ngay lập tức
-                "mimeType": "application/x-mpegURL",
-                "headers": {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    "Referer": url,
-                    "Origin": url.split('/').slice(0, 3).join('/')
-                }
-            });
-        }
-
-        // 3. Nếu nó trả MP4
-        var mp4Match = htmlContent.match(/(https?:\/\/[^"'\s<>]*\.mp4[^"'\s<>]*)/i);
-        if (mp4Match) {
-            return JSON.stringify({
-                "url": mp4Match[1].replace(/\\/g, ""),
-                "isEmbed": false,
-                "mimeType": "video/mp4",
-                "headers": {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    "Referer": url
-                }
-            });
-        }
-
-        // 4. Nếu Embed lại trỏ tới một Iframe khác, báo App tải tiếp đệ quy
-        var iframeMatch = htmlContent.match(/<iframe[^>]+src=["']([^"']+)["']/i);
-        if (iframeMatch) {
-            var iframeUrl = iframeMatch[1];
-            if (iframeUrl.indexOf('//') === 0) iframeUrl = 'https:' + iframeUrl;
-            return JSON.stringify({
-                "url": iframeUrl,
-                "isEmbed": true,
-                "headers": { "Referer": url }
-            });
-        }
-
-        // Nếu mọi nỗ lực thất bại
-        return JSON.stringify({ "url": "", "isEmbed": false });
-    } catch (e) {
-        return JSON.stringify({ "url": "", "isEmbed": false });
-    }
+    return JSON.stringify({ url: "", isEmbed: false });
 }
 
 // =============================================================================
