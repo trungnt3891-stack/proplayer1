@@ -15,6 +15,13 @@
       "scriptUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/kkphim_plugin.js",
       "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/kkphim.png"
     },
+    {
+            "id": "NguonC",
+            "name": "NguonCnoAds",
+            "version": "1.1.6",
+            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/nguoncnew_plugin.js",
+            "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/nguonC.png",
+    },
       {
             "id": "shortflix",
             "name": "PhimNgắnHay",
