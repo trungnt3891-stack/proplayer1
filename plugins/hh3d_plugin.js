@@ -2,7 +2,7 @@ function getManifest() {
     return JSON.stringify({
         id: "yanhh3d_love",
         name: "YanHH3D",
-        version: "2.0.7",
+        version: "2.0.8",
         description: "Hoạt Hình Trung Quốc Thuyết Minh 3D",
         author: "Gemini",
         baseUrl: "https://yanhh3d.love",
@@ -66,27 +66,30 @@ function getUrlDetail(slug) {
 }
 
 // ===================================================================
-// HÀM LẤY DANH SÁCH BẰNG PHƯƠNG PHÁP DOM SPLIT (KHÔNG THỂ TRƯỢT)
+// HÀM BÓC TÁCH DANH SÁCH BẰNG REGEX KHỐI (BẤT TỬ)
 // ===================================================================
 function parseListResponse(html, apiUrl) {
     var items = [];
     
-    // Cắt vụn HTML ra thành nhiều phần, mỗi phần là 1 bộ phim
-    var splits = html.split('film-poster');
-    for (var i = 1; i < splits.length; i++) {
-        var block = splits[i].substring(0, 800); 
+    // Quét tóm gọn mọi khối chứa phim: từ "flw-item" (Trang chủ/Danh mục) đến "item-top" (Bảng xếp hạng)
+    var blockRegex = /(?:class="[^"]*flw-item[^"]*"|class="[^"]*item-top[^"]*")>([\s\S]*?)class="clearfix"/gi;
+    var matchBlock;
+    
+    while ((matchBlock = blockRegex.exec(html)) !== null) {
+        var block = matchBlock[1];
         
         var urlMatch = block.match(/href="([^"]+)"/i);
-        var titleMatch = block.match(/title="([^"]+)"/i) || block.match(/alt="([^"]+)"/i);
+        // Ưu tiên title="", nếu không có thì lấy alt="", hoặc nội dung text của thẻ class dynamic-name
+        var titleMatch = block.match(/title="([^"]+)"/i) || block.match(/alt="([^"]+)"/i) || block.match(/dynamic-name[^>]*>([^<]+)</i);
         var posterMatch = block.match(/data-src="([^"]+)"/i) || block.match(/src="([^"]+)"/i);
-        var epMatch = block.match(/(?:tick-rate|fdi-item)[^>]*>([^<]+)</i);
+        var epMatch = block.match(/tick-rate[^>]*>([^<]+)</i) || block.match(/fdi-item[^>]*>([^<]+)</i);
 
         if (urlMatch && titleMatch && posterMatch) {
             var url = urlMatch[1];
             if (url.indexOf("http") === -1) url = "https://yanhh3d.love" + url;
             
-            // Lọc bỏ danh sách thừa (nếu có thẻ a dính link the-loai)
-            if (url.indexOf('/the-loai/') !== -1) continue;
+            // Lọc bỏ các link không phải phim (danh mục, quốc gia...)
+            if (url.indexOf('/the-loai/') !== -1 || url.indexOf('/quoc-gia/') !== -1) continue;
 
             var exists = false;
             for(var j = 0; j < items.length; j++) {
@@ -109,8 +112,11 @@ function parseListResponse(html, apiUrl) {
     var pageMatch = html.match(/href="[^"]+page=(\d+)"/g);
     if (pageMatch) {
         for (var i = 0; i < pageMatch.length; i++) {
-            var num = parseInt(pageMatch[i].match(/page=(\d+)/)[1]);
-            if (num > totalPages) totalPages = num;
+            var m = pageMatch[i].match(/page=(\d+)/);
+            if (m) {
+                var num = parseInt(m[1]);
+                if (num > totalPages) totalPages = num;
+            }
         }
     } else if (html.indexOf('class="pagination"') > -1 || html.indexOf('Xem thêm') > -1) {
         totalPages = 2; 
@@ -127,7 +133,7 @@ function parseSearchResponse(html, apiUrl) {
 }
 
 // ===================================================================
-// HÀM BÓC TÁCH CHI TIẾT TẬP VÀ SẮP XẾP BẰNG SỐ CHUẨN XÁC
+// HÀM BÓC TÁCH CHI TIẾT TẬP VÀ SẮP XẾP THÔNG MINH
 // ===================================================================
 function parseMovieDetail(html, apiUrl) {
     var title = "Không xác định";
@@ -144,7 +150,7 @@ function parseMovieDetail(html, apiUrl) {
 
     var servers = [];
     
-    // Quét Tab Server
+    // Quét tên Tab Server
     var navTabsMatch = html.match(/<ul[^>]*nav-tabs[^>]*>([\s\S]*?)<\/ul>/i);
     var tabs = [];
     if (navTabsMatch) {
@@ -157,7 +163,6 @@ function parseMovieDetail(html, apiUrl) {
 
     function getEps(blockHtml) {
         var eps = [];
-        // Cắt DOM list tập phim bằng từ khóa ep-item
         var splits = blockHtml.split('ep-item');
         for (var i = 1; i < splits.length; i++) {
             var block = splits[i].substring(0, 500); 
@@ -179,7 +184,7 @@ function parseMovieDetail(html, apiUrl) {
             }
         }
         
-        // Sắp xếp lại thứ tự từ bé đến lớn theo con số (Chấp luôn các tập có chữ)
+        // Sắp xếp lại thứ tự từ bé đến lớn theo con số
         eps.sort(function(a, b) {
             var numA = parseInt((a.name.match(/\d+/) || ["0"])[0]);
             var numB = parseInt((b.name.match(/\d+/) || ["0"])[0]);
@@ -189,6 +194,7 @@ function parseMovieDetail(html, apiUrl) {
         return eps;
     }
 
+    // Tách tập theo từng Tab Server tìm được
     if (tabs.length > 0) {
         for (var i = 0; i < tabs.length; i++) {
             var startStr = 'id="' + tabs[i].id + '"';
@@ -221,6 +227,9 @@ function parseMovieDetail(html, apiUrl) {
     });
 }
 
+// ===================================================================
+// HÀM LẤY LINK PHÁT STREAM HOẶC IFRAME
+// ===================================================================
 function parseDetailResponse(html, apiUrl) {
     var links = [];
     var splits = html.split('btn3dsv');
