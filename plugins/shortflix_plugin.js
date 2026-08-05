@@ -16,16 +16,16 @@ function getManifest() {
     return JSON.stringify({
         "id": "shortflix",
         "name": "Phim Ngắn Shortflix",
-        "description": "Bản Webview: Cấm tuyệt đối xoay ngang, Auto-Login.",
-        "version": "1.6.0", // Nâng cấp: Tiêu diệt API Fullscreen của Webview
+        "description": "Bản Webview VIP: Bỏ qua trang Xem Ngay, Khóa cứng màn hình dọc.",
+        "version": "2.0.0", 
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/shortflix.png",
         "isEnabled": true,
         "hasLogin": true,                     
         "loginUrl": BASEURL + "/vi/login",    
-        "type": "shortfilm",                  // Báo cho App đây là dạng Tiktok
-        "layoutType": "VERTICAL",             
-        "playerType": "embed"                 // [CHUẨN TÀI LIỆU] Dùng 'embed' để mở Webview
+        "type": "shortfilm",                  // [QUAN TRỌNG] Báo App đây là phim Tiktok
+        "layoutType": "VERTICAL",             // [QUAN TRỌNG] Ưu tiên UI dọc
+        "playerType": "webview"               // Chỉ định mở bằng Webview nội tại
     });
 }
 
@@ -243,11 +243,21 @@ function parseMovieDetail(html, url) {
         var ldirec = _$(html).find("span:content('Đạo diễn:')").parent().text().trim().replace("Đạo diễn:", "");
         var status = _$(html).find("span:content('Trạng thái:')").parent().text().trim().replace("Trạng thái:", "");
         
+        // [ĐIỂM NHẤN TỐC ĐỘ]: Bóc thẳng link của trang Play (Player) thay vì trang chi tiết
+        var directPlayUrl = url.replace("/videos/", "/play/");
+        var rawHtmlStr = typeof html === 'string' ? html : "";
+        var playMatch = rawHtmlStr.match(/href=["']([^"']+\/play\/[^"']+)["']/i);
+        if (playMatch) {
+            directPlayUrl = playMatch[1];
+            if (directPlayUrl.indexOf('http') !== 0) directPlayUrl = BASEURL + directPlayUrl;
+        }
+        
         var servers = [{
             name: "Lướt Chuyển Tập Tự Động",
             episodes: [{
-                id: url,
-                name: "Bấm vào đây để Xem & Vuốt",
+                // Truyền trực tiếp link Play để bỏ qua trang "Xem ngay" màu vàng
+                id: directPlayUrl,
+                name: "Bấm vào để Xem & Vuốt",
                 slug: "webview-player"
             }]
         }];
@@ -274,23 +284,19 @@ function parseMovieDetail(html, url) {
 }
 
 // =============================================================================
-// WEBVIEW LOADER: "THIẾN" FULLSCREEN API CHỐNG XOAY NGANG 100%
+// WEBVIEW LOADER: ÉP DỌC 100% & BỎ QUA TRANG LOAD
 // =============================================================================
 function parseDetailResponse(html, url) {
     try {
-        var autoLoginAndKillAdsJs = `
+        var autoLoginAndAntiRotateJs = `
             (function() {
-                // =============================================================
-                // 1. "THIẾN" TÍNH NĂNG FULLSCREEN CỦA TRÌNH DUYỆT (CHỐNG XOAY NGANG)
-                // =============================================================
+                // 1. "THIẾN" TOÀN BỘ API XOAY NGANG CỦA TRÌNH DUYỆT
                 try {
                     Object.defineProperty(document, 'fullscreenEnabled', {get: function() { return false; }});
                     Object.defineProperty(document, 'webkitFullscreenEnabled', {get: function() { return false; }});
-                    Element.prototype.requestFullscreen = function() { return Promise.resolve(); };
-                    Element.prototype.webkitRequestFullscreen = function() { return Promise.resolve(); };
-                    Element.prototype.mozRequestFullScreen = function() { return Promise.resolve(); };
-                    Element.prototype.msRequestFullscreen = function() { return Promise.resolve(); };
-                    if (window.HTMLVideoElement) {
+                    if(Element.prototype.requestFullscreen) Element.prototype.requestFullscreen = function() { return Promise.resolve(); };
+                    if(Element.prototype.webkitRequestFullscreen) Element.prototype.webkitRequestFullscreen = function() { return Promise.resolve(); };
+                    if(window.HTMLVideoElement) {
                         HTMLVideoElement.prototype.webkitEnterFullscreen = function() {};
                         HTMLVideoElement.prototype.enterFullscreen = function() {};
                     }
@@ -299,22 +305,27 @@ function parseDetailResponse(html, url) {
                 var EMAIL = "iamwilliamm6@gmail.com";
                 var PASS = "trung@123";
 
-                // =============================================================
-                // 2. CSS ẨN QUẢNG CÁO & XÓA CÁC NÚT BẤM FULLSCREEN TRÊN UI
-                // =============================================================
+                // 2. CSS ÉP KÍCH THƯỚC DỌC & ẨN NÚT XOAY MÀN HÌNH CỦA TRÌNH PHÁT
                 var style = document.createElement('style');
-                style.innerHTML = 'header, .header, nav, footer, .footer, .download-app, .app-download, [class*="ad-"], [id*="ad-"], .popup, .modal, .google-auto-placed, iframe[src*="ads"], .bottom-nav, .navigation, .sidebar, .comments, .vjs-fullscreen-control, .plyr__controls [data-plyr="fullscreen"], .jw-fullscreen, .fullscreen-btn, video::-webkit-media-controls-fullscreen-button { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } body, html { margin: 0 !important; padding: 0 !important; overflow-x: hidden !important; background: #000 !important; overscroll-behavior-y: none; }';
+                style.innerHTML = 'header, .header, nav, footer, .footer, .download-app, .app-download, [class*="ad-"], [id*="ad-"], .popup, .modal, .bottom-nav, .navigation, .sidebar, .comments, .vjs-fullscreen-control, .plyr__controls [data-plyr="fullscreen"], .jw-fullscreen, .fullscreen-btn, video::-webkit-media-controls-fullscreen-button { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } body, html { margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: #000 !important; overscroll-behavior-y: none; width: 100vw !important; height: 100vh !important; } .player-container, #player, .video-container { width: 100vw !important; height: 100vh !important; }';
                 document.head.appendChild(style);
 
-                // =============================================================
-                // 3. VÒNG LẶP ÉP QUYỀN PLAYSINLINE CHO THẺ VIDEO
-                // =============================================================
+                // 3. VÒNG LẶP ÉP QUYỀN PLAYSINLINE CHO VIDEO & ĐÓNG POPUP QUẢNG CÁO
                 setInterval(function() {
                     var vids = document.querySelectorAll('video');
-                    for(var k = 0; k < vids.length; k++){
-                        vids[k].setAttribute('playsinline', 'true');
-                        vids[k].setAttribute('webkit-playsinline', 'true');
-                        vids[k].removeAttribute('controls'); // Tháo cả control mặc định nếu nó tự mọc ra
+                    for(var k = 0; k < vids.length; k++) {
+                        var v = vids[k];
+                        if (!v.hasAttribute('playsinline')) {
+                            v.setAttribute('playsinline', 'true');
+                            v.setAttribute('webkit-playsinline', 'true');
+                        }
+                        // Tự động Play nếu video bị khựng
+                        if (v.paused && !v.dataset.autoPlayed) {
+                            var p = v.play();
+                            if (p !== undefined) {
+                                p.then(function() { v.dataset.autoPlayed = true; }).catch(function(){});
+                            }
+                        }
                     }
 
                     var appBanners = document.querySelectorAll('div[class*="download"], div[class*="banner"]');
@@ -327,11 +338,8 @@ function parseDetailResponse(html, url) {
                     }
                 }, 500);
 
-                // =============================================================
-                // 4. AUTO LOGIN LOGIC
-                // =============================================================
+                // 4. AUTO LOGIN LOGIC (GIỮ NGUYÊN)
                 if (sessionStorage.getItem('vax_autologin_done')) return;
-
                 function doLogin() {
                     var loginBtn = document.querySelector('a[href*="/login"]');
                     if (loginBtn) {
@@ -350,19 +358,15 @@ function parseDetailResponse(html, url) {
 
                         if (emailInput && passInput && submitBtn) {
                             clearInterval(checkForm);
-                            
                             var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-                            
                             nativeInputValueSetter.call(emailInput, EMAIL);
                             emailInput.dispatchEvent(new Event('input', { bubbles: true }));
-                            
                             nativeInputValueSetter.call(passInput, PASS);
                             passInput.dispatchEvent(new Event('input', { bubbles: true }));
                             
                             setTimeout(function() {
                                 submitBtn.click();
                                 sessionStorage.setItem('vax_autologin_done', 'true');
-                                
                                 setTimeout(function() {
                                     var backUrl = sessionStorage.getItem('vax_redirect_back');
                                     if (backUrl) window.location.href = backUrl;
@@ -379,12 +383,12 @@ function parseDetailResponse(html, url) {
 
         return JSON.stringify({
             "url": url,
-            "isEmbed": true, // Trả về true để mở WebView
+            "isEmbed": true, 
             "headers": {
                 "Referer": BASEURL,
                 "Block-Ads": "true",
-                "Block-Redirects": "false", // Chấp nhận redirect để auto-login hoạt động
-                "Custom-Js": autoLoginAndKillAdsJs.replace(/\r\n|\r|\n/g, " ").trim()
+                "Block-Redirects": "false", 
+                "Custom-Js": autoLoginAndAntiRotateJs.replace(/\r\n|\r|\n/g, " ").trim()
             }
         });
     } catch (e) {
@@ -398,7 +402,7 @@ function parseCountriesResponse(html) { return "[]"; }
 function parseYearsResponse(html) { return "[]"; }
 
 // =============================================================================
-// DANH BẠ THỂ LOẠI & HELPER _$ (GIỮ NGUYÊN)
+// DANH BẠ THỂ LOẠI & HELPER _$ (GIỮ NGUYÊN BẢN GỐC)
 // =============================================================================
 function getLISTmenu() {
     return `[{\"link\":\"&q=l%E1%BB%93ng+ti%E1%BA%BFng\",\"name\":\"Lồng Tiếng\"},{\"link\":\"&genre=tong-tai\",\"name\":\"Tổng tài\"},{\"link\":\"&genre=co-dai\",\"name\":\"Cổ đại\"},{\"link\":\"&genre=tam-ly\",\"name\":\"Tâm lý\"},{\"link\":\"&genre=ngon-tinh\",\"name\":\"Ngôn tình\"},{\"link\":\"&genre=hai-huoc\",\"name\":\"Hài hước\"},{\"link\":\"&genre=nu-cuong\",\"name\":\"Nữ cường\"},{\"link\":\"&genre=huyen-huyen\",\"name\":\"Huyền huyễn\"},{\"link\":\"&genre=toi-pham\",\"name\":\"Tội phạm\"},{\"link\":\"&genre=xuyen-khong\",\"name\":\"Xuyên không\"},{\"link\":\"&genre=thanh-xuan\",\"name\":\"Thanh xuân\"},{\"link\":\"&genre=hanh-dong\",\"name\":\"Hành động\"},{\"link\":\"&genre=kinh-di\",\"name\":\"Kinh dị\"},{\"link\":\"&genre=gia-dinh\",\"name\":\"Gia Đình\"},{\"link\":\"&genre=bi-an\",\"name\":\"Bí ẩn\"},{\"link\":\"&genre=dan-quoc\",\"name\":\"Dân quốc\"},{\"link\":\"&genre=trong-sinh\",\"name\":\"Trọng sinh\"},{\"link\":\"&genre=cuoi-truoc-yeu-sau\",\"name\":\"Cưới trước yêu sau\"},{\"link\":\"&genre=khoa-hoc-vien-tuong\",\"name\":\"Khoa học viễn tưởng\"},{\"link\":\"&genre=hanh-dong-ly-ky\",\"name\":\"Hành động ly kỳ\"},{\"link\":\"&genre=hien-dai\",\"name\":\"Hiện đại\"},{\"link\":\"&genre=bao-thu\",\"name\":\"Báo thù\"},{\"link\":\"&genre=the-thao\",\"name\":\"Thể thao\"},{\"link\":\"&genre=em-be\",\"name\":\"Em bé\"},{\"link\":\"&genre=nguoc-luyen\",\"name\":\"Ngược luyến\"},{\"link\":\"&genre=sung-ngot\",\"name\":\"Sủng ngọt\"},{\"link\":\"&genre=hieu-lam\",\"name\":\"Hiểu lầm\"},{\"link\":\"&genre=khac\",\"name\":\"Khác\"},{\"link\":\"&genre=hao-mon\",\"name\":\"Hào môn\"},{\"link\":\"&genre=tim-nguoi-than\",\"name\":\"Tìm người thân\"},{\"link\":\"&genre=quan-phiet\",\"name\":\"Quân phiệt\"},{\"link\":\"&genre=vuon-len-tu-so-khong\",\"name\":\"Vươn lên từ số không\"},{\"link\":\"&genre=tai-hop\",\"name\":\"Tái hợp\"},{\"link\":\"&genre=su-tro-lai\",\"name\":\"Sự trở lại\"},{\"link\":\"&genre=tam-ly-tinh-cam\",\"name\":\"Tâm lý tình cảm\"},{\"link\":\"&genre=truong-thanh\",\"name\":\"Trưởng thành\"}]`;
