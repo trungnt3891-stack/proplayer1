@@ -6,7 +6,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "yanhh3d",
         "name": "YanHH3D",
-        "version": "4.3.3", // Đã fix: Lỗi khóa cuộn Webview & Tối ưu luồng lưu lịch sử
+        "version": "4.3.4", // Tối giản: 1 Nút xem phim, Mở khóa vuốt cuộn tuyệt đối
         "baseUrl": "https://yanhh3d.love", 
         "iconUrl": "https://yanhh3d.love/storage/settings/August2024/YOoAwtlobLbwKhiFwRZv.png",
         "isEnabled": true,
@@ -175,8 +175,10 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// Bắt buộc phân tích lại tất cả các tập ra giao diện App để Vax có ID ghi nhận lịch sử xem
-function parseMovieDetail(html) {
+// =============================================================================
+// RÚT GỌN CHỈ CÒN ĐÚNG 1 NÚT ĐỂ VÀO THẲNG WEBVIEW
+// =============================================================================
+function parseMovieDetail(html, currentUrl) {
     try {
         var titleM = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([^<]+)<\/title>/i);
         var title = titleM ? PluginUtils.cleanText(titleM[1]) : "";
@@ -188,93 +190,25 @@ function parseMovieDetail(html) {
         var descM = html.match(/<meta property="og:description" content="([^"]+)"/i) || html.match(/<div[^>]*class=["'][^"']*desc[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
         var desc = descM ? PluginUtils.cleanText(descM[1]) : "";
 
-        var baseSlug = "";
-        var ogUrl = html.match(/<meta property="og:url" content="([^"]+)"/i) || html.match(/<link rel="canonical" href="([^"]+)"/i);
-        if (ogUrl) {
-            var urlObj = ogUrl[1].replace(/\/$/, "");
-            baseSlug = urlObj.substring(urlObj.lastIndexOf("/") + 1);
+        // Tìm link gốc của bộ phim để nhét vào nút bấm
+        var watchUrl = currentUrl;
+        if (!watchUrl) {
+            var ogUrl = html.match(/<meta property="og:url" content="([^"]+)"/i) || html.match(/<link rel="canonical" href="([^"]+)"/i);
+            watchUrl = ogUrl ? ogUrl[1] : "https://yanhh3d.love";
         }
 
         var servers = [];
-        var navTabsMatch = html.match(/<ul[^>]*nav-tabs[^>]*>([\s\S]*?)<\/ul>/i);
-        var tabs = [];
-        if (navTabsMatch) {
-            var aTagRegex = /<a[^>]*href="#([^"]+)"[^>]*>([^<]+)<\/a>/gi;
-            var aMatch;
-            while ((aMatch = aTagRegex.exec(navTabsMatch[1])) !== null) {
-                var tabName = aMatch[2].replace(/<[^>]+>/g, '').trim();
-                if(tabName.toLowerCase().indexOf('vietsub') !== -1) tabName = "Phim Vietsub (Bản 4K)";
-                else if(tabName.toLowerCase().indexOf('thuyết minh') !== -1 || tabName.toLowerCase().indexOf('tm') !== -1) tabName = "Thuyết Minh (Bản 4K)";
-                tabs.push({ id: aMatch[1].trim(), name: tabName });
-            }
-        }
-
-        function getActualEps(blockHtml) {
-            var eps = [];
-            var splits = blockHtml.split('ep-item'); 
-            for (var i = 1; i < splits.length; i++) {
-                var block = splits[i].substring(0, 500); 
-                var urlMatch = block.match(/href=["']([^"']+)["']/i);
-                var orderMatch = block.match(/ssli-order[^>]*>([^<]+)/i);
-                var titleMatch = block.match(/title=["']([^"']+)["']/i);
-                
-                if (urlMatch) {
-                    var epUrl = urlMatch[1];
-                    var uniqueSlug = epUrl.replace(/^https?:\/\/[^\/]+\//i, "").replace(/^\//, "");
-                    var epName = "N/A";
-                    if (orderMatch) epName = orderMatch[1].trim();
-                    else if (titleMatch) epName = titleMatch[1].trim();
-                    else epName = uniqueSlug.split('/').pop().replace('tap-', 'Tập ');
-
-                    var exists = false;
-                    for (var j = 0; j < eps.length; j++) {
-                        if (eps[j].id === uniqueSlug) { exists = true; break; }
-                    }
-                    if (!exists) eps.push({ id: uniqueSlug, name: epName, slug: uniqueSlug }); // Giữ ID chuẩn để Vax nhận biết lưu lịch sử
-                }
-            }
-            eps.sort(function(a, b) {
-                var numA = parseInt((a.name.match(/\d+/) || ["0"])[0], 10);
-                var numB = parseInt((b.name.match(/\d+/) || ["0"])[0], 10);
-                if (numA === numB) return a.name.length - b.name.length;
-                return numA - numB;
-            });
-            return eps;
-        }
-
-        if (tabs.length > 0) {
-            for (var i = 0; i < tabs.length; i++) {
-                var startStr = 'id="' + tabs[i].id + '"';
-                var startIdx = html.indexOf(startStr);
-                if (startIdx !== -1) {
-                    var endIdx = html.length;
-                    if (i + 1 < tabs.length) {
-                        var nextStartIdx = html.indexOf('id="' + tabs[i+1].id + '"', startIdx);
-                        if (nextStartIdx !== -1) endIdx = nextStartIdx;
-                    }
-                    var blockHtml = html.substring(startIdx, endIdx);
-                    var eps = getActualEps(blockHtml);
-                    if (eps.length > 0) servers.push({ name: tabs[i].name, episodes: eps });
-                }
-            }
-        }
-
-        if (servers.length === 0) {
-            var eps = getActualEps(html);
-            if (eps.length > 0) {
-                var isSub = html.toLowerCase().indexOf('xem vietsub') !== -1 || html.toLowerCase().indexOf('/sever2/') !== -1;
-                servers.push({ name: (isSub ? "Phim Vietsub (Bản 4K)" : "Thuyết Minh (Bản 4K)"), episodes: eps });
-            }
-        }
-
-        if (servers.length === 0 && baseSlug) {
-             servers.push({ name: "Hệ Thống", episodes: [{ id: baseSlug + "/tap-1", name: "Đang Cập Nhật / Full", slug: baseSlug + "/tap-1" }] });
-        }
-        
-        var totalEps = servers.length > 0 && servers[0].episodes.length > 0 ? servers[0].episodes.length : 0;
+        servers.push({
+            name: "Trình Phát Toàn Tập (Webview)",
+            episodes: [{
+                id: watchUrl, 
+                name: "Bấm vào để xem phim",
+                slug: "xem-phim-ngay"
+            }]
+        });
 
         return JSON.stringify({
-            id: "",
+            id: watchUrl,
             title: title,
             posterUrl: poster,
             backdropUrl: poster,
@@ -285,7 +219,7 @@ function parseMovieDetail(html) {
             year: 0,
             rating: 0,
             category: "Hoạt Hình 3D",
-            status: totalEps > 0 ? totalEps + " Tập" : "Đang Cập Nhật"
+            status: "Full Tập"
         });
     } catch (e) {
         return JSON.stringify({});
@@ -293,31 +227,42 @@ function parseMovieDetail(html) {
 }
 
 // =============================================================================
-// WEBVIEW LOADER & CSS/JS INJECTION
+// WEBVIEW LOADER VỚI LỆNH MỞ KHÓA CUỘN TUYỆT ĐỐI (TOUCH-ACTION: AUTO)
 // =============================================================================
 function parseDetailResponse(html, url) {
     try {
-        // Load thẳng url phim để bê nguyên Web Player & Giao diện chọn tập vào
         var streamUrl = url || "https://yanhh3d.love";
 
-        // Đoạn Custom-Js quyền năng để chỉnh sửa khung Webview
+        // Đoạn Custom-Js bơm vào Webview
         var pureWebviewJs = `
             (function() {
-                // 1. Tắt Fullscreen mặc định để tránh lỗi văng app Android
+                // 1. Chặn Fullscreen văng App
                 try {
                     var noop = function() { return Promise.resolve(); };
                     Object.defineProperty(document, 'fullscreenEnabled', {get: function() { return false; }});
                     Object.defineProperty(document, 'webkitFullscreenEnabled', {get: function() { return false; }});
-                    if(Element.prototype.requestFullscreen) Element.prototype.requestFullscreen = noop;
-                    if(Element.prototype.webkitRequestFullscreen) Element.prototype.webkitRequestFullscreen = noop;
                 } catch(e) {}
 
-                // 2. CSS Giấu quảng cáo, header, footer nhưng GIỮ LẠI KHẢ NĂNG CUỘN (Scroll)
+                // 2. CSS Giấu rác & Ép khôi phục Thanh cuộn 
                 var style = document.createElement('style');
-                style.innerHTML = 'header, .header, nav, footer, .footer, .download-app, .app-download, [class*="ad-"], [id*="ad-"], .popup, .modal, .google-auto-placed, iframe[src*="ads"], .bottom-nav, .navigation, .sidebar, .comments { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } body, html { margin: 0 !important; padding: 0 !important; overflow-x: hidden !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch !important; background: #1a1a1a !important; height: auto !important; min-height: 100% !important; }';
+                style.innerHTML = 
+                    'header, .header, nav, footer, .footer, .download-app, .app-download, ' +
+                    '[class*="ad-"], [id*="ad-"], .popup, .modal, .google-auto-placed, iframe[src*="ads"], ' +
+                    '.bottom-nav, .navigation, .sidebar, .comments { ' +
+                        'display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; ' +
+                    '} ' +
+                    'html, body { ' +
+                        'overflow: auto !important; overflow-y: auto !important; ' +
+                        '-webkit-overflow-scrolling: touch !important; touch-action: pan-y auto !important; ' +
+                        'height: auto !important; min-height: 100vh !important; background: #1a1a1a !important; ' +
+                        'position: static !important; ' +
+                    '} ' +
+                    '* { ' +
+                        'touch-action: pan-y auto !important; ' + // Đòn quyết định: Cấm các plugin khóa vuốt ngón tay
+                    '}';
                 document.head.appendChild(style);
 
-                // 3. Ép video chạy In-line để vuốt cuộn không lỗi & Tự dọn popup sinh sau
+                // 3. Xử lý video In-line & Dọn dẹp Popup sau mỗi 0.5s
                 setInterval(function() {
                     var vids = document.querySelectorAll('video');
                     for (var k = 0; k < vids.length; k++) {
