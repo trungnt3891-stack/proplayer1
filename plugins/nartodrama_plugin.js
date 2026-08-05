@@ -1,5 +1,5 @@
 // =============================================================================
-// CẤU HÌNH DOMAIN NARTO DRAMA (NATIVE EXOPLAYER - BỎ HOÀN TOÀN WEBVIEW)
+// CẤU HÌNH DOMAIN NARTO DRAMA (WEBVIEW EMBED + AUTO BYPASS QUẢNG CÁO)
 // =============================================================================
 var BASEURL = "https://edge.narto-drama.com"; 
 var DEV = false;
@@ -8,16 +8,16 @@ function getManifest() {
     return JSON.stringify({
         "id": "nartodrama",
         "name": "Phim Ngắn Narto",
-        "description": "Bản Native ExoPlayer: Chống quảng cáo triệt để, Vuốt TikTok, Khóa Dọc",
-        "version": "2.0.0",
-        "info": "Bỏ hoàn toàn WebView, bắt link m3u8 trực tiếp phát bằng ExoPlayer, hỗ trợ vuốt đổi tập.",
+        "description": "Bản WebView VIP: Auto Click mở khóa/xem quảng cáo, Khóa dọc, Vuốt TikTok",
+        "version": "2.1.0",
+        "info": "Sử dụng WebView nguyên bản kết hợp Auto-Clicker vượt quảng cáo reward và mở khóa tập tự động.",
         "baseUrl": BASEURL,
         "iconUrl": "https://narto-drama.com/narto-drama-logo-compressed.png",
         "isEnabled": true,
-        "type": "shortfilm",           // [QUAN TRỌNG] Kích hoạt giao diện dọc & vuốt TikTok[cite: 1, 2]
-        "layoutType": "VERTICAL",      // Ưu tiên bố cục dọc
-        "playerType": "exoplayer",     // [QUAN TRỌNG] Dùng exoplayer để phát trực tiếp, không qua webview[cite: 1, 2]
-        "subtitleCat": true
+        "type": "shortfilm",           // [QUAN TRỌNG] Kích hoạt chế độ phim ngắn và vuốt tập[cite: 1, 2]
+        "layoutType": "VERTICAL",      // Ép khung hiển thị dọc[cite: 1, 2]
+        "playerType": "embed",         // Mở bằng khung WebView để tương thích tuyệt đối với giao diện web[cite: 1, 2]
+        "subtitleCat": false
     });
 }
 
@@ -164,9 +164,7 @@ function parseListResponse(html, $url) {
             if (hrefMatch && titleMatch && imgMatch) {
                 var href = hrefMatch[1];
                 if (href.indexOf("http") == -1) href = BASEURL + href;
-                // Chuẩn hóa đường dẫn về trang chi tiết phim gốc
-                href = href.replace(/(^[\s\S]*?)\/watch\/[\s\S]*$/i, "$1");
-                if (href.indexOf("?lang=") === -1) href += "?lang=vi-VN";
+                if (href.indexOf("?lang=") === -1) href += (href.indexOf("?") > -1 ? "&" : "?") + "lang=vi-VN";
 
                 var src = imgMatch[1];
                 if (src.indexOf("http") == -1) src = BASEURL + src;
@@ -201,7 +199,7 @@ function parseSearchResponse(html, url) {
 }
 
 // -----------------------------------------------------------------------------
-// BÓC TÁCH DANH SÁCH TẬP PHIM ĐỂ HIỂN THỊ NÚT BẤM CHO TỪNG TẬP
+// XỬ LÝ TRANG CHI TIẾT PHIM (DÙNG ĐỂ HIỂN THỊ NÚT XEM HOẶC CHỌN TẬP TRÊN APP)
 // -----------------------------------------------------------------------------
 function parseMovieDetail(html, url) {
     try {
@@ -226,45 +224,14 @@ function parseMovieDetail(html, url) {
         var epMatch = html.match(/movie-sub[^>]*>([^<]+)/i);
         var episode_current = epMatch ? epMatch[1].trim() : "";
         
-        // Cào tất cả các liên kết tập phim từ trang chi tiết
-        var episodes = [];
-        var epLinks = html.split('href=');
-        var addedSlugs = {};
-
-        for (var j = 1; j < epLinks.length; j++) {
-            var linkMatch = epLinks[j].match(/^["']([^"']+\/watch\/[^"']+)["']/i);
-            if (linkMatch) {
-                var epUrl = linkMatch[1];
-                if (epUrl.indexOf("http") === -1) epUrl = BASEURL + epUrl;
-                
-                // Tránh trùng lặp tập
-                if (!addedSlugs[epUrl]) {
-                    addedSlugs[epUrl] = true;
-                    var epNumMatch = epUrl.match(/\/(\d+)(?:\?|$)/);
-                    var epName = epNumMatch ? "Tập " + epNumMatch[1] : "Tập " + (episodes.length + 1);
-                    var uniqueSlug = "ep-" + (epNumMatch ? epNumMatch[1] : episodes.length + 1);
-
-                    episodes.push({
-                        id: epUrl,
-                        name: epName,
-                        slug: uniqueSlug // [QUAN TRỌNG] Slug duy nhất giúp tính năng Preload và Vuốt tập hoạt động chính xác[cite: 1, 2]
-                    });
-                }
-            }
-        }
-
-        // Dự phòng nếu không tìm thấy link tập
-        if (episodes.length === 0) {
-            episodes.push({
-                id: url,
-                name: "Xem Tập 1",
-                slug: "ep-1"
-            });
-        }
-
+        // Trả về URL gốc để mở giao diện Webview đầy đủ tính năng của trang web
         var servers = [{
-            name: "Danh Sách Tập (Native Player)",
-            episodes: episodes
+            name: "Giao Diện Web Narto (Đầy Đủ Tính Năng)",
+            episodes: [{
+                id: url,
+                name: "Mở Trang Xem Phim",
+                slug: "webview-player"
+            }]
         }];
 
         return JSON.stringify({
@@ -293,52 +260,63 @@ function parseMovieDetail(html, url) {
 }
 
 // -----------------------------------------------------------------------------
-// BẮT LINK STREAM TRỰC TIẾP (.M3U8) ĐỂ NÉM CHO EXOPLAYER PHÁT NATIVE
+// WEBVIEW LOADER: BƠM SCRIPT TỰ ĐỘNG BẤM QUẢNG CÁO, MỞ KHÓA TẬP VÀ KHÓA DỌC
 // -----------------------------------------------------------------------------
 function parseDetailResponse(html, url) {
     try {
-        var streamUrl = "";
-        
-        // 1. Tìm trực tiếp link .m3u8 trong mã nguồn HTML của trang xem tập phim
-        var m3u8Match = html.match(/https?:\/\/[^"'\s]+\.m3u8[^"'\s]*/i);
-        if (m3u8Match) {
-            streamUrl = m3u8Match[0].replace(/&amp;/g, '&');
-        }
-
-        // 2. Nếu trang dùng JSON dữ liệu Next.js hoặc script nhúng
-        if (!streamUrl) {
-            var jsonScriptMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/);
-            if (jsonScriptMatch) {
-                try {
-                    var jsonData = JSON.parse(jsonScriptMatch[1]);
-                    // Quét tìm chuỗi chứa m3u8 trong JSON
-                    var jsonStr = JSON.stringify(jsonData);
-                    var parsedM3u8 = jsonStr.match(/https?:\/\/[^"'\s]+\.m3u8[^"'\s]*/i);
-                    if (parsedM3u8) {
-                        streamUrl = parsedM3u8[0].replace(/\\u0026/g, '&').replace(/&amp;/g, '&');
-                    }
-                } catch(err) {}
-            }
-        }
-
-        // Nếu vẫn không bắt được link m3u8, đẩy về embed exoplayer backup hoặc trả về url gốc
-        if (!streamUrl) {
-            streamUrl = url;
-        }
+        // Script chuyên dụng cho Narto Drama: Ẩn rác, tự động bấm "Xem quảng cáo", "Unlock", "Tiếp tục"
+        var autoBypassAndLockPortrait = 
+            "var s = document.createElement('style');" +
+            "s.innerHTML = 'header, .topbar, .site-footer-wrap, .detail-adsterra-top, .detail-inline-banners, .detail-native-ad, .you-may-like, .detail-seo-block, .share-buttons { display: none !important; } " +
+            "body, html { background: #000 !important; overflow-x: hidden !important; }" +
+            "video::-webkit-media-controls-fullscreen-button { display: none !important; }';" +
+            "document.head.appendChild(s);" +
+            
+            "setInterval(function() {" +
+                // 1. Ép thẻ video luôn chạy inline (playsinline) để không bị bung toàn màn hình ngang
+                "var vids = document.querySelectorAll('video');" +
+                "for(var k=0; k<vids.length; k++) {" +
+                    "if(!vids[k].hasAttribute('playsinline')) {" +
+                        "vids[k].setAttribute('playsinline', 'true');" +
+                        "vids[k].setAttribute('webkit-playsinline', 'true');" +
+                    "}" +
+                "}" +
+                
+                // 2. Tự động click xác nhận popup thông báo / hộp thoại
+                "var swalBtn = document.querySelector('.swal2-confirm');" +
+                "if(swalBtn) { try { swalBtn.click(); } catch(e){} }" +
+                
+                // 3. Tự động bấm các nút yêu cầu xem quảng cáo hoặc mở khóa tập phim
+                "var clickables = document.querySelectorAll('button, a, div, span');" +
+                "for(var i=0; i<clickables.length; i++) {" +
+                    "var txt = (clickables[i].innerText || clickables[i].textContent || '').toLowerCase();" +
+                    "if(txt.indexOf('xem quảng cáo') > -1 || txt.indexOf('watch ad') > -1 || txt.indexOf('mở khóa') > -1 || txt.indexOf('unlock') > -1 || txt.indexOf('tiếp tục') > -1 || txt.indexOf('start watching') > -1) {" +
+                        "try { clickables[i].click(); } catch(e){}" +
+                    "}" +
+                "}" +
+                
+                // 4. Dọn dẹp modal đăng nhập bắt buộc nếu có
+                "var modal = document.getElementById('nd-auth-modal'); if(modal) modal.classList.remove('open');" +
+            "}, 400);";
 
         return JSON.stringify({
-            "url": streamUrl,
-            "isEmbed": false, // [QUAN TRỌNG] Bật false để ExoPlayer phát trực tiếp bản Native, chặn đứng mọi loại quảng cáo web
-            "mimeType": "application/x-mpegURL",
+            "url": url,
+            "isEmbed": true, // Mở hoàn toàn bằng WebView nội tại của App
             "headers": {
                 "Referer": BASEURL,
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15",
+                "Custom-Js": autoBypassAndLockPortrait
             },
             "subtitles": []
         });
     } catch (e) {
-        return JSON.stringify({ "url": url, "isEmbed": false, "headers": {} });
+        return JSON.stringify({ "url": url, "isEmbed": true, "headers": {} });
     }
+}
+
+// Giữ chuẩn chống lỗi 404 cho WebView
+function parseEmbedResponse(htmlContent, url) {
+    return JSON.stringify({ url: "", isEmbed: false });
 }
 
 function parseCategoriesResponse(apiResponseJson) {
