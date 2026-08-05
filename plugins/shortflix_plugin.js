@@ -6,7 +6,7 @@ var BASEURL = "https://" + MAIN_DOMAIN;
 var BASEAPI = "https://" + MAIN_DOMAIN + "/api/search?limit=100&language=vi_VN&lang=vi_VN";
 
 // =============================================================================
-// GLOBAL CURSOR CACHE (BỘ NHỚ LƯU CURSOR ĐỘNG TRONG BỘ NHỚ RAM)
+// GLOBAL CURSOR CACHE (BỘ NHỚ LƯU CURSOR ĐỘNG TRONG RAM)
 // =============================================================================
 var CURSOR_CACHE = {};
 var URL_TO_PAGE_MAP = {};
@@ -16,16 +16,16 @@ function getManifest() {
     return JSON.stringify({
         "id": "shortflix",
         "name": "Phim Ngắn Shortflix",
-        "description": "Bản Webview: Auto-Login, Chọn tập trên Web, Khóa xoay dọc.",
-        "version": "1.4.0", 
+        "description": "Load Webview gốc, Auto-Login, Cố định dọc 100%.",
+        "version": "1.5.0", 
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/shortflix.png",
         "isEnabled": true,
         "hasLogin": true,                     
         "loginUrl": BASEURL + "/vi/login",    
-        "type": "shortfilm",                  // [CHỐNG XOAY NGANG] Báo cho App đây là dạng Tiktok
-        "layoutType": "VERTICAL",             // [CHỐNG XOAY NGANG] Ưu tiên giao diện dọc
-        "playerType": "embed"                 // [QUAN TRỌNG] Dùng 'embed' chuẩn để hiển thị giao diện Webview
+        "type": "shortfilm",                  // Ép UI dọc
+        "layoutType": "VERTICAL",             
+        "playerType": "webview"               // Dùng webview nguyên bản, tránh EmbedPlayer xoay ngang của App
     });
 }
 
@@ -243,12 +243,11 @@ function parseMovieDetail(html, url) {
         var ldirec = _$(html).find("span:content('Đạo diễn:')").parent().text().trim().replace("Đạo diễn:", "");
         var status = _$(html).find("span:content('Trạng thái:')").parent().text().trim().replace("Trạng thái:", "");
         
-        // Trả về 1 Server và 1 Tập duy nhất để người dùng ấn vào mở Webview
         var servers = [{
             name: "Lướt Chuyển Tập Tự Động",
             episodes: [{
                 id: url,
-                name: "Bấm vào để Xem & Chọn Tập",
+                name: "Bấm vào đây để Xem & Chọn Tập",
                 slug: "webview-player"
             }]
         }];
@@ -275,7 +274,7 @@ function parseMovieDetail(html, url) {
 }
 
 // =============================================================================
-// WEBVIEW LOADER & AUTO-LOGIN (CHỐNG XOAY NGANG)
+// WEBVIEW LOADER: ÉP DỌC BẰNG PLAYSINLINE & ẨN NÚT FULLSCREEN
 // =============================================================================
 function parseDetailResponse(html, url) {
     try {
@@ -284,13 +283,21 @@ function parseDetailResponse(html, url) {
                 var EMAIL = "iamwilliamm6@gmail.com";
                 var PASS = "trung@123";
 
-                // Ép ẩn mọi element rác, quảng cáo, nút tải app. 
-                // [CHỐNG XOAY NGANG] Ẩn nút Fullscreen của trình phát web để chặn người dùng click xoay ngang
+                // CSS Ẩn sạch quảng cáo & Ẩn TOÀN BỘ nút Fullscreen của trình phát
                 var style = document.createElement('style');
-                style.innerHTML = 'header, .header, nav, footer, .footer, .download-app, .app-download, [class*="ad-"], [id*="ad-"], .popup, .modal, .google-auto-placed, iframe[src*="ads"], .bottom-nav, .navigation, .sidebar, .comments, .vjs-fullscreen-control, .plyr__controls [data-plyr="fullscreen"], .jw-fullscreen, .fullscreen-btn { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } body, html { margin: 0 !important; padding: 0 !important; overflow-x: hidden !important; background: #000 !important; overscroll-behavior-y: none; }';
+                style.innerHTML = 'header, .header, nav, footer, .footer, .download-app, .app-download, [class*="ad-"], [id*="ad-"], .popup, .modal, .google-auto-placed, iframe[src*="ads"], .bottom-nav, .navigation, .sidebar, .comments, .vjs-fullscreen-control, .plyr__controls [data-plyr="fullscreen"], .jw-fullscreen, .fullscreen-btn, video::-webkit-media-controls-fullscreen-button { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } body, html { margin: 0 !important; padding: 0 !important; overflow-x: hidden !important; background: #000 !important; overscroll-behavior-y: none; }';
                 document.head.appendChild(style);
 
                 setInterval(function() {
+                    // [CHÌA KHÓA VÀNG] Bơm playsinline vào thẻ video để ngăn Android tự phóng to xoay ngang
+                    var vids = document.querySelectorAll('video');
+                    for(var k = 0; k < vids.length; k++){
+                        if (!vids[k].hasAttribute('playsinline')) {
+                            vids[k].setAttribute('playsinline', 'true');
+                            vids[k].setAttribute('webkit-playsinline', 'true');
+                        }
+                    }
+
                     var appBanners = document.querySelectorAll('div[class*="download"], div[class*="banner"]');
                     for (var i = 0; i < appBanners.length; i++) {
                         if (appBanners[i]) appBanners[i].style.display = 'none';
@@ -348,17 +355,14 @@ function parseDetailResponse(html, url) {
             })();
         `;
 
-        // Làm sạch chuỗi JS để tránh lỗi JSON parse
-        var fixedScript = autoLoginAndKillAdsJs.replace(/\r\n|\r|\n/g, " ").trim();
-
         return JSON.stringify({
             "url": url,
-            "isEmbed": true, // BẮT BUỘC: Trả về true để App mở Webview nguyên bản
+            "isEmbed": true, 
             "headers": {
                 "Referer": BASEURL,
                 "Block-Ads": "true",
-                "Block-Redirects": "false", // Tắt chặn redirect để code đăng nhập hoạt động
-                "Custom-Js": fixedScript
+                "Block-Redirects": "false", 
+                "Custom-Js": autoLoginAndKillAdsJs.replace(/\r\n|\r|\n/g, " ").trim()
             }
         });
     } catch (e) {
@@ -372,7 +376,7 @@ function parseCountriesResponse(html) { return "[]"; }
 function parseYearsResponse(html) { return "[]"; }
 
 // =============================================================================
-// DANH BẠ THỂ LOẠI & HELPER _$ 
+// DANH BẠ THỂ LOẠI & HELPER _$ (GIỮ NGUYÊN)
 // =============================================================================
 function getLISTmenu() {
     return `[{\"link\":\"&q=l%E1%BB%93ng+ti%E1%BA%BFng\",\"name\":\"Lồng Tiếng\"},{\"link\":\"&genre=tong-tai\",\"name\":\"Tổng tài\"},{\"link\":\"&genre=co-dai\",\"name\":\"Cổ đại\"},{\"link\":\"&genre=tam-ly\",\"name\":\"Tâm lý\"},{\"link\":\"&genre=ngon-tinh\",\"name\":\"Ngôn tình\"},{\"link\":\"&genre=hai-huoc\",\"name\":\"Hài hước\"},{\"link\":\"&genre=nu-cuong\",\"name\":\"Nữ cường\"},{\"link\":\"&genre=huyen-huyen\",\"name\":\"Huyền huyễn\"},{\"link\":\"&genre=toi-pham\",\"name\":\"Tội phạm\"},{\"link\":\"&genre=xuyen-khong\",\"name\":\"Xuyên không\"},{\"link\":\"&genre=thanh-xuan\",\"name\":\"Thanh xuân\"},{\"link\":\"&genre=hanh-dong\",\"name\":\"Hành động\"},{\"link\":\"&genre=kinh-di\",\"name\":\"Kinh dị\"},{\"link\":\"&genre=gia-dinh\",\"name\":\"Gia Đình\"},{\"link\":\"&genre=bi-an\",\"name\":\"Bí ẩn\"},{\"link\":\"&genre=dan-quoc\",\"name\":\"Dân quốc\"},{\"link\":\"&genre=trong-sinh\",\"name\":\"Trọng sinh\"},{\"link\":\"&genre=cuoi-truoc-yeu-sau\",\"name\":\"Cưới trước yêu sau\"},{\"link\":\"&genre=khoa-hoc-vien-tuong\",\"name\":\"Khoa học viễn tưởng\"},{\"link\":\"&genre=hanh-dong-ly-ky\",\"name\":\"Hành động ly kỳ\"},{\"link\":\"&genre=hien-dai\",\"name\":\"Hiện đại\"},{\"link\":\"&genre=bao-thu\",\"name\":\"Báo thù\"},{\"link\":\"&genre=the-thao\",\"name\":\"Thể thao\"},{\"link\":\"&genre=em-be\",\"name\":\"Em bé\"},{\"link\":\"&genre=nguoc-luyen\",\"name\":\"Ngược luyến\"},{\"link\":\"&genre=sung-ngot\",\"name\":\"Sủng ngọt\"},{\"link\":\"&genre=hieu-lam\",\"name\":\"Hiểu lầm\"},{\"link\":\"&genre=khac\",\"name\":\"Khác\"},{\"link\":\"&genre=hao-mon\",\"name\":\"Hào môn\"},{\"link\":\"&genre=tim-nguoi-than\",\"name\":\"Tìm người thân\"},{\"link\":\"&genre=quan-phiet\",\"name\":\"Quân phiệt\"},{\"link\":\"&genre=vuon-len-tu-so-khong\",\"name\":\"Vươn lên từ số không\"},{\"link\":\"&genre=tai-hop\",\"name\":\"Tái hợp\"},{\"link\":\"&genre=su-tro-lai\",\"name\":\"Sự trở lại\"},{\"link\":\"&genre=tam-ly-tinh-cam\",\"name\":\"Tâm lý tình cảm\"},{\"link\":\"&genre=truong-thanh\",\"name\":\"Trưởng thành\"}]`;
