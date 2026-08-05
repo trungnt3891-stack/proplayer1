@@ -16,16 +16,16 @@ function getManifest() {
     return JSON.stringify({
         "id": "shortflix",
         "name": "Phim Ngắn Shortflix",
-        "description": "Bản Webview VIP: Chọc mù Sniffer, Bỏ qua trang Xem Ngay, Cố định dọc.",
-        "version": "2.0.0", 
+        "description": "Load siêu tốc, Bỏ qua trang Xem Ngay, Cố định dọc Webview 100%.",
+        "version": "3.0.0", 
         "baseUrl": BASEURL,
         "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/shortflix.png",
         "isEnabled": true,
         "hasLogin": true,                     
         "loginUrl": BASEURL + "/vi/login",    
-        "type": "shortfilm",                  // Cố định giao diện dọc 
+        "type": "shortfilm",                  // Báo App đây là phim Tiktok
         "layoutType": "VERTICAL",             
-        "playerType": "webview"               // Mở bằng Webview nguyên bản
+        "playerType": "embed"                 // [CHUẨN TÀI LIỆU] Bắt buộc hiển thị phát bằng WebView[cite: 1]
     });
 }
 
@@ -59,29 +59,13 @@ function getFilterConfig() { return JSON.stringify({}); }
 // HELPER: CURSOR BASE64 ENCODE / DECODE 
 // =============================================================================
 function encodeBase64(str) {
-    if (typeof btoa !== 'undefined') { try { return btoa(str); } catch (e) {} }
-    var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-    var output = '';
     var utf8Str = unescape(encodeURIComponent(str));
-    for (var block, charCode, idx = 0, map = chars;
-        utf8Str.charAt(idx | 0) || (map = '=', idx % 1);
-        output += map.charAt(63 & block >> 8 - idx % 1 * 8)) {
-        charCode = utf8Str.charCodeAt(idx += 3/4);
-        block = block << 8 | charCode;
-    }
-    return output;
+    return encodeURIComponent(utf8Str); // [CHUẨN TÀI LIỆU] Dùng encodeURIComponent thay cho btoa trong QuickJS[cite: 1]
 }
 
 function decodeBase64(str) {
-    if (typeof atob !== 'undefined') { try { return atob(str); } catch (e) {} }
-    var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-    var output = '';
-    str = String(str).replace(/=+$/, '');
-    for (var bc = 0, bs, buffer, idx = 0;
-        buffer = str.charAt(idx++);
-        ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer, bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0
-    ) { buffer = chars.indexOf(buffer); }
-    return decodeURIComponent(escape(output));
+    var decoded = decodeURIComponent(str); // [CHUẨN TÀI LIỆU] Dùng decodeURIComponent[cite: 1]
+    return decodeURIComponent(escape(decoded));
 }
 
 function parseCursor(cursorBase64) {
@@ -243,24 +227,16 @@ function parseMovieDetail(html, url) {
         var ldirec = _$(html).find("span:content('Đạo diễn:')").parent().text().trim().replace("Đạo diễn:", "");
         var status = _$(html).find("span:content('Trạng thái:')").parent().text().trim().replace("Trạng thái:", "");
         
-        // ⚡ [TỐI ƯU TỐC ĐỘ]: Lấy thẳng link PLAY, bỏ qua trang Xem Ngay
-        var directPlayUrl = url;
-        var htmlStr = typeof html === 'string' ? html : "";
-        var playMatch = htmlStr.match(/href=["']([^"']+\/play\/[^"']+)["']/i);
-        
-        if (playMatch) {
-            directPlayUrl = playMatch[1];
-            if (directPlayUrl.indexOf('http') !== 0) directPlayUrl = BASEURL + directPlayUrl;
-        } else {
-            // Backup nếu không tìm thấy thẻ <a>, tự tạo link /play/
-            directPlayUrl = url.replace("/videos/", "/play/");
-        }
+        // ⚡ BƯỚC NHẢY CÓC (BYPASS TRANG CHI TIẾT):
+        // Chuyển thẳng link từ dạng /videos/slug sang dạng /play/slug
+        // Để khi bấm "Xem Tiếp", Webview vào thẳng Player Vuốt, bỏ qua nút "Xem Ngay" màu vàng.
+        var directPlayUrl = url.replace("/videos/", "/play/");
         
         var servers = [{
-            name: "Lướt Chuyển Tập Tự Động",
+            name: "Giao Diện Vuốt (Web)",
             episodes: [{
-                id: directPlayUrl, // Gửi link /play/ để vào thẳng giao diện Player
-                name: "Bấm vào để Xem & Vuốt ngay",
+                id: directPlayUrl, // Gửi link /play/ thay vì url gốc
+                name: "Bấm vào để Xem ngay",
                 slug: "webview-player"
             }]
         }];
@@ -287,90 +263,32 @@ function parseMovieDetail(html, url) {
 }
 
 // =============================================================================
-// WEBVIEW LOADER: CHỌC MÙ SNIFFER & CHỐNG XOAY NGANG
+// WEBVIEW LOADER: ÉP CHẾ ĐỘ NHÚNG ĐỂ TẮT SNIFFER
 // =============================================================================
 function parseDetailResponse(html, url) {
     try {
-        var blindSnifferAndLoginJs = `
+        var autoLoginAndAntiRotateJs = `
             (function() {
-                // =================================================================
-                // 1. CHỌC MÙ TRÌNH DÒ LINK CỦA APP (Ngăn chặn mở ExoPlayer)
-                // =================================================================
-                var origQuery = document.querySelector;
-                document.querySelector = function(selector) {
-                    if (selector && typeof selector === 'string' && selector.toLowerCase().indexOf('video') !== -1) {
-                        return document.createElement('div'); // Trả về thẻ giả để lừa App
-                    }
-                    return origQuery.apply(this, arguments);
-                };
-                
-                var origQueryAll = document.querySelectorAll;
-                document.querySelectorAll = function(selector) {
-                    if (selector && typeof selector === 'string' && selector.toLowerCase().indexOf('video') !== -1) {
-                        return []; // Báo cáo không có video nào
-                    }
-                    return origQueryAll.apply(this, arguments);
-                };
-                
-                var origGetTags = document.getElementsByTagName;
-                document.getElementsByTagName = function(tag) {
-                    if (tag && typeof tag === 'string' && tag.toLowerCase() === 'video') {
-                        return []; 
-                    }
-                    return origGetTags.apply(this, arguments);
-                };
-
-                // Vô hiệu hóa tính năng Fullscreen của trình duyệt
+                // Tiêu diệt API gọi màn hình ngang của Website
                 try {
                     Object.defineProperty(document, 'fullscreenEnabled', {get: function() { return false; }});
                     Object.defineProperty(document, 'webkitFullscreenEnabled', {get: function() { return false; }});
+                    if(Element.prototype.requestFullscreen) Element.prototype.requestFullscreen = function() { return Promise.resolve(); };
+                    if(Element.prototype.webkitRequestFullscreen) Element.prototype.webkitRequestFullscreen = function() { return Promise.resolve(); };
                 } catch(e) {}
 
-                // =================================================================
-                // 2. CSS ẨN QUẢNG CÁO & XÓA CÁC NÚT BẤM FULLSCREEN
-                // =================================================================
                 var EMAIL = "iamwilliamm6@gmail.com";
                 var PASS = "trung@123";
 
+                // CSS Ẩn toàn bộ rác, ẩn nút phóng to của web, khóa cuộn ngang
                 var style = document.createElement('style');
-                style.innerHTML = 'header, .header, nav, footer, .footer, .download-app, .app-download, [class*="ad-"], [id*="ad-"], .popup, .modal, .bottom-nav, .navigation, .sidebar, .comments, .vjs-fullscreen-control, .plyr__controls [data-plyr="fullscreen"], .jw-fullscreen, .fullscreen-btn { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } body, html { margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: #000 !important; overscroll-behavior-y: none; width: 100vw !important; height: 100vh !important; }';
+                style.innerHTML = 'header, .header, nav, footer, .footer, .download-app, .app-download, [class*="ad-"], [id*="ad-"], .popup, .modal, .bottom-nav, .navigation, .sidebar, .comments, .vjs-fullscreen-control, .plyr__controls [data-plyr="fullscreen"], .jw-fullscreen, .fullscreen-btn { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } body, html { margin: 0 !important; padding: 0 !important; overflow-x: hidden !important; background: #000 !important; overscroll-behavior-y: none; }';
                 document.head.appendChild(style);
 
-                // =================================================================
-                // 3. VÒNG LẶP XỬ LÝ VIDEO BẰNG HÀM GỐC (Bypass lớp chọc mù ở trên)
-                // =================================================================
-                setInterval(function() {
-                    try {
-                        // Gọi hàm gốc để vẫn lấy được video xử lý playsinline (chống Android tự phóng to)
-                        var vids = origQueryAll.call(document, 'video');
-                        for(var k = 0; k < vids.length; k++) {
-                            vids[k].setAttribute('playsinline', 'true');
-                            vids[k].setAttribute('webkit-playsinline', 'true');
-                            vids[k].removeAttribute('controls');
-                            
-                            // Auto-play khi phim bị khựng
-                            if (vids[k].paused && !vids[k].dataset.autoPlayed) {
-                                var p = vids[k].play();
-                                if (p) p.then(function(){ vids[k].dataset.autoPlayed = true; }).catch(function(){});
-                            }
-                        }
-                    } catch(e) {}
-
-                    try {
-                        var appBanners = origQueryAll.call(document, 'div[class*="download"], div[class*="banner"]');
-                        for (var i = 0; i < appBanners.length; i++) {
-                            if (appBanners[i]) appBanners[i].style.display = 'none';
-                        }
-                    } catch(e) {}
-                }, 500);
-
-                // =================================================================
-                // 4. AUTO LOGIN LOGIC
-                // =================================================================
+                // Auto Login Logic
                 if (sessionStorage.getItem('vax_autologin_done')) return;
-
                 function doLogin() {
-                    var loginBtn = origQuery.call(document, 'a[href*="/login"]');
+                    var loginBtn = document.querySelector('a[href*="/login"]');
                     if (loginBtn) {
                         sessionStorage.setItem('vax_redirect_back', window.location.href);
                         window.location.href = loginBtn.href; 
@@ -381,25 +299,21 @@ function parseDetailResponse(html, url) {
 
                 if (window.location.href.indexOf('/login') > -1) {
                     var checkForm = setInterval(function() {
-                        var emailInput = origQuery.call(document, 'input[type="email"], input[name="email"], input[placeholder*="mail"]');
-                        var passInput = origQuery.call(document, 'input[type="password"], input[name="password"]');
-                        var submitBtn = origQuery.call(document, 'button[type="submit"]');
+                        var emailInput = document.querySelector('input[type="email"], input[name="email"], input[placeholder*="mail"]');
+                        var passInput = document.querySelector('input[type="password"], input[name="password"]');
+                        var submitBtn = document.querySelector('button[type="submit"]');
 
                         if (emailInput && passInput && submitBtn) {
                             clearInterval(checkForm);
-                            
                             var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-                            
                             nativeInputValueSetter.call(emailInput, EMAIL);
                             emailInput.dispatchEvent(new Event('input', { bubbles: true }));
-                            
                             nativeInputValueSetter.call(passInput, PASS);
                             passInput.dispatchEvent(new Event('input', { bubbles: true }));
                             
                             setTimeout(function() {
                                 submitBtn.click();
                                 sessionStorage.setItem('vax_autologin_done', 'true');
-                                
                                 setTimeout(function() {
                                     var backUrl = sessionStorage.getItem('vax_redirect_back');
                                     if (backUrl) window.location.href = backUrl;
@@ -416,12 +330,12 @@ function parseDetailResponse(html, url) {
 
         return JSON.stringify({
             "url": url,
-            "isEmbed": true, 
+            "isEmbed": true, // [CHUẨN TÀI LIỆU] isEmbed: true kết hợp playerType: embed để vô hiệu hóa Sniffer mở ExoPlayer[cite: 1]
             "headers": {
                 "Referer": BASEURL,
                 "Block-Ads": "true",
                 "Block-Redirects": "false", 
-                "Custom-Js": blindSnifferAndLoginJs.replace(/\r\n|\r|\n/g, " ").trim()
+                "Custom-Js": autoLoginAndAntiRotateJs.replace(/\r\n|\r|\n/g, " ").trim()
             }
         });
     } catch (e) {
