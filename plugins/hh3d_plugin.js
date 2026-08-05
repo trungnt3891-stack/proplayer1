@@ -6,14 +6,14 @@ function getManifest() {
     return JSON.stringify({
         "id": "yanhh3d",
         "name": "YanHH3D",
-        "version": "4.3.0", // Bản cập nhật: Domain yanhh3d.love, Giữ Vietsub & Thuyết Minh 4K
+        "version": "4.3.1", // Bản cập nhật: Ép chạy chế độ Web View Player
         "baseUrl": "https://yanhh3d.love", 
         "iconUrl": "https://yanhh3d.love/storage/settings/August2024/YOoAwtlobLbwKhiFwRZv.png",
         "isEnabled": true,
         "isAdult": false,
         "type": "MOVIE",
         "layoutType": "VERTICAL",
-        "playerType": "auto"
+        "playerType": "webview" // Đã chuyển sang Web View
     });
 }
 
@@ -320,42 +320,34 @@ function parseMovieDetail(html) {
     }
 }
 
+// =============================================================================
+// STREAM / EMBED EXTRACTORS (Cập nhật ưu tiên Web View)
+// =============================================================================
+
 function parseDetailResponse(html) {
     try {
         var streamUrl = "";
         
-        var m3u8Match = html.match(/(https?:\/\/[^"'\s<>]*\.m3u8[^"'\s<>]*)/i);
-        if (m3u8Match) {
-            streamUrl = m3u8Match[1].replace(/\\/g, "");
-        }
-        
-        if (!streamUrl) {
-            var mp4Match = html.match(/(https?:\/\/[^"'\s<>]*\.mp4[^"'\s<>]*)/i);
-            if (mp4Match) streamUrl = mp4Match[1].replace(/\\/g, "");
-        }
-
-        if (!streamUrl) {
-            var iframeMatch = html.match(/<iframe[^>]+src=["']([^"']+)["']/i);
-            if (iframeMatch) {
-                streamUrl = iframeMatch[1];
-                if (streamUrl.indexOf("//") === 0) streamUrl = "https:" + streamUrl;
-                return JSON.stringify({
-                    url: streamUrl,
-                    headers: { "Referer": "https://yanhh3d.love/" },
-                    isEmbed: true
-                });
-            }
-        }
-
-        if (streamUrl) {
+        // Chỉ bắt iframe Web Player gốc để nạp vào Web View
+        var iframeMatch = html.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+        if (iframeMatch) {
+            streamUrl = iframeMatch[1];
+            if (streamUrl.indexOf("//") === 0) streamUrl = "https:" + streamUrl;
+            
             return JSON.stringify({
                 url: streamUrl,
-                headers: { 
-                    "Referer": "https://yanhh3d.love/",
-                    "Origin": "https://yanhh3d.love",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                },
-                isEmbed: false 
+                headers: { "Referer": "https://yanhh3d.love/" },
+                isEmbed: true // Bắt buộc mở bằng Web View thay vì Trình phát nội bộ
+            });
+        }
+        
+        // Nếu không lấy được iframe, trả về URL hiện tại để nó load thẳng trang phim vào Web View
+        var ogUrl = html.match(/<meta property="og:url" content="([^"]+)"/i);
+        if (ogUrl) {
+            return JSON.stringify({
+                url: ogUrl[1],
+                headers: { "Referer": "https://yanhh3d.love/" },
+                isEmbed: true
             });
         }
         
@@ -367,28 +359,16 @@ function parseDetailResponse(html) {
 
 function parseEmbedResponse(html, sourceUrl) {
     try {
-        var streamUrl = "";
-        var m3u8Match = html.match(/(https?:\/\/[^"'\s<>]*\.m3u8[^"'\s<>]*)/i);
-        if (m3u8Match) streamUrl = m3u8Match[1].replace(/\\/g, "");
-
-        if (!streamUrl) {
-            var mp4Match = html.match(/(https?:\/\/[^"'\s<>]*\.mp4[^"'\s<>]*)/i);
-            if (mp4Match) streamUrl = mp4Match[1].replace(/\\/g, "");
-        }
-
-        if (streamUrl) {
-            return JSON.stringify({
-                url: streamUrl,
-                isEmbed: false,
-                mimeType: streamUrl.indexOf(".m3u8") !== -1 ? "application/x-mpegURL" : "video/mp4",
-                headers: {
-                    "Referer": sourceUrl,
-                    "Origin": sourceUrl.split('/').slice(0, 3).join('/'),
-                    "User-Agent": "Mozilla/5.0"
-                }
-            });
-        }
-        return JSON.stringify({ url: "", isEmbed: false });
+        // Trong chế độ Web View, bỏ qua việc cào m3u8. 
+        // Trả về chính link đó để Web View tự xử lý player gốc.
+        return JSON.stringify({ 
+            url: sourceUrl, 
+            isEmbed: true,
+            headers: {
+                "Referer": "https://yanhh3d.love/",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+            }
+        });
     } catch (e) {
         return JSON.stringify({ url: "", isEmbed: false });
     }
