@@ -9,7 +9,7 @@ function getManifest() {
         "id": "phimngan_net",
         "name": "PhimNgan.Net",
         "description": "Bản Webview Gốc: Load siêu tốc, ép video dọc, xóa rác giao diện.",
-        "version": "1.9.0",
+        "version": "1.9.5",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/icons/icon-192x192.png",
         "isEnabled": true,
@@ -35,26 +35,26 @@ function log(msg) {
 
 function getHomeSections() {
     return JSON.stringify([
-        { slug: '', title: 'Mới Cập Nhật', type: 'Grid' },
-        { slug: 'genres/phim-ai', title: 'Phim AI', type: 'Horizontal' },
-        { slug: 'genres/ngon-tinh', title: 'Ngôn Tình', type: 'Horizontal' },
-        { slug: 'genres/tong-tai', title: 'Tổng Tài', type: 'Horizontal' },
-        { slug: 'genres/cung-dau', title: 'Cung Đấu', type: 'Grid' },
-        { slug: 'genres/hanh-dong', title: 'Hành Động', type: 'Horizontal' }
+        { slug: '/', title: 'Mới Cập Nhật', type: 'Grid' },
+        { slug: '/genres/phim-ai', title: 'Phim AI', type: 'Horizontal' },
+        { slug: '/genres/ngon-tinh', title: 'Ngôn Tình', type: 'Horizontal' },
+        { slug: '/genres/tong-tai', title: 'Tổng Tài', type: 'Horizontal' },
+        { slug: '/genres/cung-dau', title: 'Cung Đấu', type: 'Grid' },
+        { slug: '/genres/hanh-dong', title: 'Hành Động', type: 'Horizontal' }
     ]);
 }
 
 function getPrimaryCategories() {
     return JSON.stringify([
-        { name: 'Mới Cập Nhật', slug: '' },
-        { name: 'Phim AI', slug: 'genres/phim-ai' },
-        { name: 'Ngôn Tình', slug: 'genres/ngon-tinh' },
-        { name: 'Tổng Tài', slug: 'genres/tong-tai' },
-        { name: 'Cung Đấu', slug: 'genres/cung-dau' },
-        { name: 'Gia Đình', slug: 'genres/gia-dinh' },
-        { name: 'Hài Hước', slug: 'genres/hai-huoc' },
-        { name: 'Phục Thù', slug: 'genres/phuc-thu' },
-        { name: 'Xuyên Không', slug: 'genres/xuyen-khong' }
+        { name: 'Mới Cập Nhật', slug: '/' },
+        { name: 'Phim AI', slug: '/genres/phim-ai' },
+        { name: 'Ngôn Tình', slug: '/genres/ngon-tinh' },
+        { name: 'Tổng Tài', slug: '/genres/tong-tai' },
+        { name: 'Cung Đấu', slug: '/genres/cung-dau' },
+        { name: 'Gia Đình', slug: '/genres/gia-dinh' },
+        { name: 'Hài Hước', slug: '/genres/hai-huoc' },
+        { name: 'Phục Thù', slug: '/genres/phuc-thu' },
+        { name: 'Xuyên Không', slug: '/genres/xuyen-khong' }
     ]);
 }
 
@@ -76,7 +76,8 @@ function getUrlList(slug, filtersJson) {
 
         if (slug && slug.indexOf("http") === 0) return slug;
 
-        var resultUrl = BASEURL + (slug ? "/" + slug : "");
+        var path = slug || "/";
+        var resultUrl = BASEURL + (path.indexOf("/") === 0 ? path : "/" + path);
 
         if (page > 1) {
             resultUrl += (resultUrl.indexOf("?") > -1 ? "&" : "?") + "page=" + page;
@@ -84,7 +85,7 @@ function getUrlList(slug, filtersJson) {
         
         return resultUrl;
     } catch (e) {
-        return BASEURL;
+        return BASEURL + "/";
     }
 }
 
@@ -107,78 +108,78 @@ function getUrlYears() { return ""; }
 // PARSERS
 // =============================================================================
 
-// Thuật toán cắt chuỗi cực kỳ an toàn, bỏ qua thư viện ngoài để tránh sập App
 function parseListResponse(html, apiUrl) {
     var items = [];
     try {
+        // Tách từng đoạn HTML chứa thẻ <a> để tránh bị trôi Regex
         var chunks = html.split('<a ');
         var seen = {};
 
         for (var i = 1; i < chunks.length; i++) {
-            var chunk = chunks[i];
-            
-            // Chỉ bắt các block <a> có chứa link tới /phim/ hoặc /watch/
-            var hrefMatch = chunk.match(/href=["'](\/(?:phim|watch)\/[^"']+)["']/i);
-            if (!hrefMatch) continue;
+            var chunk = '<a ' + chunks[i]; 
 
-            var link = hrefMatch[1];
+            // Chỉ bắt thẻ a có chứa href /phim/ hoặc /watch/
+            var hrefM = chunk.match(/href=["'](\/(?:phim|watch)\/[^"']+)["']/i);
+            if (!hrefM) continue;
+
+            var link = hrefM[1];
             var id = BASEURL + link;
 
-            // Chống lặp phim
             if (seen[id]) continue;
             seen[id] = true;
 
-            // Lấy tiêu đề
+            // Bắt tiêu đề
             var title = "";
-            var titleMatch = chunk.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
-            if (titleMatch) {
-                title = titleMatch[1].replace(/<[^>]+>/g, '').trim();
+            var titleM = chunk.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
+            if (titleM) {
+                title = titleM[1].replace(/<[^>]+>/g, '').trim();
             } else {
-                var altMatch = chunk.match(/alt=["']([^"']+)["']/i);
-                if (altMatch) title = altMatch[1];
+                var altM = chunk.match(/alt=["']([^"']+)["']/i);
+                if (altM) title = altM[1].trim();
             }
 
-            // Lấy ảnh poster (Giải mã base64 URL của Next.js)
+            if (!title) continue; 
+
+            // Bắt ảnh bìa
             var img = "";
-            var imgMatch = chunk.match(/<img[^>]*src=["']([^"']+)["']/i);
-            if (imgMatch) {
-                img = imgMatch[1];
+            var imgM = chunk.match(/<img[^>]+src=["']([^"']+)["']/i);
+            if (imgM) {
+                img = imgM[1];
                 if (img.indexOf('url=') > -1) {
-                    var uMatch = img.match(/url=([^&]+)/);
-                    if (uMatch) img = decodeURIComponent(uMatch[1]);
+                    var uM = img.match(/url=([^&]+)/);
+                    if (uM) img = decodeURIComponent(uM[1]);
                 }
             }
             if (img && img.indexOf('http') === -1) {
-                img = BASEURL + img;
+                if (img.indexOf('//') === 0) img = "https:" + img;
+                else img = BASEURL + img;
             }
 
-            // Lấy trạng thái tập (nằm trong thẻ span chữ in hoa)
+            // Bắt trạng thái tập
             var ep = "Full";
-            var epMatch = chunk.match(/<span[^>]*uppercase[^>]*>([\s\S]*?)<\/span>/i);
-            if (epMatch) {
-                ep = epMatch[1].replace(/<[^>]+>/g, '').trim();
+            var epM = chunk.match(/<span[^>]*uppercase[^>]*>([\s\S]*?)<\/span>/i);
+            if (epM) {
+                ep = epM[1].replace(/<[^>]+>/g, '').trim();
             }
 
-            if (title && img) {
-                items.push({
-                    id: id,
-                    title: title,
-                    posterUrl: img,
-                    backdropUrl: img,
-                    quality: "HD",
-                    episode_current: ep
-                });
-            }
+            items.push({
+                id: id,
+                title: title,
+                posterUrl: img,
+                backdropUrl: img,
+                quality: "HD",
+                episode_current: ep
+            });
         }
     } catch(e) {
-        log("Lỗi Parse: " + e.message);
+        log("Parse Error: " + e.message);
     }
 
     return JSON.stringify({
         items: items,
         pagination: {
             currentPage: 1,
-            totalPages: 99 // Hỗ trợ Load More vô tận
+            totalPages: 99 // Nền tảng tự động cuộn trang
         }
     });
 }
@@ -229,7 +230,7 @@ function parseMovieDetail(html, url) {
 
 function parseDetailResponse(html, url) {
     try {
-        // Áp dụng chuẩn logic CustomJS từ mẫu shortflix (Xóa quảng cáo & Đăng nhập tự động)
+        // Áp dụng chuẩn logic CustomJS từ mẫu shortflix
         var pureWebviewJs = `
             (function() {
                 try {
@@ -262,10 +263,6 @@ function parseDetailResponse(html, url) {
                             vids[k].setAttribute('playsinline', 'true');
                             vids[k].setAttribute('webkit-playsinline', 'true');
                         }
-                    }
-                    var appBanners = document.querySelectorAll('div[class*="download"], div[class*="banner"]');
-                    for (var i = 0; i < appBanners.length; i++) {
-                        if (appBanners[i]) appBanners[i].style.display = 'none';
                     }
                 }, 500);
 
@@ -316,9 +313,10 @@ function parseDetailResponse(html, url) {
             "isEmbed": true, 
             "headers": {
                 "Referer": BASEURL,
+                "User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
                 "Block-Ads": "true",
                 "Block-Redirects": "false", 
-                "Custom-Js": pureWebviewJs.replace(/\r\n|\r|\n/g, " ").trim()
+                "Custom-Js": pureWebviewJs.replace(/\n/g, " ").trim()
             }
         });
     } catch (e) {
