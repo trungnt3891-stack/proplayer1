@@ -1,6 +1,6 @@
 // =============================================================================
 // PLUGIN VAX APP: GÀ MỜ MÊ PHIM (GAMOMEPHIM.COM)
-// CHUYÊN GIA TỐI ƯU: TRỰC TIẾP MP4 + DỰ PHÒNG HOOK (HYBRID)
+// CHUYÊN GIA TỐI ƯU: TRỰC TIẾP MP4 SIÊU TỐC + DỰ PHÒNG HOOK (HYBRID)
 // =============================================================================
 
 var BASEURL = "https://gamomephim.com";
@@ -9,15 +9,15 @@ function getManifest() {
     return JSON.stringify({
         "id": "gamomephim",
         "name": "Gà Mờ Mê Phim",
-        "description": "Bản Hybrid Tối Cao: Moi trực tiếp link MP4 + Có sẵn Hook tự động click dự phòng.",
-        "version": "8.0.0",
+        "description": "Bản Hybrid Tối Cao: Moi trực tiếp link MP4 + Có Hook tự động click nút 'Vào Xem Phim'.",
+        "version": "9.0.0",
         "baseUrl": BASEURL,
         "iconUrl": "https://r2.gamomephim.com/site/logo-1784305321242.png",
         "isEnabled": true,
         "isAdult": false,
-        "type": "shortfilm", // Bắt buộc: Kích hoạt giao diện Player Dọc
+        "type": "shortfilm", // Kích hoạt giao diện vuốt dọc (TikTok-style)
         "layoutType": "VERTICAL",
-        "playerType": "auto" // Tự động chọn Native ExoPlayer hoặc Webview Hook
+        "playerType": "embedtoexoplay" // Hỗ trợ chạy Webview ngầm cho chức năng Hook dự phòng
     });
 }
 
@@ -46,11 +46,17 @@ function getPrimaryCategories() {
         { name: 'Bảng Xếp Hạng', slug: 'ban-xep-hang' },
         { name: 'Chữa Lành', slug: 'the-loai/chua-lanh' },
         { name: 'Cổ Trang', slug: 'the-loai/co-trang' },
+        { name: 'Cưới Trước Yêu Sau', slug: 'the-loai/cuoi-truoc-yeu-sau' },
+        { name: 'Dân Quốc', slug: 'the-loai/dan-quoc' },
+        { name: 'Gương Vỡ Lại Lành', slug: 'the-loai/guong-vo-lai-lanh' },
         { name: 'Hài Hước', slug: 'the-loai/hai-huoc' },
         { name: 'Hiện Đại', slug: 'the-loai/hien-dai' },
+        { name: 'Niên Đại', slug: 'the-loai/nien-dai' },
         { name: 'Thanh Xuân', slug: 'the-loai/thanh-xuan' },
         { name: 'Trà Xanh Nam', slug: 'the-loai/tra-xanh-nam' },
-        { name: 'Xuyên Không', slug: 'the-loai/xuyen-khong' }
+        { name: 'Trọng Sinh', slug: 'the-loai/trong-sinh' },
+        { name: 'Xuyên Không', slug: 'the-loai/xuyen-khong' },
+        { name: 'Yêu Thầm', slug: 'the-loai/yeu-tham' }
     ]);
 }
 
@@ -85,7 +91,6 @@ function getUrlSearch(keyword, filtersJson) {
 function getUrlDetail(slug) {
     if (!slug) return "";
     if (slug.indexOf("http") === 0) return slug;
-    // Bỏ chữ /phim/ để quy chuẩn URL
     var cleanSlug = slug.replace(/^\//, "").replace(/^phim\//, "");
     return BASEURL + "/" + cleanSlug;
 }
@@ -102,7 +107,6 @@ function parseListResponse(html, url) {
     try {
         var items = [];
         var added = {};
-        
         var unescapedHtml = html.replace(/\\"/g, '"');
         var regex = /"item"\s*:\s*(\{[^{}]*"slug"\s*:\s*"([^"]+)"[^{}]*\})/g;
         var match;
@@ -114,7 +118,6 @@ function parseListResponse(html, url) {
                 var titleMatch = objStr.match(/"title"\s*:\s*"([^"]+)"/);
                 var imgMatch = objStr.match(/"img"\s*:\s*"([^"]+)"/);
                 var badgeMatch = objStr.match(/"badge"\s*:\s*"([^"]+)"/);
-                var yearMatch = objStr.match(/"year"\s*:\s*(\d+)/);
                 
                 if (titleMatch && !added[slug]) {
                     added[slug] = true;
@@ -124,7 +127,6 @@ function parseListResponse(html, url) {
                         posterUrl: imgMatch ? imgMatch[1] : "",
                         backdropUrl: imgMatch ? imgMatch[1] : "",
                         quality: badgeMatch ? badgeMatch[1] : "HD",
-                        year: yearMatch ? parseInt(yearMatch[1]) : 0,
                         episode_current: badgeMatch ? badgeMatch[1] : "Cập nhật"
                     });
                 }
@@ -132,7 +134,7 @@ function parseListResponse(html, url) {
         }
 
         if (items.length === 0) {
-            var domRegex = /<a[^>]+href="(?:\/phim)?\/([^"]+)"[^>]*title="([^"]+)"[\s\S]*?<img[^>]+src="([^"]+)"[\s\S]*?(?:<span[^>]*>([^<]+)<\/span>)?/gi;
+            var domRegex = /<a[^>]+href="(?:\/phim)?\/([^"]+)"[^>]*title="([^"]+)"[\s\S]*?<img[^>]+src="([^"]+)"/gi;
             var domMatch;
             while ((domMatch = domRegex.exec(html)) !== null) {
                 var dSlug = domMatch[1];
@@ -143,12 +145,11 @@ function parseListResponse(html, url) {
                         title: domMatch[2].trim(),
                         posterUrl: domMatch[3],
                         backdropUrl: domMatch[3],
-                        episode_current: domMatch[4] ? domMatch[4].trim() : "Full"
+                        episode_current: "Full"
                     });
                 }
             }
         }
-
         return JSON.stringify({ items: items, pagination: { currentPage: 1, totalPages: items.length > 0 ? 99 : 1 } });
     } catch (e) { return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } }); }
 }
@@ -164,7 +165,7 @@ function parseMovieDetail(html, url) {
         var casts = "";
         var duration = "";
 
-        // Trích Metadata
+        // Bóc tách Thông Tin Metadata
         var metaTitle = html.match(/<meta property="og:title" content="([^"]+)"/);
         if (metaTitle) title = metaTitle[1].replace(/ FULL - Gà Mờ Mê Phim/gi, "").replace(/ - Gà Mờ Mê Phim/gi, "").trim();
 
@@ -187,55 +188,53 @@ function parseMovieDetail(html, url) {
         }
 
         // =====================================================================
-        // TRỤC CHÍNH: MOI TRỰC TIẾP LINK MP4 TỪ HTML GỐC BẰNG SPLIT (SIÊU CHUẨN)
+        // TRỤC CHÍNH: MOI TRỰC TIẾP LINK MP4 TỪ MÃ NGUỒN (KHÔNG CẦN CHẠY WEBVIEW)
+        // Dùng Regex siêu mạnh tóm gọn cả JSON đã escape (\")
         // =====================================================================
         var svSub = [];
         var svTm = [];
         var addedEps = {};
         
-        // Tách chuỗi cực mạnh, chống lỗi dính chùm JSON
-        var blocks = html.split(/\\?"episodeNumber\\?"\s*:/);
-        for (var i = 1; i < blocks.length; i++) {
-            var block = blocks[i];
+        var epRegex = /\{[^{}]*?"m3u8Url\\?"\s*:\s*\\?"(https:[^"\\]+)[^{}]*?\}/gi;
+        var match;
+        while ((match = epRegex.exec(html)) !== null) {
+            var block = match[0];
+            var urlM = block.match(/"m3u8Url\\?"\s*:\s*\\?"(https:[^"\\]+)/i);
+            var numM = block.match(/"episodeNumber\\?"\s*:\s*(\d+)/i);
+            var audioM = block.match(/"audioType\\?"\s*:\s*\\?"([^"\\]+)/i);
             
-            var numMatch = block.match(/^(\d+)/);
-            var epNum = numMatch ? numMatch[1] : "1";
-            
-            var linkMatch = block.match(/m3u8Url\\?"\s*:\s*\\?"(https:[^"\\]+)/);
-            var epLink = linkMatch ? linkMatch[1] : "";
-            
-            var audioMatch = block.match(/audioType\\?"\s*:\s*\\?"([^"\\]+)/);
-            var audioType = audioMatch ? audioMatch[1] : "VIETSUB";
-            
-            if (epLink) {
-                var slug = (audioType === "THUYET_MINH" ? "tm-" : "vs-") + epNum;
+            if (urlM && urlM[1]) {
+                var link = urlM[1].replace(/\\\//g, '/'); // Gỡ rối dấu gạch chéo
+                var num = numM ? numM[1] : "1";
+                var audio = audioM ? audioM[1] : "VIETSUB";
+                var slug = (audio === "THUYET_MINH" ? "tm-" : "vs-") + num;
+                
                 if (!addedEps[slug]) {
                     addedEps[slug] = true;
-                    // Nhét trực tiếp link .mp4 vào ID
-                    if (audioType === "THUYET_MINH") {
-                        svTm.push({ id: epLink, name: "Tập " + epNum, slug: slug });
+                    // Tống thẳng link .mp4 vào ID để player phát liền tay
+                    if (audio === "THUYET_MINH") {
+                        svTm.push({ id: link, name: "Tập " + num, slug: slug });
                     } else {
-                        svSub.push({ id: epLink, name: "Tập " + epNum, slug: slug });
+                        svSub.push({ id: link, name: "Tập " + num, slug: slug });
                     }
                 }
             }
         }
 
         var servers = [];
-        if (svTm.length > 0) servers.push({ name: "Phát Ngay - Thuyết Minh", episodes: svTm });
-        if (svSub.length > 0) servers.push({ name: "Phát Ngay - Vietsub", episodes: svSub });
+        if (svTm.length > 0) servers.push({ name: "Phát Ngay - Thuyết Minh (Native)", episodes: svTm });
+        if (svSub.length > 0) servers.push({ name: "Phát Ngay - Vietsub (Native)", episodes: svSub });
 
-        // NẾU MOI LINK THẤT BẠI HOẶC BẠN MUỐN DÙNG HOOK, TẠO SERVER DỰ PHÒNG CHẠY HOOK
+        // TẠO SERVER DỰ PHÒNG CHẠY BẰNG HOOK TỰ ĐỘNG BẤM NÚT "VÀO XEM PHIM"
         var cleanUrl = url.split("|")[0];
         servers.push({
-            name: "Dự phòng (Chạy Hook tự động)",
+            name: "Dự phòng (Chạy Hook Tự Động)",
             episodes: [
-                { id: cleanUrl + "|data:hook=vs", name: "Bản Vietsub", slug: "hook-vs" },
-                { id: cleanUrl + "|data:hook=tm", name: "Bản Thuyết Minh", slug: "hook-tm" }
+                { id: cleanUrl + "|data:hook=vs", name: "Tự động Vietsub", slug: "hook-vs" },
+                { id: cleanUrl + "|data:hook=tm", name: "Tự động Thuyết Minh", slug: "hook-tm" }
             ]
         });
 
-        // Sort eps
         servers.forEach(function(s) {
             s.episodes.sort(function(a, b) {
                 var matchA = a.slug.match(/\d+/);
@@ -264,17 +263,17 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// XỬ LÝ 2 NHÁNH: PHÁT TRỰC TIẾP HOẶC CHẠY HOOK
+// XỬ LÝ NHÁNH: PHÁT TRỰC TIẾP MP4 HOẶC GỌI WEBVIEW NGẦM CHẠY HOOK
 function parseDetailResponse(html, apiUrl) {
     try {
         var url = apiUrl.split("|")[0];
 
-        // 1. NHÁNH NATIVE: Nếu ID truyền vào đã là link MP4 (Moi thành công)
+        // 1. NHÁNH NATIVE: Nếu ID là link MP4 (Trích xuất thành công từ bước 1)
         if (url.indexOf(".mp4") > -1 || url.indexOf(".m3u8") > -1) {
             var mimeType = url.indexOf(".m3u8") > -1 ? "application/x-mpegURL" : "video/mp4";
             return JSON.stringify({
                 "url": url, 
-                "isEmbed": false, // Bật Native Player Dọc, 0% quảng cáo
+                "isEmbed": false, // KÍCH HOẠT PLAYER NATIVE DỌC CỦA VAX APP, 0% quảng cáo
                 "mimeType": mimeType,
                 "headers": {
                     "Referer": BASEURL,
@@ -285,7 +284,7 @@ function parseDetailResponse(html, apiUrl) {
             });
         }
 
-        // 2. NHÁNH HOOK: Nếu bạn bấm vào các tập ở "Server Dự Phòng"
+        // 2. NHÁNH HOOK: Tự động giả lập bấm nút VÀO XEM PHIM -> BẤM NGÔN NGỮ -> BẤM PLAY
         var isVietsub = apiUrl.indexOf('hook=vs') > -1 ? true : false;
         var customJsCode = `
         (function() {
@@ -298,7 +297,12 @@ function parseDetailResponse(html, apiUrl) {
 
             var checkInterval = setInterval(function() {
                 try {
-                    // BƯỚC 1: CLICK NÚT VÀO XEM PHIM (MỞ KHÓA PLAYER)
+                    // BƯỚC 1: XÓA SẠCH QUẢNG CÁO HIỂN THỊ
+                    var style = document.createElement('style');
+                    style.innerHTML = 'header, footer, nav, iframe, .ads { display: none !important; }';
+                    document.head.appendChild(style);
+
+                    // BƯỚC 2: TÌM VÀ CLICK NÚT "VÀO XEM PHIM"
                     if (step === 0) {
                         var links = document.querySelectorAll('a');
                         var found = false;
@@ -306,36 +310,36 @@ function parseDetailResponse(html, apiUrl) {
                             if (links[i].innerText && links[i].innerText.toUpperCase().indexOf('VÀO XEM PHIM') > -1) {
                                 links[i].click();
                                 found = true;
+                                if(window.SnifferBridge) window.SnifferBridge.log("Hook: Đã click [VÀO XEM PHIM]");
                                 break;
                             }
                         }
                         if (found || document.querySelector('video')) step = 1; 
                     }
 
-                    // BƯỚC 2: CHỌN NGÔN NGỮ THUYẾT MINH / VIETSUB
+                    // BƯỚC 3: CHỌN NGÔN NGỮ
                     if (step === 1) {
                         var btns = document.querySelectorAll('button');
+                        var clicked = false;
                         for (var j = 0; j < btns.length; j++) {
                             var text = (btns[j].innerText || "").toLowerCase();
                             if (isVietsub && text.indexOf('vietsub') > -1) {
-                                btns[j].click(); break;
+                                btns[j].click(); clicked = true; break;
                             } else if (!isVietsub && text.indexOf('thuyết minh') > -1) {
-                                btns[j].click(); break;
+                                btns[j].click(); clicked = true; break;
                             }
                         }
-                        step = 2;
+                        if (clicked) step = 2;
                     }
 
-                    // BƯỚC 3: CLICK NÚT PLAY ĐỂ WEB LOAD MP4
+                    // BƯỚC 4: BẤM PLAY VÀ TÓM LINK MP4 ĐẨY RA NGOÀI
                     if (step === 2) {
                         var svgPaths = document.querySelectorAll('svg path');
                         for (var k = 0; k < svgPaths.length; k++) {
                             var d = svgPaths[k].getAttribute('d');
                             if (d && (d.indexOf('M8 5v14l11-7z') > -1 || d.indexOf('M18 13c0') > -1)) {
                                 var parentBtn = svgPaths[k].parentNode;
-                                while(parentBtn && parentBtn.tagName !== 'BUTTON' && parentBtn.tagName !== 'BODY') {
-                                    parentBtn = parentBtn.parentNode;
-                                }
+                                while(parentBtn && parentBtn.tagName !== 'BUTTON' && parentBtn.tagName !== 'BODY') parentBtn = parentBtn.parentNode;
                                 if (parentBtn && parentBtn.tagName === 'BUTTON') {
                                     parentBtn.click(); break;
                                 }
@@ -346,15 +350,12 @@ function parseDetailResponse(html, apiUrl) {
                         step = 3;
                     }
 
-                    // BƯỚC 4: TÓM GỌN LINK MP4 VÀ ĐẨY SANG EXOPLAYER NATIVE
                     if (step === 3) {
                         var video = document.querySelector('video');
                         if (video && video.src && video.src.indexOf('http') === 0) {
                             if (window.SnifferBridge) {
-                                var headers = JSON.stringify({
-                                    "Referer": window.location.href,
-                                    "User-Agent": navigator.userAgent
-                                });
+                                window.SnifferBridge.log("✅ HOOK THÀNH CÔNG MP4: " + video.src);
+                                var headers = JSON.stringify({"Referer": window.location.href, "User-Agent": navigator.userAgent});
                                 window.SnifferBridge.play(video.src, headers);
                             }
                             clearInterval(checkInterval);
@@ -362,7 +363,7 @@ function parseDetailResponse(html, apiUrl) {
                     }
 
                     checkCount++;
-                    if (checkCount > 50) clearInterval(checkInterval); // Giải phóng sau 25s
+                    if (checkCount > 50) clearInterval(checkInterval); // Tự hủy sau 25s
                 } catch (err) {}
             }, 500);
         })();
@@ -370,7 +371,7 @@ function parseDetailResponse(html, apiUrl) {
 
         return JSON.stringify({
             "url": url, 
-            "isEmbed": true, // Kích hoạt Webview ngầm cho chức năng Hook
+            "isEmbed": true, // Kích hoạt Webview ngầm chạy Hook
             "headers": {
                 "Referer": BASEURL,
                 "Block-Ads": "true",
