@@ -7,8 +7,8 @@ var BASEURL = "https://gamomephim.com";
 
 function getManifest() {
     return JSON.stringify({
-        "id": "Mê Phim Ngắn",
-        "name": "Mê Phim Ngắn",
+        "id": "gamomephim",
+        "name": "Gà Mờ Mê Phim",
         "description": "Cấu trúc 3 Cấp: Vào trang 1 -> Bấm tập -> Tự tóm link mp4 ở trang 2 và stream dọc.",
         "version": "5.1.0", // Fix lỗi mã hóa NextJS ở Trang 2
         "baseUrl": BASEURL,
