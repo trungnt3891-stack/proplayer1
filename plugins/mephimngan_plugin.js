@@ -7,10 +7,10 @@ var BASEURL = "https://gamomephim.com";
 
 function getManifest() {
     return JSON.stringify({
-        "id": "Mê Phim Ngắn",
-        "name": "Mê Phim Ngắn",
+        "id": "gamomephim",
+        "name": "Gà Mờ Mê Phim",
         "description": "Cấu trúc 3 Cấp: Vào trang 1 -> Bấm tập -> Tự tóm link mp4 ở trang 2 và stream dọc.",
-        "version": "5.0.0", // Đã Fix Load Trang Chủ + Menu Chuẩn
+        "version": "5.1.0", // Fix lỗi mã hóa NextJS ở Trang 2
         "baseUrl": BASEURL,
         "iconUrl": "https://r2.gamomephim.com/site/logo-1784305321242.png",
         "isEnabled": true,
@@ -139,7 +139,7 @@ function getUrlYears() { return ""; }
 // PARSERS
 // =============================================================================
 
-// CẤP 1: BẮT DANH SÁCH PHIM TỪ TRANG CHỦ (ĐÃ FIX LOAD CHUẨN XÁC 100%)
+// CẤP 1: BẮT DANH SÁCH PHIM TỪ TRANG CHỦ
 function parseListResponse(html, $url) {
     try {
         var items = [];
@@ -202,39 +202,6 @@ function parseListResponse(html, $url) {
 
 function parseSearchResponse(html, url) { return parseListResponse(html, url); }
 
-function parseNextPayload(raw) {
-    try {
-        var match = raw.match(/self\.__next_f\.push\((.*)\)/);
-        if (!match) return null;
-        var pushArgs = JSON.parse(match[1]);
-        var rawString = pushArgs[1];
-        var cleanJsonStr = rawString.replace(/^\w+:/, '').replace(/\n$/, '');
-        return JSON.parse(cleanJsonStr);
-    } catch (e) {
-        return null;
-    }
-}
-
-function extractCleanData(data) {
-    var result = { video: null, episodes: [], related: [], collection: [] };
-    function traverse(node) {
-        if (!node) return;
-        if (typeof node === 'object' && !Array.isArray(node)) {
-            if (node.video && typeof node.video === 'object') result.video = node.video;
-            if (Array.isArray(node.episodes)) result.episodes = node.episodes;
-            if (Array.isArray(node.related)) result.related = node.related;
-            if (Array.isArray(node.collection)) result.collection = node.collection;
-            for (var key in node) {
-                if (node.hasOwnProperty(key)) traverse(node[key]);
-            }
-        } else if (Array.isArray(node)) {
-            for (var i = 0; i < node.length; i++) traverse(node[i]);
-        }
-    }
-    traverse(data);
-    return result;
-}
-
 // CẤP 2: VÀO TRANG 1 BÓC THÔNG TIN -> TẠO NÚT BẤM CÓ ID LÀ URL CỦA TRANG 2
 function parseMovieDetail(html, url) {
     try {
@@ -255,25 +222,18 @@ function parseMovieDetail(html, url) {
 
         var metaImg = html.match(/<meta property="og:image" content="([^"]+)"/i);
         if (metaImg) limg = metaImg[1];
+        
+        // Khôi phục HTML thô để trích xuất cast & duration
+        var unescapedHtml = html.replace(/\\"/g, '"');
+        
+        var descMatch = unescapedHtml.match(/"description"\s*:\s*"([^"]+)"/i);
+        if (descMatch) ldes = descMatch[1].replace(/\\n/g, '\n');
 
-        var script = _$(html).find("script:content('m3u8Url')").text();
-        if (!script) {
-            script = _$(html).find("script:content('audioType')").text();
-        }
+        var castMatch = unescapedHtml.match(/"cast"\s*:\s*"([^"]+)"/i);
+        if (castMatch) lactor = castMatch[1];
         
-        var rawVD = parseNextPayload(script);
-        var dataVD = extractCleanData(rawVD);
-        var video = dataVD.video;
-        
-        if (video) {
-            lname = video.title || lname;
-            limg = video.thumbnailUrl || limg;
-            ldes = video.description || ldes;
-            year = video.releaseYear || year;
-            lactor = video.cast || lactor;
-            lduran = video.durationString || lduran;
-            status = video.status || status;
-        }
+        var durationMatch = unescapedHtml.match(/"durationString"\s*:\s*"([^"]+)"/i);
+        if (durationMatch) lduran = durationMatch[1];
 
         // TẠO URL TRANG 2 (TRANG CHIẾU PHIM THỰC SỰ) BẰNG CÁCH BỎ CHỮ /PHIM/
         var cleanSlug = url.split("?")[0].replace(BASEURL, "").replace(/^\//, "").replace(/^phim\//, "");
@@ -283,8 +243,8 @@ function parseMovieDetail(html, url) {
         var epsVietsub = [{ "name": "Bản Vietsub", "id": watchUrl + "|data:audio=VIETSUB", "slug": "tap-vs" }];
         var epsThuyetMinh = [{ "name": "Bản Thuyết Minh", "id": watchUrl + "|data:audio=THUYET_MINH", "slug": "tap-tm" }];
         
-        servers.push({ "name": "Vietsub (Native)", "episodes": epsVietsub });
-        servers.push({ "name": "Thuyết Minh (Native)", "episodes": epsThuyetMinh });
+        servers.push({ "name": "Vietsub", "episodes": epsVietsub });
+        servers.push({ "name": "Thuyết Minh", "episodes": epsThuyetMinh });
 
         return JSON.stringify({
             id: id,
@@ -317,53 +277,62 @@ function parseDetailResponse(html, apiUrl) {
             targetAudio = "THUYET_MINH";
         }
 
-        // Tái sử dụng hàm bóc tách của bạn để moi mảng episodes trong Trang 2
-        var script = _$(html).find("script:content('m3u8Url')").text();
-        if (!script) {
-            script = _$(html).find("script:content('audioType')").text();
-        }
-        
-        var rawVD = parseNextPayload(script);
-        var dataVD = extractCleanData(rawVD);
-        var listepi = dataVD.episodes || [];
         var finalLink = "";
+        var backupLink = "";
 
-        // Tìm link mp4 có audioType khớp với lựa chọn
-        for (var $j = 0; $j < listepi.length; $j++) {
-            var ep = listepi[$j];
-            var audio = (ep.audioType || "VIETSUB").toUpperCase();
-            if (audio.indexOf(targetAudio) > -1 && ep.m3u8Url) {
-                finalLink = ep.m3u8Url;
+        // TẨY RỬA MÃ HÓA NEXTJS: Loại bỏ \" và \/ để DOM trở nên sạch sẽ
+        var unescapedHtml = html.replace(/\\"/g, '"').replace(/\\\//g, '/');
+
+        // REGEX XUYÊN GIÁP: Tìm chính xác link mp4 và AudioType đi kèm
+        var regex = /"m3u8Url"\s*:\s*"([^"]+)"[^{}]*?"audioType"\s*:\s*"([^"]+)"/gi;
+        var match;
+
+        while ((match = regex.exec(unescapedHtml)) !== null) {
+            var epLink = match[1];
+            var audioType = match[2].toUpperCase();
+
+            // Lưu nháp link đầu tiên tìm được làm backup
+            if (!backupLink) backupLink = epLink;
+
+            // Nếu đúng Audio người dùng bấm, chốt hạ luôn
+            if (audioType.indexOf(targetAudio) > -1) {
+                finalLink = epLink;
                 break;
             }
         }
 
-        // Fallback: nếu không khớp ngôn ngữ, lấy link đầu tiên có thể
-        if (!finalLink && listepi.length > 0) {
-            finalLink = listepi[0].m3u8Url;
-        }
+        // Fallback 1: Lấy link đầu tiên nếu không khớp ngôn ngữ
+        if (!finalLink) finalLink = backupLink;
 
-        // Fallback cuối cùng bằng Regex moi thẳng từ HTML
+        // Fallback 2: Moi bằng Regex trần tục nếu web đổi cấu trúc JSON
         if (!finalLink) {
-            var fallbackMatch = html.match(/(https:\/\/[^"'\s]+\.(?:mp4|m3u8))/);
-            if (fallbackMatch) finalLink = fallbackMatch[1].replace(/\\\//g, '/');
+            var fallbackMatch = unescapedHtml.match(/(https:\/\/[^"'\s]+\.(?:mp4|m3u8))/i);
+            if (fallbackMatch) {
+                finalLink = fallbackMatch[1];
+            }
         }
 
-        var mimeType = finalLink.indexOf(".m3u8") > -1 ? "application/x-mpegURL" : "video/mp4";
+        log("Link phim bóc được: " + finalLink);
+
+        var mimeType = "video/mp4";
+        if (finalLink && finalLink.indexOf(".m3u8") > -1) {
+            mimeType = "application/x-mpegURL";
+        }
 
         // APP NHẬN ĐƯỢC LINK NÀY SẼ TỰ ĐỘNG PHÁT NATIVE (KHÔNG MỞ WEBVIEW, KHÔNG QUẢNG CÁO)
         return JSON.stringify({
-            "url": finalLink,
+            "url": finalLink || "",
             "isEmbed": false, 
             "mimeType": mimeType,
             "headers": {
                 "Referer": BASEURL,
                 "Origin": BASEURL,
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             },
             "subtitles": []
         });
     } catch (e) {
+        log("Lỗi Cấp 3: " + e.message);
         return JSON.stringify({ "url": "", "isEmbed": false, "headers": {} });
     }
 }
