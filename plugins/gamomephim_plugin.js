@@ -1,22 +1,24 @@
 // =============================================================================
 // PLUGIN VAX APP: GÀ MỜ MÊ PHIM (GAMOMEPHIM.COM)
-// CHIẾN THUẬT: AUTO-CLICK & HOOK SNIFFER (VƯỢT RÀO LẤY LINK MẠNH MẼ NHẤT)
+// CHIẾN THUẬT: VÀO TỰ NHIÊN TRANG 1 -> BẤM XEM NGAY -> HOOK TRANG 2 
 // =============================================================================
 
-var BASEURL = "https://gamomephim.com";
+// CẤU HÌNH DOMAIN CHÍNH
+// Nếu web đổi tên miền, bạn CHỈ CẦN THAY ĐỔI biến BASEURL dưới đây:
+var BASEURL = "https://gamomephim.com"; 
 
 function getManifest() {
     return JSON.stringify({
         "id": "gamomephim",
         "name": "Gà Mờ Mê Phim",
-        "description": "Bản Hook Tuyệt Đối: Mở web ngầm, tự động click chọn tập, tóm link phát dọc.",
-        "version": "1.0.0",
+        "description": "Luồng tự nhiên: Vào trang 1, bấm Xem ngay để Hook bắt link trang 2.",
+        "version": "2.0.0",
         "baseUrl": BASEURL,
         "iconUrl": "https://r2.gamomephim.com/site/logo-1784305321242.png",
         "isEnabled": true,
-        "type": "shortfilm", // Kích hoạt UI vuốt dọc
+        "type": "shortfilm", // Kích hoạt giao diện Player Dọc (TikTok-style)
         "layoutType": "VERTICAL",
-        "playerType": "embedtoexoplay" // KÍCH HOẠT WEBVIEW NGẦM CHẠY HOOK
+        "playerType": "embedtoexoplay" // BẮT BUỘC: Để Webview ngầm chạy bộ Sniffer
     });
 }
 
@@ -43,7 +45,9 @@ function getPrimaryCategories() {
 function getFilterConfig() {
     var listurl = getLISTmenu();
     var menulist = buildMenu(listurl);
-    return JSON.stringify({ category: menulist });
+    return JSON.stringify({
+        category: menulist
+    });
 }
 
 // =============================================================================
@@ -52,24 +56,60 @@ function getFilterConfig() {
 
 function getUrlList(slug, filtersJson) {
     try {
+        if (slug && slug.indexOf("http") > -1) {
+            if (slug.indexOf("search") > -1) {
+                if (filtersJson) {
+                    var fixedJson = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
+                    try {
+                        var filters = JSON.parse(fixedJson);
+                        var page = parseInt(filters.page) || 1;
+                        if (page > 1) {
+                            return slug + "?from_videos=" + page + "&from_albums=" + page;
+                        } else {
+                            return slug;
+                        }
+                    } catch (jsonErr) {
+                        return slug;
+                    }
+                }
+            }
+            return slug;
+        }
+        
         var page = 1;
         var path = slug || "";
+        
         if (filtersJson) {
-            var fixedJson = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
+            var fixedJson2 = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
             try {
-                var filters = JSON.parse(fixedJson);
-                page = parseInt(filters.page) || 1;
-                if (filters.category) {
-                    if (Array.isArray(filters.category) && filters.category.length > 0) path = filters.category[0].slug;
-                    else if (typeof filters.category === 'string') path = filters.category;
+                var filters2 = JSON.parse(fixedJson2);
+                page = parseInt(filters2.page) || 1;
+                if (filters2.category) {
+                    if (Array.isArray(filters2.category) && filters2.category.length > 0) {
+                        path = filters2.category[0].slug;
+                    } else if (typeof filters2.category === 'string') {
+                        path = filters2.category;
+                    }
                 }
-            } catch (e) {}
+            } catch (jsonErr) {}
         }
+        
         var resultUrl = BASEURL;
-        if (path) resultUrl += path.startsWith('/') ? path : '/' + path;
-        if (page > 1) resultUrl += "?page=" + page;
+        if (path) {
+            resultUrl += path.startsWith('/') ? path : '/' + path;
+        }
+        if (page > 1) {
+            resultUrl += "?page=" + page;
+        }
         return resultUrl.replace(/([^:]\/)\/+/g, "$1");
-    } catch (e) { return BASEURL; }
+    } catch (e) {
+        console.log(e);
+        if (slug && slug.indexOf("http") > -1) {
+            return slug;
+        }
+        var fallback = BASEURL + (slug ? "/" + slug : "");
+        return fallback.replace(/([^:]\/)\/+/g, "$1");
+    }
 }
 
 function getUrlSearch(keyword, filtersJson) {
@@ -77,18 +117,22 @@ function getUrlSearch(keyword, filtersJson) {
     if (filtersJson) {
         try {
             var fixedJson = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
-            page = parseInt(JSON.parse(fixedJson).page) || 1;
+            var filters = JSON.parse(fixedJson);
+            page = parseInt(filters.page) || 1;
         } catch (e) {}
     }
     var searchUrl = BASEURL + "/tim-kiem?q=" + encodeURIComponent(keyword);
-    if (page > 1) searchUrl += "&page=" + page;
+    if (page > 1) {
+        searchUrl += "&page=" + page;
+    }
     return searchUrl;
 }
 
 function getUrlDetail(slug) {
     if (!slug) return "";
     if (slug.indexOf('http') === 0) return slug;
-    // Đi thẳng vào Trang 1 (Thông tin phim)
+    
+    // ĐIỂM CHỐT 1: VÀO TỰ NHIÊN TRANG 1
     var cleanSlug = slug.replace(/^\//, "").replace(/^phim\//, "");
     return BASEURL + "/phim/" + cleanSlug;
 }
@@ -100,7 +144,6 @@ function getUrlYears() { return ""; }
 // =============================================================================
 // PARSERS
 // =============================================================================
-
 function parseListResponse(html, $url) {
     try {
         var items = [];
@@ -112,16 +155,20 @@ function parseListResponse(html, $url) {
 
         _$(html).find(".grid").find(".relative").find("a").each(function() {
             var href = this.attr("href").replace("/phim", "");
-            if (href.indexOf("http") == -1) href = BASEURL + href;
+            if (href.indexOf("http") == -1) {
+                href = BASEURL + href;
+            }
             var title = this.attr("title") || this.text();
             var src = this.find("img").attr("src");
-            if (src && src.indexOf("http") == -1) src = BASEURL + src;
+            if (src && src.indexOf("http") == -1) {
+                src = BASEURL + src;
+            }
             
             if (href && href.indexOf("http") > -1) {
                 var cleanThumb = (src || "").replace(/&amp;/g, '&');
                 items.push({
                     "id": href,
-                    "title": (title || "").trim(),
+                    "title": title.trim(),
                     "posterUrl": cleanThumb,
                     "backdropUrl": cleanThumb,
                     "quality": "FULL",
@@ -133,219 +180,303 @@ function parseListResponse(html, $url) {
         
         return JSON.stringify({
             "items": items,
-            "pagination": { "currentPage": calculatedPage, "totalPages": 999 }
+            "pagination": {
+                "currentPage": calculatedPage,
+                "totalPages": 999
+            }
         });
     } catch (e) {
         log(e);
-        return JSON.stringify({ "items": [], "pagination": { "currentPage": 1, "totalPages": 1 } });
+        return JSON.stringify({
+            "items": [],
+            "pagination": { "currentPage": 1, "totalPages": 1 }
+        });
     }
 }
 
-function parseSearchResponse(html, url) { return parseListResponse(html, url); }
+function parseSearchResponse(html, url) {
+    return parseListResponse(html, url);
+}
 
+function decodeHtmlEntities(str) {
+  if (!str) return str;
+  return str
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+// ĐIỂM CHỐT 2: TRANG 1 TRẢ VỀ NÚT "XEM NGAY" TRỎ SANG TRANG 2
 function parseMovieDetail(html, url) {
     try {
-        var id = url;
-        var lname = "Đang cập nhật...";
-        var limg = "";
-        var ldes = "Không có mô tả.";
-        var year = 2026;
-        var lactor = "";
-        var lduran = "";
-        
+        log("parseMovieDetail [videoUrl]: " + url);
+        var title = "Đang cập nhật...";
+        var year = "2026";
+        var des = "Không có mô tả.";
+        var img = ""; 
+        var casts = "";
+        var duration = "";
+
+        // Trích xuất Metadata thông tin từ Trang 1
         var metaTitle = html.match(/<meta property="og:title" content="([^"]+)"/i);
-        if (metaTitle) lname = metaTitle[1].replace(/ FULL - Gà Mờ Mê Phim/gi, "").replace(/ - Gà Mờ Mê Phim/gi, "").trim();
+        if (metaTitle) title = metaTitle[1].replace(/ FULL - Gà Mờ Mê Phim/gi, "").replace(/ - Gà Mờ Mê Phim/gi, "").trim();
 
         var metaImg = html.match(/<meta property="og:image" content="([^"]+)"/i);
-        if (metaImg) limg = metaImg[1];
+        if (metaImg) img = metaImg[1];
 
         var ldJsonMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/i);
         if (ldJsonMatch) {
             try {
                 var ldData = JSON.parse(ldJsonMatch[1]);
-                if (ldData.name) lname = ldData.name;
-                if (ldData.description) ldes = ldData.description;
+                if (ldData.name) title = ldData.name;
+                if (ldData.description) des = ldData.description;
             } catch(e) {}
         }
         
-        // TRỤC CHÍNH: Tạo 2 tập phim và gán URL của TRANG 2 vào. Thêm cờ để phân biệt Sub/Thuyết minh
-        var cleanUrl = url.split("?")[0].replace("/phim/", "/"); // Lấy URL Trang 2
-        
-        var servers = [{
-            "name": "Bắt Link Tự Động (Sniffer)",
-            "episodes": [
-                { "name": "Bản Vietsub", "id": cleanUrl + "|data:lang=vs", "slug": "tap-vs" },
-                { "name": "Bản Thuyết Minh", "id": cleanUrl + "|data:lang=tm", "slug": "tap-tm" }
-            ]
-        }];
+        var unescapedHtml = html.replace(/\\"/g, '"');
+        var castMatch = unescapedHtml.match(/"cast"\s*:\s*"([^"]+)"/);
+        if (castMatch) casts = castMatch[1];
+        var durationMatch = unescapedHtml.match(/"durationString"\s*:\s*"([^"]+)"/);
+        if (durationMatch) duration = durationMatch[1];
 
+        // Lấy đường dẫn Trang 2 (Trang chiếu phim thực sự)
+        var cleanSlug = url.split("?")[0].replace(BASEURL, "").replace(/^\//, "").replace(/^phim\//, "");
+        var watchUrl = BASEURL + "/" + cleanSlug;
+
+        // Tạo Episode ID chứa URL của Trang 2
+        var episodes = [{ id: watchUrl, name: "Vào Xem Phim (Tự Động Bắt Link)", slug: "tap-1" }];
+        
         return JSON.stringify({
-            id: id,
-            title: lname,
-            posterUrl: limg,
-            backdropUrl: limg,
-            description: ldes,
-            quality: "FULL",
+            id: url,
+            title: title,
+            posterUrl: img,
+            backdropUrl: img,
+            description: des,
             year: year,
-            rating: 9.5,
-            status: "Hoàn Thành",
-            servers: servers,
-            duration: lduran || "",
-            casts: lactor || "",
-            director: ""
+            rating: 10,
+            quality: "HD",
+            casts: casts,
+            duration: duration,
+            servers: [{ name: "Server Tự Động (Hook)", episodes: episodes }]
         });
     } catch (e) {
-        log(e);
-        return JSON.stringify({ id: url || "error", title: "Lỗi tải thông tin chi tiết", servers: [] });
+        console.log("parseMovieDetail Error: " + e);
+        return JSON.stringify({ id: "error", title: "Lỗi tải dữ liệu", servers: [] });
     }
 }
 
-// BƯỚC NÀY CHẠY WEBVIEW NGẦM TRÊN TRANG 2, NHÚNG CUSTOM-JS ĐỂ AUTO CLICK VÀ BẮT LINK
-function parseDetailResponse(html, apiUrl) {
-    try {
-        var isVietsub = apiUrl.indexOf("lang=vs") > -1 ? true : false;
-        var rawUrl = apiUrl.split("|")[0]; // Cắt bỏ cờ data
-        
-        var rawJS = checkRaw(runJS(isVietsub), true); // Sử dụng hàm checkRaw bảo vệ chuỗi của bạn
+// ĐIỂM CHỐT 3: KHI NGƯỜI DÙNG BẤM "XEM NGAY", MỞ WEBVIEW NGẦM TRANG 2 VÀ CHẠY SNIFFER
+function parseDetailResponse(html, url) {
+  console.log("parseDetailResponse [Tầng 2]: " + url);
+  try {
+    var rawJS = checkRaw(runJS(), true);
 
-        return JSON.stringify({
-            "url": rawUrl, 
-            "isEmbed": true, // Cho phép Webview ẩn hoạt động để chạy Hook
-            "headers": {
-                "Referer": BASEURL,
-                "Block-Ads": "true",
-                "User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-                "Custom-Js": rawJS
-            },
-            "subtitles": []
-        });
-    } catch (e) {
-        return JSON.stringify({ "url": "", "isEmbed": false, "headers": {} });
-    }
+    return JSON.stringify({
+      url: url, // Load trang chiếu phim
+      isEmbed: true, // Kích hoạt Webview ẩn để Sniffer chạy
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Referer: BASEURL,
+        "Block-Ads": "true",
+        "Custom-Js": rawJS
+      }
+    });
+  } catch (e) {
+    console.log("[Lỗi parseDetailResponse]", e);
+    return JSON.stringify({ url: "", isEmbed: false, headers: {} });
+  }
 }
 
 function parseEmbedResponse(html, url) {
     return JSON.stringify({ url: url, isEmbed: false });
 }
 
+// =============================================================================
+// THƯ VIỆN BẢO VỆ CHUỖI & SNIFFER CỦA BẠN (GIỮ NGUYÊN 100%)
+// =============================================================================
+
 function checkRaw(scriptStr, returnFixed) {
-    try {
-        if (!scriptStr || typeof scriptStr !== "string") return scriptStr || "";
-        var lines = scriptStr.split("\n");
-        var fixedLines = [];
-        for (var i = 0; i < lines.length; i++) {
-            var fixedLine = lines[i];
-            if (returnFixed) fixedLine = fixedLine.replace(/\r/g, "").replace(/\t/g, "  ");
-            fixedLines.push(fixedLine);
-        }
-        return returnFixed ? fixedLines.join("\n") : scriptStr;
-    } catch (e) {
-        return scriptStr; 
+  try {
+    if (!scriptStr || typeof scriptStr !== "string") {
+      return scriptStr || "";
     }
+    var lines = scriptStr.split("\n");
+    var fixedLines = [];
+    for (var i = 0; i < lines.length; i++) {
+      var currentLine = lines[i];
+      var fixedLine = currentLine;
+      if (returnFixed) {
+        fixedLine = fixedLine.replace(/\r/g, "").replace(/\t/g, "  ");
+      }
+      fixedLines.push(fixedLine);
+    }
+    return returnFixed ? fixedLines.join("\n") : scriptStr;
+  } catch (e) {
+    return scriptStr;
+  }
 }
 
-// =============================================================================
-// MÃ CUSTOM-JS NHÚNG VÀO WEBVIEW (TỰ ĐỘNG CLICK + SNIFFER THEO KHUÔN MẪU CỦA BẠN)
-// =============================================================================
-function runJS(isVietsub) {
-    return `
-    (function() {
-        'use strict';
-        var isVietsub = ${isVietsub};
-        var isFinished = 0;
-        
-        // Hàm bắn link về ExoPlayer
-        function dispatchToApp(url) {
-            if (isFinished === 1) return;
-            isFinished = 1;
-            if (window.SnifferBridge && typeof window.SnifferBridge.play === 'function') {
-                window.SnifferBridge.log("✅ TÓM ĐƯỢC LINK: " + url);
-                window.SnifferBridge.play(url, JSON.stringify({"Referer": window.location.href}));
+// HÀM SNIFFER BẮT LINK CỦA BẠN (KÈM AUTO-CLICK NÚT PLAY ĐỂ KÍCH NỔ VIDEO)
+function runJS() {
+  return `
+HTMLRAW = 0; 
+BODYRAW = 0; 
+CSSBLOCK = 1; 
+VIDEOEND = 0; 
+NUMBERRAW = 0; 
+HOOK_NETWORK_AND_DOM = 1; // 1 = Hook bằng xhr hoặc dom (RẤT QUAN TRỌNG ĐỂ BẮT LINK)
+ENABLE_PRIORITY_FILTER = 0; 
+FILTER_KEYWORDS = ["google", "playlist", "mp4", "m3u8", "hls","master", "master.txt"];
+
+(function() {
+    'use strict';
+    
+    function bridgeLog(msg, check) {
+        try {
+          if (window.SnifferBridge && typeof window.SnifferBridge.log === 'function') {
+            window.SnifferBridge.log(msg);
+            if (check === true && typeof window.SnifferBridge.toast === 'function') {
+              window.SnifferBridge.toast(msg, 1000);
             }
-        }
+          } else if (typeof console !== 'undefined' && console.log) {
+            console.log(msg);
+          }
+        } catch(e) {}
+    }
 
-        // 1. AUTO CLICKER: Tìm nút Thuyết Minh/Vietsub và nút Play
-        var autoClicker = setInterval(function() {
-            if (isFinished === 1) { clearInterval(autoClicker); return; }
-            try {
-                // Xóa rác UI
-                var style = document.createElement('style');
-                style.innerHTML = 'header, footer, nav { display: none !important; }';
-                document.head.appendChild(style);
-
-                // Click chọn ngôn ngữ
-                var btns = document.querySelectorAll('button');
-                for (var i = 0; i < btns.length; i++) {
-                    var txt = (btns[i].innerText || "").toLowerCase();
-                    if (isVietsub && txt.indexOf('vietsub') > -1) {
-                        btns[i].click(); 
-                    } else if (!isVietsub && txt.indexOf('thuyết minh') > -1) {
-                        btns[i].click(); 
-                    }
-                }
-
-                // Click Play
-                var svgs = document.querySelectorAll('svg path');
-                for (var j = 0; j < svgs.length; j++) {
-                    var d = svgs[j].getAttribute('d');
-                    if (d && (d.indexOf('M8 5v14l11-7z') > -1 || d.indexOf('M18 13c0') > -1)) {
-                        var p = svgs[j].parentNode;
-                        while(p && p.tagName !== 'BUTTON' && p.tagName !== 'BODY') p = p.parentNode;
-                        if (p && p.tagName === 'BUTTON') p.click();
-                    }
-                }
-                
-                // Ép play thẻ video
-                var v = document.querySelector('video');
-                if (v && typeof v.play === 'function') v.play().catch(function(){});
-            } catch(e) {}
-        }, 800);
-
-        // 2. DOM SNIFFER: Rình thẻ Video
-        setInterval(function() {
-            if (isFinished === 1) return;
-            var v = document.querySelector('video');
-            if (v && v.src && v.src.indexOf('http') === 0 && (v.src.indexOf('.mp4') > -1 || v.src.indexOf('.m3u8') > -1)) {
-                dispatchToApp(v.src);
-            }
-        }, 500);
-
-        // 3. HOOK FETCH: Đón lõng request mạng
-        if (typeof window.fetch !== 'undefined') {
-            var origFetch = window.fetch;
-            window.fetch = function() {
-                var args = arguments;
-                return origFetch.apply(this, args).then(function(res) {
-                    var url = (typeof args[0] === 'string') ? args[0] : (args[0] && args[0].url ? args[0].url : '');
-                    if (url.indexOf('.mp4') > -1 || url.indexOf('.m3u8') > -1) {
-                        dispatchToApp(url);
-                    }
-                    return res;
-                });
-            };
-        }
-
-        // 4. HOOK XHR: 
-        if (typeof XMLHttpRequest !== 'undefined') {
-            var origOpen = XMLHttpRequest.prototype.open;
-            XMLHttpRequest.prototype.open = function(method, url) {
-                if (url.indexOf('.mp4') > -1 || url.indexOf('.m3u8') > -1) {
-                    dispatchToApp(url);
-                }
-                return origOpen.apply(this, arguments);
-            };
-        }
-
-        // Timeout 25s bảo vệ
-        setTimeout(function() {
-            if (isFinished === 0) {
-                isFinished = 1;
-                if (window.SnifferBridge) window.SnifferBridge.log("❌ Quá giờ bắt link!");
-            }
-        }, 25000);
+    // XÓA RÁC CSS ĐỂ TRANG LOAD NHANH
+    (function injectCSS() {
+      try {
+        const cssStyle = "header, footer, nav, .ads { display: none !important; opacity: 0 !important; }";
+        const styleElement = document.createElement('style');
+        styleElement.type = 'text/css';
+        if (styleElement.styleSheet) { styleElement.styleSheet.cssText = cssStyle; } 
+        else { styleElement.appendChild(document.createTextNode(cssStyle)); }
+        document.head.appendChild(styleElement);
+      } catch (error) {}
     })();
-    `;
+
+    // AUTO CLICKER: TỰ ĐỘNG BẤM PLAY ĐỂ TRÌNH DUYỆT NẠP LINK VÀO XHR/FETCH
+    var autoPlayTimer = setInterval(function() {
+        try {
+            var svgs = document.querySelectorAll('svg path');
+            for (var k = 0; k < svgs.length; k++) {
+                var d = svgs[k].getAttribute('d');
+                if (d && (d.indexOf('M8 5v14l11-7z') > -1 || d.indexOf('M18 13c0') > -1)) {
+                    var p = svgs[k].parentNode;
+                    while(p && p.tagName !== 'BUTTON' && p.tagName !== 'BODY') p = p.parentNode;
+                    if (p && p.tagName === 'BUTTON') p.click();
+                }
+            }
+            var v = document.querySelector('video');
+            if (v && typeof v.play === 'function') v.play().catch(function(){});
+        } catch(e) {}
+    }, 1000);
+
+    // BỘ SNIFFER NÒNG CỐT CỦA BẠN (GIỮ NGUYÊN LOGIC)
+    (function initLocalBlobSniffer() {
+      if (window.__BLOB_SNIFFER_INITIALIZED__) return;
+      window.__BLOB_SNIFFER_INITIALIZED__ = 1;
+
+      var hasDispatchedAny = 0;
+      var isFinished = 0;
+      var timeoutTimer = null;
+      var domScanInterval = null;
+
+      bridgeLog("Đang tiến hành tìm link Video, xin chờ....", true);
+
+      function stopTimeout() {
+        if (timeoutTimer) { clearTimeout(timeoutTimer); timeoutTimer = null; }
+        if (domScanInterval) { clearInterval(domScanInterval); domScanInterval = null; }
+        if (autoPlayTimer) { clearInterval(autoPlayTimer); autoPlayTimer = null; }
+      }
+
+      function isValidM3U8(content) {
+        if (typeof content !== 'string') return false;
+        var trimmed = content.trim();
+        return trimmed.indexOf('#EXTM3U') === 0 && 
+              (trimmed.indexOf('#EXTINF') !== -1 || trimmed.indexOf('#EXT-X-STREAM-INF') !== -1);
+      }
+
+      function dispatchDirectLinkToApp(directUrl) {
+        if (!directUrl || hasDispatchedAny === 1) return;
+        hasDispatchedAny = 1;
+        isFinished = 1;
+        stopTimeout();
+
+        bridgeLog("🎯 Bắt link trực tiếp thành công! Đang phát...", true);
+        try {
+          if (window.SnifferBridge && typeof window.SnifferBridge.play === 'function') {
+            window.SnifferBridge.play(directUrl, JSON.stringify({"Referer": window.location.href}));
+          }
+        } catch(e) {}
+      }
+
+      // HOOK NETWORK (FETCH / XHR) VÀ SCAN DOM
+      if (HOOK_NETWORK_AND_DOM === 1) {
+        try {
+          if (typeof window.fetch !== 'undefined') {
+            var originalFetch = window.fetch;
+            window.fetch = function() {
+              var args = arguments;
+              return originalFetch.apply(this, args).then(function(response) {
+                if (isFinished === 0 && response) {
+                  var url = (typeof args[0] === 'string') ? args[0] : (args[0] && args[0].url ? args[0].url : '');
+                  if (url.indexOf('.mp4') > -1 || url.indexOf('.m3u8') > -1) {
+                      bridgeLog('🎯 Bắt được M3U8/MP4 từ Fetch: ' + url);
+                      dispatchDirectLinkToApp(url);
+                  }
+                }
+                return response;
+              });
+            };
+          }
+        } catch (e) {}
+
+        try {
+          if (typeof XMLHttpRequest !== 'undefined') {
+            var originalXHR = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function(method, url) {
+              if (url.indexOf('.mp4') > -1 || url.indexOf('.m3u8') > -1) {
+                  bridgeLog('🎯 Bắt được M3U8/MP4 từ XHR: ' + url);
+                  dispatchDirectLinkToApp(url);
+              }
+              return originalXHR.apply(this, arguments);
+            };
+          }
+        } catch (e) {}
+
+        domScanInterval = setInterval(function() {
+          if (isFinished === 1) return;
+          var videos = document.getElementsByTagName('video');
+          for (var i = 0; i < videos.length; i++) {
+            var src = videos[i].src || videos[i].currentSrc;
+            if (src && (src.indexOf('.mp4') > -1 || src.indexOf('.m3u8') > -1)) {
+              bridgeLog('🔍 Đã phát hiện thẻ Video chứa link: ' + src);
+              dispatchDirectLinkToApp(src);
+            }
+          }
+        }, 500);
+      }
+
+      timeoutTimer = setTimeout(function() {
+        if (hasDispatchedAny === 0 && isFinished === 0) {
+          isFinished = 1;
+          stopTimeout();
+          bridgeLog("❌ Đã quá thời gian chờ nhưng không tìm thấy link phù hợp!", false);
+        }
+      }, 25000);
+
+    })();
+})();
+  `;
 }
+
+// =============================================================================
+// BỘ MENU CHUẨN XÁC THEO ẢNH
+// =============================================================================
 
 function parseCategoriesResponse(apiResponseJson) {
     var listurl = getLISTmenu();
@@ -358,7 +489,6 @@ function parseYearsResponse(html) { return "[]"; }
 
 function getLISTmenu() {
     return JSON.stringify([
-        {"link":"/phim-moi","name":"Phim Mới"},
         {"link":"/the-loai/chua-lanh","name":"Chữa Lành"},
         {"link":"/the-loai/co-trang","name":"Cổ Trang"},
         {"link":"/the-loai/cuoi-truoc-yeu-sau","name":"Cưới Trước Yêu Sau"},
