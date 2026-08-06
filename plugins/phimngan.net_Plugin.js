@@ -1,5 +1,5 @@
 // =============================================================================
-// PLUGIN VAAPP: PHIMNGAN.NET (Bản Hoàn Hảo - Sạch Lỗi Trang Chủ)
+// PLUGIN VAAPP: PHIMNGAN.NET (Bản Chuẩn - Quét HTML Trực Tiếp)
 // =============================================================================
 
 var BASEURL = "https://phimngan.net";
@@ -9,7 +9,7 @@ function getManifest() {
         "id": "phimngan_net",
         "name": "PhimNgan.Net",
         "description": "Bản Webview Gốc: Load siêu tốc, ép video dọc, xóa rác giao diện.",
-        "version": "1.8.6",
+        "version": "1.8.8",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/icons/icon-192x192.png",
         "isEnabled": true,
@@ -110,64 +110,46 @@ function getUrlYears() { return ""; }
 function parseListResponse(html, apiUrl) {
     var items = [];
     
-    // CÁCH 1: Bóc trực tiếp mảng JSON ẩn của Next.js (Siêu nhanh, chuẩn xác 100%)
     try {
-        var jsonMatch = html.match(/"videos"\s*:\s*(\[.+?\])\s*,\s*"totalCount"/);
-        if (jsonMatch) {
-            var videos = JSON.parse(jsonMatch[1]);
-            for (var i = 0; i < videos.length; i++) {
-                var v = videos[i];
-                var link = (v.is_series ? "/phim/" : "/watch/") + v.slug;
-                
-                var poster = v.poster_url || "";
-                if (poster && poster.indexOf("http") === -1) poster = "https:" + poster;
+        // Quét chính xác cấu trúc HTML giao diện hiển thị của web phimngan.net
+        var regex = /<a[^>]+href=["'](\/(?:phim|watch)\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+        var match;
+        var seen = {};
 
-                items.push({
-                    id: BASEURL + link,
-                    title: v.title || "Không tên",
-                    posterUrl: poster,
-                    backdropUrl: poster,
-                    quality: "HD",
-                    episode_current: v.is_series ? (v.part_count + " Phần") : "Full"
-                });
+        while ((match = regex.exec(html)) !== null) {
+            var link = match[1];
+            var block = match[2];
+            var id = BASEURL + link;
+
+            // Bỏ qua các link rác
+            if (link === "/watch" || link === "/phim" || seen[id]) continue;
+            seen[id] = true;
+
+            // Lấy tên phim
+            var titleM = block.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
+            var title = titleM ? titleM[1].replace(/<[^>]+>/g, '').trim() : "";
+            if (!title) {
+                var altM = block.match(/alt=["']([^"']+)["']/i);
+                title = altM ? altM[1] : "Phim Ngắn";
             }
-        }
-    } catch(e) { log("JSON Parse Error: " + e.message); }
 
-    // CÁCH 2: Fallback bằng Regex thuần túy (Dự phòng nếu Cách 1 thất bại)
-    if (items.length === 0) {
-        try {
-            var regex = /<a[^>]+href=["'](\/(?:watch|phim)\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-            var match;
-            var seen = {};
-
-            while ((match = regex.exec(html)) !== null) {
-                var link = match[1];
-                var block = match[2];
-                var id = BASEURL + link;
-                
-                if (seen[id]) continue;
-                seen[id] = true;
-
-                var titleM = block.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
-                var title = titleM ? titleM[1].replace(/<[^>]+>/g, '').trim() : "";
-                if (!title) {
-                    var altM = block.match(/alt=["']([^"']+)["']/i);
-                    title = altM ? altM[1] : "Phim Ngắn";
+            // Lấy ảnh bìa
+            var imgM = block.match(/<img[^>]+src=["']([^"']+)["']/i);
+            var img = imgM ? imgM[1] : "";
+            if (img.indexOf('url=') > -1) {
+                var uM = img.match(/url=([^&]+)/);
+                if (uM) {
+                    img = decodeURIComponent(uM[1]); // Giải mã link ảnh của Next.js
                 }
+            } else if (img !== "" && img.indexOf("http") === -1) {
+                img = BASEURL + img;
+            }
 
-                var imgM = block.match(/src=["']([^"']+)["']/i);
-                var img = imgM ? imgM[1] : "";
-                if (img.indexOf('url=') > -1) {
-                    var uM = img.match(/url=([^&]+)/);
-                    if (uM) img = decodeURIComponent(uM[1]);
-                } else if (img !== "" && img.indexOf("http") === -1) {
-                    img = BASEURL + img;
-                }
+            // Lấy số phần/tập
+            var epM = block.match(/<span[^>]+uppercase[^>]*>([\s\S]*?)<\/span>/i);
+            var ep = epM ? epM[1].replace(/<[^>]+>/g, '').trim() : "Full";
 
-                var epM = block.match(/<span[^>]*uppercase[^>]*>([\s\S]*?)<\/span>/i);
-                var ep = epM ? epM[1].replace(/<[^>]+>/g, '').trim() : "Full";
-
+            if (title && img) {
                 items.push({
                     id: id,
                     title: title,
@@ -177,7 +159,9 @@ function parseListResponse(html, apiUrl) {
                     episode_current: ep
                 });
             }
-        } catch(e) { log("Regex Parse Error: " + e.message); }
+        }
+    } catch(e) {
+        log("Regex Parse Error: " + e.message);
     }
 
     return JSON.stringify({
