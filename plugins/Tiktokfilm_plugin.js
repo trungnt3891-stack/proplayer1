@@ -6,8 +6,8 @@ var BASEURL = "https://phimngan.net";
 
 function getManifest() {
     return JSON.stringify({
-        "id": "phimngan_net",
-        "name": "PhimNgan.Net",
+        "id": "ShortTV",
+        "name": "ShortTV",
         "description": "Nền tảng xem phim ngắn, phim dọc người thật đóng và phim AI.",
         "version": "1.0.2",
         "baseUrl": BASEURL,
