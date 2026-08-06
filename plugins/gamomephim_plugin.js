@@ -9,7 +9,7 @@ var BASEURL = "https://gamomephim.com";
 function getManifest() {
     return JSON.stringify({
         "id": "gamomephim",
-        "name": "Gà Mờ Mê Phim",
+        "name": "Mê Phim Ngắn",
         "description": "Nền tảng xem phim ngắn, tổng tài FULL HD. Trực tiếp ExoPlayer, siêu mượt.",
         "version": "1.2.0",
         "baseUrl": BASEURL,
