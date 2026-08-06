@@ -51,6 +51,13 @@
       "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/Tiktokfilm_plugin.js",
       "iconUrl": "https://static.vecteezy.com/system/resources/thumbnails/016/716/450/small/tiktok-icon-free-png.png"
     },
+     {
+      "id": "ShortBITV",
+      "name": "ShortBITV",
+      "version": "5.0.0",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/ShortBITV_Plugin.js",
+      "iconUrl": "https://shorts.tv/en/uploads/2017/03/Untitled-1.jpg"
+    },
     {
             "id": "hh3d",
             "name": "HH3D - Hoạt Hình 3D",
