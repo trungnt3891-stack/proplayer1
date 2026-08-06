@@ -1,31 +1,34 @@
 // =============================================================================
 // PLUGIN ĐỘNG PHIM NGẮN TRUNG (DONGPHIMNGAN.COM)
-// NATIVE PLAYER - GIẢI MÃ BASE64 LẤY LINK MP4 TRỰC TIẾP
+// ĐÃ BỔ SUNG: GIAO DIỆN FOLDER TRANG CHỦ & BẢNG LƯỚT NGANG
 // =============================================================================
 
 function getManifest() {
     return JSON.stringify({
         "id": "dongphimngan",
         "name": "Động Phim Ngắn",
-        "version": "1.0.0", 
+        "version": "1.0.1", 
         "baseUrl": "https://dongphimngan.com",
         "iconUrl": "https://dongphimngan.com/uploads/4260e165-e0c7-45e7-9ac1-6740b4f50510-pc.webp",
         "isEnabled": true,
         "isAdult": false,
         "type": "MOVIE",
         "layoutType": "VERTICAL",
-        "playerType": "auto" // Dùng Trình phát video gốc của App (Mượt, tự động lưu lịch sử)
+        "playerType": "auto" 
     });
 }
 
+// KHỞI TẠO CÁC FOLDER Ở TRANG CHỦ BẰNG DẠNG LƯỚT NGANG (HORIZONTAL) VÀ LƯỚI (GRID)
 function getHomeSections() {
     return JSON.stringify([
-        { slug: '', title: 'Phim Mới Cập Nhật', type: 'Grid', path: '' },
-        { slug: 'the-loai/ngon-tinh', title: 'Ngôn Tình', type: 'Horizontal', path: '' },
+        { slug: '?section=Phim Mới Cập Nhật', title: 'Phim Mới Cập Nhật', type: 'Horizontal', path: '' },
+        { slug: '?section=Top 10', title: 'Bảng Xếp Hạng Top 10', type: 'Horizontal', path: '' },
+        { slug: '?section=Ngọt đến sâu răng', title: 'Ngọt Sủng Sâu Răng', type: 'Horizontal', path: '' },
+        { slug: 'the-loai/ngon-tinh', title: 'Phim Ngôn Tình', type: 'Grid', path: '' },
         { slug: 'the-loai/cuoi-truoc-yeu-sau', title: 'Cưới Trước Yêu Sau', type: 'Horizontal', path: '' },
         { slug: 'the-loai/tong-tai', title: 'Tổng Tài Bá Đạo', type: 'Horizontal', path: '' },
-        { slug: 'the-loai/nu-cuong', title: 'Nữ Cường', type: 'Horizontal', path: '' },
-        { slug: 'the-loai/ngot-sung', title: 'Ngọt Sủng', type: 'Horizontal', path: '' }
+        { slug: 'the-loai/nu-cuong', title: 'Nữ Cường & Báo Thù', type: 'Horizontal', path: '' },
+        { slug: 'the-loai/hai-huoc', title: 'Phim Hài Hước', type: 'Horizontal', path: '' }
     ]);
 }
 
@@ -55,6 +58,12 @@ function getUrlList(slug, filtersJson) {
     var page = filters.page || 1;
     var baseUrl = "https://dongphimngan.com";
     
+    // Nếu là load Folder (Mục phân mảnh) ở trang chủ
+    if (slug.indexOf('?section=') === 0) {
+        return baseUrl + "/" + slug; 
+    }
+    
+    // Nếu là load Danh mục bình thường
     var finalSlug = slug.replace(/^\//, ""); 
     var url = baseUrl + "/" + finalSlug;
     
@@ -84,7 +93,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// BỘ TIỆN ÍCH GIẢI MÃ BASE64 VÀ XỬ LÝ CHUỖI
+// BỘ TIỆN ÍCH
 // =============================================================================
 
 var PluginUtils = {
@@ -98,7 +107,6 @@ var PluginUtils = {
             .replace(/\s+/g, " ")
             .trim();
     },
-    // Thuật toán bẻ khóa Link Base64 chuyên dụng
     base64Decode: function(str) {
         var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
         var output = '';
@@ -114,15 +122,42 @@ var PluginUtils = {
 };
 
 // =============================================================================
-// PARSERS
+// PARSERS: THUẬT TOÁN BÓC TÁCH FOLDER VÀ BẢNG LƯỚT
 // =============================================================================
 
-function parseListResponse(html) {
+function parseListResponse(html, url) {
     try {
         var items = [];
         var seen = {};
+        var urlStr = url || "";
+        var targetSection = "";
         
-        // Quét tất cả các thẻ <a> có chứa link /phim/
+        // Trích xuất tên Folder mục tiêu từ URL ảo
+        if (urlStr.indexOf('?section=') !== -1) {
+            targetSection = decodeURIComponent(urlStr.split('?section=')[1]);
+        }
+        
+        // Kỹ thuật phân mảnh: Chỉ lấy phim nằm trong Folder được yêu cầu
+        if (targetSection) {
+            var sections = html.split('<section');
+            var foundHtml = "";
+            for (var i = 1; i < sections.length; i++) {
+                var sec = sections[i];
+                var titleMatch = sec.match(/<h2[^>]*>([\s\S]*?)<\/h2>/i);
+                // Nếu tìm thấy Tên Folder khớp với dữ liệu trên web
+                if (titleMatch && PluginUtils.cleanText(titleMatch[1]).indexOf(targetSection) !== -1) {
+                    foundHtml = sec;
+                    break;
+                }
+            }
+            if (foundHtml) {
+                html = foundHtml; // Thu hẹp phạm vi quét phim chỉ trong Folder này
+            } else {
+                return JSON.stringify({ items: [] });
+            }
+        }
+        
+        // Quét mổ xẻ lấy Phim
         var aRegex = /<a[^>]+href="\/phim\/([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
         var match;
         
@@ -130,23 +165,25 @@ function parseListResponse(html) {
             var slug = match[1];
             var innerHtml = match[2];
             
-            var titleMatch = innerHtml.match(/alt="([^"]+)"/i) || innerHtml.match(/<h[34][^>]*>([^<]+)<\/h[34]>/i);
+            var titleMatch = innerHtml.match(/<h[34][^>]*>([^<]+)<\/h[34]>/i) || innerHtml.match(/alt="([^"]+)"/i);
             var imgMatch = innerHtml.match(/src="([^"]+)"/i);
 
             if (titleMatch && imgMatch) {
-                var url = "https://dongphimngan.com/phim/" + slug;
+                var phimUrl = "https://dongphimngan.com/phim/" + slug;
                 var img = imgMatch[1].split(' ')[0]; 
                 if (img.indexOf("http") === -1) img = "https://dongphimngan.com" + img;
                 
                 var title = PluginUtils.cleanText(titleMatch[1]);
+                var epMatch = innerHtml.match(/>(Trọn bộ|Tập \d+|Full[^<]*)<\/span>/i);
+                var episode = epMatch ? epMatch[1] : "Full Tập";
                 
                 if (!seen[slug]) {
                     items.push({
-                        id: url,
+                        id: phimUrl,
                         title: title,
                         posterUrl: img,
                         backdropUrl: img,
-                        episode_current: "Full Tập",
+                        episode_current: episode,
                         quality: "FHD"
                     });
                     seen[slug] = true;
@@ -156,21 +193,23 @@ function parseListResponse(html) {
 
         return JSON.stringify({
             items: items,
-            pagination: { currentPage: 1, totalPages: 10, totalItems: 9999 } 
+            // Với Folder ở Trang chủ chỉ load 1 trang, với Danh mục được quyền lướt trang tiếp theo
+            pagination: { currentPage: 1, totalPages: targetSection ? 1 : 10, totalItems: 9999 } 
         });
     } catch (e) {
         return JSON.stringify({ items: [] });
     }
 }
 
-function parseSearchResponse(html) {
-    return parseListResponse(html);
+function parseSearchResponse(html, url) {
+    return parseListResponse(html, url);
 }
 
-// BẮT CHUẨN XÁC TẬP PHIM BẰNG CÁCH QUÉT NEXT.JS JSON
+// =============================================================================
+// PARSE MOVIE DETAIL (GIỮ NGUYÊN 100% NHƯ YÊU CẦU)
+// =============================================================================
 function parseMovieDetail(html, currentUrl) {
     try {
-        // Dọn dẹp dấu gạch chéo ngược (\") của Next.js để Regex dễ đọc
         var cleanHtml = html.replace(/\\"/g, '"'); 
         
         var titleM = cleanHtml.match(/"title":"([^"]+)"/);
@@ -189,7 +228,6 @@ function parseMovieDetail(html, currentUrl) {
         var eps = [];
         var added = {};
         
-        // Quét tìm tất cả các tập (number và slug) trong mảng episodes
         var epRegex = /"number":"([^"]+)","slug":"([^"]+)"/g;
         var epMatch;
         while ((epMatch = epRegex.exec(cleanHtml)) !== null) {
@@ -201,7 +239,6 @@ function parseMovieDetail(html, currentUrl) {
             }
         }
 
-        // Sắp xếp tập từ bé đến lớn
         eps.sort(function(a, b) {
             var na = parseInt((a.num.match(/\d+/) || ["0"])[0], 10);
             var nb = parseInt((b.num.match(/\d+/) || ["0"])[0], 10);
@@ -215,10 +252,8 @@ function parseMovieDetail(html, currentUrl) {
             
             for (var i = 0; i < eps.length; i++) {
                 var name = eps[i].num;
-                // Nếu tập chỉ có số (vd: 1, 2, 3), tự động nối thêm chữ "Tập"
                 if (/^\d+$/.test(name)) name = "Tập " + name;
 
-                // GIẢ LẬP ĐƯỜNG DẪN XEM PHIM ĐỂ HÀM SAU NHẢY VÀO BẮT LINK
                 vsEps.push({
                     id: "https://dongphimngan.com/xem-phim/" + movieSlug + "/1080/vietsub/" + eps[i].slug,
                     name: name,
@@ -256,21 +291,18 @@ function parseMovieDetail(html, currentUrl) {
 }
 
 // =============================================================================
-// BỘ GIẢI MÃ VIDEO GỐC NATIVE (HOÀN TOÀN KHÔNG DÙNG WEBVIEW)
+// PARSE DETAIL RESPONSE (GIỮ NGUYÊN 100% BỘ BẮT LINK)
 // =============================================================================
 function parseDetailResponse(html) {
     try {
         var streamUrl = "";
         var cleanHtml = html.replace(/\\"/g, '"'); 
         
-        // 1. Tìm chuỗi Base64 giấu trong "videoUrl"
         var base64Match = cleanHtml.match(/"videoUrl":"(aHR0cHM[^"]+)"/i);
         
         if (base64Match) {
-            // 2. Kích hoạt thuật toán bẻ khóa thành Link MP4 nguyên chất
             streamUrl = PluginUtils.base64Decode(base64Match[1]);
         } else {
-            // Backup nếu web thả lỏng không mã hóa nữa
             var rawMatch = cleanHtml.match(/"videoUrl":"(https?[^"]+)"/i);
             if (rawMatch) streamUrl = rawMatch[1];
         }
@@ -278,7 +310,7 @@ function parseDetailResponse(html) {
         if (streamUrl) {
             return JSON.stringify({
                 url: streamUrl,
-                isEmbed: false, // Ra lệnh cho App bật Native Player
+                isEmbed: false, 
                 mimeType: streamUrl.indexOf('.m3u8') !== -1 ? "application/x-mpegURL" : "video/mp4",
                 headers: { 
                     "Referer": "https://dongphimngan.com/",
