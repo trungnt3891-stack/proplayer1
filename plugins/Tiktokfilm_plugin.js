@@ -1,313 +1,333 @@
-/**
- * PLUGIN BÓC TÁCH PHIM/VIDEO TIKTOK - QIQI THẬT THẬT 00
- * Platform Target: Mobile Application
- * Author: Chuyên Gia Scraper Plugin
- */
+// =============================================================================
+// PLUGIN VAX APP: GÀ MỜ MÊ PHIM (GAMOMEPHIM.COM)
+// CHUYÊN GIA TỐI ƯU: NATIVE SHORTFILM + DIRECT MP4/M3U8 (NO WEBVIEW)
+// =============================================================================
 
-// =========================================================================
-// 1. CẤU HÌNH MANIFEST & DANH MỤC (CONFIG FUNCTIONS)
-// =========================================================================
+var BASEURL = "https://gamomephim.com";
 
 function getManifest() {
-    return {
-        id: "com.plugin.tiktok.qiqithatthat00",
-        name: "TikTok - Qiqi Thật Thật 00",
-        version: "1.0.0",
-        baseUrl: "https://www.tiktok.com",
-        icon: "https://www.tiktok.com/favicon.ico",
-        description: "Plugin bóc tách video/phim ngắn từ kênh TikTok @qiqithatthat00"
-    };
+    return JSON.stringify({
+        "id": "gamomephim",
+        "name": "Gà Mờ Mê Phim",
+        "description": "Nền tảng xem phim ngắn, phim tổng tài FULL HD siêu mượt. Không Quảng Cáo.",
+        "version": "1.2.0",
+        "baseUrl": BASEURL,
+        "iconUrl": "https://r2.gamomephim.com/site/logo-1784305321242.png",
+        "isEnabled": true,
+        "isAdult": false,
+        "type": "shortfilm", // Kích hoạt giao diện Player Dọc (TikTok-style)
+        "layoutType": "VERTICAL",
+        "playerType": "exoplayer" // Dùng Native Player thuần túy, tuyệt đối không dùng Webview
+    });
+}
+
+function log(msg) {
+    if (typeof nativeLog !== 'undefined') {
+        nativeLog("[GaMoMePhim] " + msg);
+    } else if (typeof console !== 'undefined' && console.log) {
+        console.log("[GaMoMePhim] " + msg);
+    }
 }
 
 function getHomeSections() {
-    return [
-        {
-            id: "latest_videos",
-            title: "Phim Ngắn Mới Nhất",
-            url: "https://www.tiktok.com/@qiqithatthat00?lang=en"
-        }
-    ];
+    return JSON.stringify([
+        { slug: 'phim-moi', title: 'Phim Mới', type: 'Grid' },
+        { slug: 'the-loai/hien-dai', title: 'Hiện Đại', type: 'Horizontal' },
+        { slug: 'the-loai/co-trang', title: 'Cổ Trang', type: 'Horizontal' },
+        { slug: 'the-loai/hai-huoc', title: 'Hài Hước', type: 'Horizontal' },
+        { slug: 'the-loai/tra-xanh-nam', title: 'Trà Xanh Nam', type: 'Horizontal' },
+        { slug: 'ban-xep-hang', title: 'Bảng Xếp Hạng', type: 'Horizontal' }
+    ]);
 }
 
 function getPrimaryCategories() {
-    return [
-        { id: "all_episodes", title: "Tất Cả Tập Phim (@qiqithatthat00)" }
-    ];
+    return JSON.stringify([
+        { name: 'Phim Mới', slug: 'phim-moi' },
+        { name: 'Bảng Xếp Hạng', slug: 'ban-xep-hang' },
+        { name: 'Chữa Lành', slug: 'the-loai/chua-lanh' },
+        { name: 'Cổ Trang', slug: 'the-loai/co-trang' },
+        { name: 'Cưới Trước Yêu Sau', slug: 'the-loai/cuoi-truoc-yeu-sau' },
+        { name: 'Dân Quốc', slug: 'the-loai/dan-quoc' },
+        { name: 'Gương Vỡ Lại Lành', slug: 'the-loai/guong-vo-lai-lanh' },
+        { name: 'Hài Hước', slug: 'the-loai/hai-huoc' },
+        { name: 'Hiện Đại', slug: 'the-loai/hien-dai' },
+        { name: 'Niên Đại', slug: 'the-loai/nien-dai' },
+        { name: 'Thanh Xuân', slug: 'the-loai/thanh-xuan' },
+        { name: 'Trà Xanh Nam', slug: 'the-loai/tra-xanh-nam' },
+        { name: 'Trọng Sinh', slug: 'the-loai/trong-sinh' },
+        { name: 'Xuyên Không', slug: 'the-loai/xuyen-khong' },
+        { name: 'Yêu Thầm', slug: 'the-loai/yeu-tham' }
+    ]);
 }
 
 function getFilterConfig() {
-    return [];
+    return JSON.stringify({});
 }
 
-// =========================================================================
-// 2. TẠO URL REQUEST (URL GENERATORS)
-// =========================================================================
+// =============================================================================
+// URL GENERATION
+// =============================================================================
 
-function getUrlList(categoryId, page) {
-    return "https://www.tiktok.com/@qiqithatthat00?lang=en";
-}
-
-function getUrlSearch(keyword, page) {
-    return "https://www.tiktok.com/search?q=" + encodeURIComponent(keyword);
-}
-
-function getUrlDetail(url) {
-    return url;
-}
-
-function getUrlCategories() {
-    return "https://www.tiktok.com/@qiqithatthat00?lang=en";
-}
-
-// =========================================================================
-// 3. HELPER UTILS (XỬ LÝ DỮ LIỆU NÂNG CAO & AN TOÀN)
-// =========================================================================
-
-/**
- * Hàm bổ trợ quét Regex trích xuất JSON Payload từ SSR HTML của TikTok
- */
-function extractTikTokData(html) {
-    log("Đang bóc tách JSON Payload từ HTML TikTok...");
-    if (!html) return null;
-
-    var dataStr = null;
-
-    // 1. Bắt JSON Rehydration chính của TikTok
-    var matchUni = html.match(/<script\s+id="__UNIVERSAL_DATA_FOR_REHYDRATION__"\s+type="application\/json">([\s\S]*?)<\/script>/i);
-    if (matchUni && matchUni[1]) {
-        dataStr = matchUni[1].trim();
-    } else {
-        // 2. Dự phòng bắt SIGI_STATE nếu TikTok đổi cấu trúc render
-        var matchSigi = html.match(/<script\s+id="SIGI_STATE"\s+type="application\/json">([\s\S]*?)<\/script>/i);
-        if (matchSigi && matchSigi[1]) {
-            dataStr = matchSigi[1].trim();
-        }
-    }
-
-    if (dataStr) {
-        try {
-            // An toàn kiểm tra kiểu dữ liệu tránh crash
-            return typeof dataStr === 'string' ? JSON.parse(dataStr) : dataStr;
-        } catch (e) {
-            log("Lỗi JSON.parse payload TikTok: " + e.message);
-        }
-    }
-    return null;
-}
-
-// =========================================================================
-// 4. CÁC HÀM PARSE DỮ LIỆU (PARSE FUNCTIONS)
-// =========================================================================
-
-function parseListResponse(html) {
-    var items = [];
+function getUrlList(slug, filtersJson) {
     try {
-        log("Bắt đầu parse danh sách video...");
-        var rawData = extractTikTokData(html);
+        var page = 1;
+        if (filtersJson) {
+            try {
+                var filters = JSON.parse(filtersJson);
+                page = parseInt(filters.page) || 1;
+            } catch (e) {}
+        }
+        var url = BASEURL + "/" + slug.replace(/^\//, "");
+        if (page > 1) {
+            url += (url.indexOf("?") > -1 ? "&" : "?") + "page=" + page;
+        }
+        return url;
+    } catch (e) {
+        return BASEURL;
+    }
+}
 
-        if (rawData) {
-            var itemList = [];
+function getUrlSearch(keyword, filtersJson) {
+    try {
+        var page = 1;
+        if (filtersJson) {
+            try {
+                page = JSON.parse(filtersJson).page || 1;
+            } catch (e) {}
+        }
+        return BASEURL + "/tim-kiem?q=" + encodeURIComponent(keyword) + (page > 1 ? "&page=" + page : "");
+    } catch (e) {
+        return BASEURL;
+    }
+}
 
-            // Trích xuất mảng item từ __UNIVERSAL_DATA_FOR_REHYDRATION__
-            var defaultScope = rawData["__DEFAULT_SCOPE__"] || rawData;
-            if (defaultScope["webapp.user-detail"] && defaultScope["webapp.user-detail"].itemList) {
-                itemList = defaultScope["webapp.user-detail"].itemList;
-            } else if (rawData.ItemModule) {
-                // Trích xuất từ SIGI_STATE
-                itemList = Object.values(rawData.ItemModule);
-            }
+function getUrlDetail(slug) {
+    if (!slug) return "";
+    if (slug.indexOf("http") === 0) return slug;
+    
+    // Đã fix lỗi 404: Web chỉ nhận trực tiếp slug, nếu có chữ /phim/ sẽ bị lỗi
+    var cleanSlug = slug.replace(/^\//, "").replace(/^phim\//, "");
+    return BASEURL + "/" + cleanSlug;
+}
 
-            for (var i = 0; i < itemList.length; i++) {
-                var item = itemList[i];
-                var videoId = item.id || (item.video ? item.id : null);
-                var title = item.desc || ("Phim ngắn Qiqi #" + (i + 1));
+function getUrlCategories() { return BASEURL; }
+function getUrlCountries() { return ""; }
+function getUrlYears() { return ""; }
+
+// =============================================================================
+// PARSERS
+// =============================================================================
+
+function parseListResponse(html, url) {
+    try {
+        var items = [];
+        var added = {};
+        
+        // Tiền xử lý giải mã JSON ẩn của NextJS
+        var unescapedHtml = html.replace(/\\"/g, '"');
+        var regex = /"item"\s*:\s*(\{[^{}]*"slug"\s*:\s*"([^"]+)"[^{}]*\})/g;
+        var match;
+        
+        while ((match = regex.exec(unescapedHtml)) !== null) {
+            try {
+                var objStr = match[1];
+                var slug = match[2];
+                var titleMatch = objStr.match(/"title"\s*:\s*"([^"]+)"/);
+                var imgMatch = objStr.match(/"img"\s*:\s*"([^"]+)"/);
+                var badgeMatch = objStr.match(/"badge"\s*:\s*"([^"]+)"/);
+                var yearMatch = objStr.match(/"year"\s*:\s*(\d+)/);
                 
-                var cover = "";
-                if (item.video) {
-                    cover = item.video.originCover || item.video.cover || item.video.dynamicCover || "";
-                }
-
-                var author = (item.author && item.author.uniqueId) ? item.author.uniqueId : "qiqithatthat00";
-                var videoUrl = item.shareUrl || ("https://www.tiktok.com/@" + author + "/video/" + videoId);
-
-                if (videoId) {
+                if (titleMatch && !added[slug]) {
+                    added[slug] = true;
                     items.push({
-                        id: videoId,
-                        title: title,
-                        cover: cover,
-                        url: videoUrl,
-                        author: author
+                        id: slug, 
+                        title: titleMatch[1],
+                        posterUrl: imgMatch ? imgMatch[1] : "",
+                        backdropUrl: imgMatch ? imgMatch[1] : "",
+                        quality: badgeMatch ? badgeMatch[1] : "HD",
+                        year: yearMatch ? parseInt(yearMatch[1]) : 0,
+                        episode_current: badgeMatch ? badgeMatch[1] : "Cập nhật"
                     });
                 }
-            }
-        } else {
-            log("Không lấy được JSON Payload, quét Regex HTML dự phòng...");
-            // Regex fallback quét trực tiếp link video trong HTML
-            var videoRegex = /href="(https:\/\/www\.tiktok\.com\/@[^\/]+\/video\/(\d+))"/g;
-            var match;
-            var seenIds = {};
+            } catch (errJson) {}
+        }
 
-            while ((match = videoRegex.exec(html)) !== null) {
-                var vUrl = match[1];
-                var vId = match[2];
-                if (!seenIds[vId]) {
-                    seenIds[vId] = true;
+        // Cứu vớt lấy link qua cấu trúc DOM nếu NextJS payload bị ngắt
+        if (items.length === 0) {
+            var domRegex = /<a[^>]+href="(?:\/phim)?\/([^"]+)"[^>]*title="([^"]+)"[\s\S]*?<img[^>]+src="([^"]+)"[\s\S]*?(?:<span[^>]*>([^<]+)<\/span>)?/gi;
+            var domMatch;
+            while ((domMatch = domRegex.exec(html)) !== null) {
+                var dSlug = domMatch[1];
+                if (!added[dSlug]) {
+                    added[dSlug] = true;
                     items.push({
-                        id: vId,
-                        title: "Tập Phim #" + vId,
-                        cover: "",
-                        url: vUrl
+                        id: dSlug,
+                        title: domMatch[2].trim(),
+                        posterUrl: domMatch[3],
+                        backdropUrl: domMatch[3],
+                        episode_current: domMatch[4] ? domMatch[4].trim() : "Full"
                     });
                 }
             }
         }
 
-        log("Parse thành công " + items.length + " video.");
+        return JSON.stringify({
+            items: items,
+            pagination: {
+                currentPage: 1,
+                totalPages: items.length > 0 ? 99 : 1 // Cấp ảo để App cuộn vô tận
+            }
+        });
+
     } catch (e) {
-        log("Lỗi trong parseListResponse: " + e.message);
+        log("parseListResponse err: " + e);
+        return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
     }
-    return items;
 }
 
-function parseSearchResponse(html) {
-    return parseListResponse(html);
+function parseSearchResponse(html, url) {
+    return parseListResponse(html, url);
 }
 
 function parseMovieDetail(html, url) {
     try {
-        log("Đang parse thông tin chi tiết video/phim tại URL: " + url);
-        var rawData = extractTikTokData(html);
+        var title = "Đang cập nhật...";
+        var posterUrl = "";
+        var description = "Không có mô tả.";
+        var year = 2026;
+        var casts = "";
+        var duration = "";
+        var status = "Đang cập nhật";
+        var servers = [];
+
+        var unescapedHtml = html.replace(/\\"/g, '"');
+
+        // BÓC THÔNG TIN METADATA BẰNG REGEX
+        var metaTitle = html.match(/<meta property="og:title" content="([^"]+)"/);
+        if (metaTitle) title = metaTitle[1].replace(/ FULL - Gà Mờ Mê Phim/gi, "").replace(/ - Gà Mờ Mê Phim/gi, "").trim();
+
+        var metaImg = html.match(/<meta property="og:image" content="([^"]+)"/);
+        if (metaImg) posterUrl = metaImg[1];
+
+        var descMatch = unescapedHtml.match(/"description"\s*:\s*"([^"]+)"/);
+        if (descMatch) description = descMatch[1].replace(/\\n/g, '\n');
+
+        var castMatch = unescapedHtml.match(/"cast"\s*:\s*"([^"]+)"/);
+        if (castMatch) casts = castMatch[1];
+
+        var yearMatch = unescapedHtml.match(/"releaseYear"\s*:\s*(\d+)/);
+        if (yearMatch) year = parseInt(yearMatch[1]);
+
+        var durationMatch = unescapedHtml.match(/"durationString"\s*:\s*"([^"]+)"/);
+        if (durationMatch) duration = durationMatch[1];
+
+        // =====================================================================
+        // TRỤC CHÍNH: BÓC TRỰC TIẾP LINK MP4 TỪ KHỐI DỮ LIỆU ẨN
+        // Đẩy thẳng mảng tập vào "servers", Vax App sẽ tự động render NATIVE!
+        // =====================================================================
+        var svSub = [];
+        var svTm = [];
         
-        var movieDetail = {
-            title: "Qiqi Thật Thật 00 - Phim Ngắn",
-            description: "",
-            cover: "",
-            episodes: []
-        };
+        var epObjRegex = /\{[^{}]*"m3u8Url"\s*:\s*"[^"]+"[^{}]*\}/g;
+        var epMatches = unescapedHtml.match(epObjRegex);
+        
+        if (epMatches) {
+            epMatches.forEach(function(epStr) {
+                var m3u8Match = epStr.match(/"m3u8Url"\s*:\s*"([^"]+)"/);
+                var audioMatch = epStr.match(/"audioType"\s*:\s*"([^"]+)"/);
+                var epNumMatch = epStr.match(/"episodeNumber"\s*:\s*(\d+)/);
+                var epTitleMatch = epStr.match(/"title"\s*:\s*"([^"]+)"/);
+                
+                if (m3u8Match) {
+                    var epLink = m3u8Match[1]; // Link MP4 thật
+                    var epNum = epNumMatch ? epNumMatch[1] : "1";
+                    var epTitle = (epTitleMatch && epTitleMatch[1] !== "null") ? epTitleMatch[1] : ("Tập " + epNum);
+                    var audio = audioMatch ? audioMatch[1] : "";
 
-        if (rawData) {
-            var defaultScope = rawData["__DEFAULT_SCOPE__"] || {};
-            var videoDetail = defaultScope["webapp.video-detail"] || {};
-            var itemInfo = videoDetail.itemInfo ? videoDetail.itemInfo.itemStruct : null;
-
-            if (!itemInfo && rawData.ItemModule) {
-                var keys = Object.keys(rawData.ItemModule);
-                if (keys.length > 0) itemInfo = rawData.ItemModule[keys[0]];
-            }
-
-            if (itemInfo) {
-                movieDetail.title = itemInfo.desc ? itemInfo.desc.split('#')[0].trim() : "Qiqi Thật Thật 00";
-                movieDetail.description = itemInfo.desc || "";
-                movieDetail.cover = itemInfo.video ? (itemInfo.video.originCover || itemInfo.video.cover) : "";
-
-                movieDetail.episodes.push({
-                    name: "Phát Video (Full HD)",
-                    url: url
-                });
-            }
-        }
-
-        // Trường hợp không bóc tách được chi tiết, vẫn trả về tập mặc định
-        if (movieDetail.episodes.length === 0) {
-            movieDetail.episodes.push({
-                name: "Tập 1",
-                url: url
+                    // Phân luồng server vietsub/thuyết minh (Bắt buộc slug phải duy nhất)
+                    if (audio === "THUYET_MINH") {
+                        svTm.push({ id: epLink, name: epTitle, slug: "tm-" + epNum });
+                    } else {
+                        svSub.push({ id: epLink, name: epTitle, slug: "vs-" + epNum });
+                    }
+                }
             });
         }
 
-        return movieDetail;
+        if (svTm.length > 0) servers.push({ name: "Thuyết Minh", episodes: svTm });
+        if (svSub.length > 0) servers.push({ name: "Vietsub", episodes: svSub });
+
+        // Backup nếu web cố tình giấu cấu trúc JSON
+        if (servers.length === 0) {
+             var fallbackMp4 = unescapedHtml.match(/(https:\/\/[^"'\s]+\.(?:mp4|m3u8))/);
+             if (fallbackMp4) {
+                 servers.push({
+                     name: "Mặc định",
+                     episodes: [{id: fallbackMp4[1], name: "Tập 1", slug: "tap-1"}]
+                 });
+             }
+        }
+
+        // Sắp xếp tập tự động
+        servers.forEach(function(s) {
+            s.episodes.sort(function(a, b) {
+                var matchA = a.slug.match(/\d+/);
+                var matchB = b.slug.match(/\d+/);
+                return (matchA ? parseInt(matchA[0]) : 0) - (matchB ? parseInt(matchB[0]) : 0);
+            });
+        });
+
+        if (svSub.length > 0 || svTm.length > 0) {
+            status = "Full " + Math.max(svSub.length, svTm.length) + " Tập";
+        }
+
+        return JSON.stringify({
+            id: url,
+            title: title,
+            posterUrl: posterUrl,
+            backdropUrl: posterUrl,
+            description: description,
+            quality: "FHD",
+            year: year,
+            rating: 9.5,
+            status: status,
+            casts: casts,
+            duration: duration,
+            servers: servers
+        });
+
     } catch (e) {
-        log("Lỗi trong parseMovieDetail: " + e.message);
-        return { title: "", description: "", cover: "", episodes: [] };
+        log("parseMovieDetail err: " + e);
+        return JSON.stringify({ id: url || "error", title: "Lỗi nội dung", servers: [] });
     }
 }
 
+// =============================================================================
+// APP TỰ ĐỘNG CHẠY HÀM NÀY, TIẾP NHẬN LINK MP4 TỪ ID VÀ EXOPLAYER PHÁT NATIVE
+// =============================================================================
 function parseDetailResponse(html, url) {
     try {
-        log("Bắt đầu xử lý nguồn phát (Source Parsing)...");
-        var rawData = extractTikTokData(html);
-        var directMp4 = "";
-
-        if (rawData) {
-            var defaultScope = rawData["__DEFAULT_SCOPE__"] || {};
-            var videoDetail = defaultScope["webapp.video-detail"] || {};
-            var itemStruct = videoDetail.itemInfo ? videoDetail.itemInfo.itemStruct : null;
-
-            if (!itemStruct && rawData.ItemModule) {
-                var keys = Object.keys(rawData.ItemModule);
-                if (keys.length > 0) itemStruct = rawData.ItemModule[keys[0]];
-            }
-
-            if (itemStruct && itemStruct.video) {
-                // Ưu tiên 1: Lấy Direct Link playAddr/downloadAddr gốc
-                directMp4 = itemStruct.video.playAddr || itemStruct.video.downloadAddr || "";
-                
-                // Ưu tiên 2: Trích xuất từ bitrateInfo
-                if (!directMp4 && itemStruct.video.bitrateInfo && itemStruct.video.bitrateInfo.length > 0) {
-                    var bitrate = itemStruct.video.bitrateInfo[0];
-                    if (bitrate.PlayAddr && bitrate.PlayAddr.UrlList && bitrate.PlayAddr.UrlList.length > 0) {
-                        directMp4 = bitrate.PlayAddr.UrlList[0];
-                    }
-                }
-            }
-        }
-
-        // =========================================================================
-        // TRƯỜNG HỢP 1: BẮT ĐƯỢC DIRECT LINK (Phát Native Player)
-        // =========================================================================
-        if (directMp4) {
-            log("Bắt thành công Direct Link MP4! Chuyển sang Native Player.");
-            return {
-                isEmbed: false,
-                url: directMp4,
-                mimeType: "video/mp4",
-                headers: {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "Referer": "https://www.tiktok.com/"
-                }
-            };
-        }
-
-        // =========================================================================
-        // TRƯỜNG HỢP 2: FALLBACK WEBVIEW + CUSTOM-JS ANTI-ADS / CLEAN UI
-        // =========================================================================
-        log("Không tìm thấy Direct Link, sử dụng Webview Embed + Custom-JS Anti-Ads.");
-        
-        var customJs = `
-            (function() {
-                // 1. Inject CSS làm sạch giao diện và phủ đen toàn màn hình
-                var css = 'header, footer, div[class*="banner"], div[class*="ad"], .tiktok-top-nav-container, .tiktok-feed-sidebar, div[class*="ButtonContainer"] { display: none !important; } ' +
-                          'body, html { background-color: #000 !important; width: 100vw !important; height: 100vh !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; } ' +
-                          'video { width: 100% !important; height: 100% !important; object-fit: contain !important; }';
-                
-                var style = document.createElement('style');
-                style.type = 'text/css';
-                style.appendChild(document.createTextNode(css));
-                (document.head || document.getElementsByTagName('head')[0]).appendChild(style);
-
-                // 2. Tự động click tắt nút Quảng cáo / Nút mở App nếu xuất hiện
-                setInterval(function() {
-                    var closeBtns = document.querySelectorAll('button[class*="close"], div[class*="close"], a[class*="open-app"]');
-                    closeBtns.forEach(function(btn) { btn.click(); });
-                }, 1000);
-            })();
-        `;
-
-        return {
-            isEmbed: true,
-            url: url,
-            headers: {
-                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
-                "Custom-Js": customJs
-            }
-        };
-
+        var mimeType = url.indexOf(".m3u8") > -1 ? "application/x-mpegURL" : "video/mp4";
+        return JSON.stringify({
+            "url": url, 
+            "isEmbed": false, // LỆNH CHẶT ĐỨT WEBVIEW: Buộc ExoPlayer phát thẳng link 100% Native, nói không với quảng cáo web
+            "mimeType": mimeType,
+            "headers": {
+                "Referer": BASEURL,
+                "Origin": BASEURL,
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "subtitles": []
+        });
     } catch (e) {
-        log("Lỗi trong parseDetailResponse: " + e.message);
-        return { isEmbed: true, url: url };
+        return JSON.stringify({ "url": url, "isEmbed": false, "headers": {} });
     }
 }
 
-function parseEmbedResponse(html, url) {
-    return parseDetailResponse(html, url);
+function parseEmbedResponse(html, url) { 
+    return JSON.stringify({ url: url, isEmbed: false }); 
 }
+
+function parseCategoriesResponse(html) { return "[]"; }
+function parseCountriesResponse(html) { return "[]"; }
+function parseYearsResponse(html) { return "[]"; }
