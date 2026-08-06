@@ -7,8 +7,8 @@ var BASEURL = "https://gamomephim.com";
 
 function getManifest() {
     return JSON.stringify({
-        "id": "gamomephim",
-        "name": "Gà Mờ Mê Phim",
+        "id": "Mê Phim Ngắn",
+        "name": "Mê Phim Ngắn",
         "description": "Cấu trúc 3 Cấp: Vào trang 1 -> Bấm tập -> Tự tóm link mp4 ở trang 2 và stream dọc.",
         "version": "5.0.0", // Đã Fix Load Trang Chủ + Menu Chuẩn
         "baseUrl": BASEURL,
