@@ -7,8 +7,8 @@ var BASEURL = "https://gamomephim.com";
 
 function getManifest() {
     return JSON.stringify({
-        "id": "gamomephim",
-        "name": "Gà Mờ Mê Phim",
+        "id": "Mê Phim Ngắn",
+        "name": "Mê Phim Ngắn",
         "description": "Vào Trang 1 siêu nhanh. Bấm Xem Ngay để Hook tóm link ở Trang 2.",
         "version": "4.0.0",
         "baseUrl": BASEURL,
