@@ -10,14 +10,14 @@ function getManifest() {
         "id": "gamomephim",
         "name": "Gà Mờ Mê Phim",
         "description": "Nền tảng xem phim ngắn FULL HD. Sử dụng Hook bắt link siêu tốc, xóa sạch quảng cáo.",
-        "version": "3.0.0",
+        "version": "4.0.0",
         "baseUrl": BASEURL,
         "iconUrl": "https://r2.gamomephim.com/site/logo-1784305321242.png",
         "isEnabled": true,
         "isAdult": false,
-        "type": "shortfilm", // Kích hoạt trình phát phim dọc
+        "type": "shortfilm", // Kích hoạt giao diện vuốt dọc (TikTok-style)
         "layoutType": "VERTICAL",
-        "playerType": "embedtoexoplay" // BẮT BUỘC: Mở Webview ngầm tàng hình để Hook chạy
+        "playerType": "embedtoexoplay" // BẮT BUỘC: Mở Webview ngầm để Hook Custom-Js chạy
     });
 }
 
@@ -105,10 +105,9 @@ function getUrlDetail(slug) {
     if (!slug) return "";
     if (slug.indexOf("http") === 0) return slug;
     
-    // ĐIỂM CHỐT QUAN TRỌNG: Cắt bỏ chữ /phim/ để ép App lao thẳng vào trang Watch Video, 
-    // né hoàn toàn trang giới thiệu có nút "Vào Xem Phim"
+    // ĐÃ FIX: ÉP BUỘC CHÈN `/phim/` VÀO LINK ĐỂ LAO THẲNG VÀO TRANG SỐ 2 (TRANG PLAYER)
     var cleanSlug = slug.replace(/^\//, "").replace(/^phim\//, "");
-    return BASEURL + "/" + cleanSlug;
+    return BASEURL + "/phim/" + cleanSlug;
 }
 
 function getUrlCategories() { return BASEURL; }
@@ -152,7 +151,6 @@ function parseListResponse(html, url) {
             } catch (errJson) {}
         }
 
-        // Cứu vớt DOM nếu API đổi
         if (items.length === 0) {
             var domRegex = /<a[^>]+href="(?:\/phim)?\/([^"]+)"[^>]*title="([^"]+)"[\s\S]*?<img[^>]+src="([^"]+)"[\s\S]*?(?:<span[^>]*>([^<]+)<\/span>)?/gi;
             var domMatch;
@@ -185,7 +183,7 @@ function parseSearchResponse(html, url) {
     return parseListResponse(html, url);
 }
 
-// BƯỚC 1: TẠO GIAO DIỆN CHỌN TẬP PHIM NATIVE DỌC
+// TẠO GIAO DIỆN CHỌN TẬP BÊN NGOÀI NATIVE
 function parseMovieDetail(html, url) {
     try {
         var title = "Đang cập nhật...";
@@ -193,7 +191,6 @@ function parseMovieDetail(html, url) {
         var description = "Không có mô tả.";
         var year = 2026;
 
-        // Trích xuất Metadata trực tiếp từ trang Watch
         var metaTitle = html.match(/<meta property="og:title" content="([^"]+)"/);
         if (metaTitle) title = metaTitle[1].replace(/ FULL - Gà Mờ Mê Phim/gi, "").trim();
 
@@ -213,10 +210,10 @@ function parseMovieDetail(html, url) {
         var yearMatch = unescapedHtml.match(/"releaseYear"\s*:\s*(\d+)/);
         if (yearMatch) year = parseInt(yearMatch[1]);
 
-        // Tạo 2 nút bấm Phát Nhanh theo đúng chuẩn |data: của Vax App
+        // Tạo sẵn 2 tập ảo với tham số data riêng biệt để Hook hiểu cần click nút nào
         var cleanUrl = url.split("|")[0];
         var servers = [{
-            name: "Phát Nhanh (Không Quảng Cáo)",
+            name: "Phát Nhanh (Native Dọc)",
             episodes: [
                 { id: cleanUrl + "|data:lang=vs", name: "Bản Vietsub", slug: "tap-vs" },
                 { id: cleanUrl + "|data:lang=tm", name: "Bản Thuyết Minh", slug: "tap-tm" }
@@ -241,10 +238,9 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// BƯỚC 2: HOOK CUSTOM-JS VÀO WEBVIEW NGẦM ĐỂ ÉP RA LINK MEDIA VÀ ĐẨY SANG EXOPLAYER
+// SỬ DỤNG CUSTOM-JS CHẠY NGẦM ĐỂ ÉP RA LINK M3U8/MP4
 function parseDetailResponse(html, apiUrl) {
     try {
-        // App sẽ tự tách chuỗi |data: truyền vào
         var isVietsub = apiUrl.indexOf('lang=vs') > -1 ? true : false;
         var cleanUrl = apiUrl.split("|")[0];
         
@@ -308,14 +304,14 @@ function parseDetailResponse(html, apiUrl) {
                                 "Referer": window.location.href,
                                 "User-Agent": navigator.userAgent
                             });
-                            // Truyền link cho ExoPlayer (Lệnh Native)
+                            // Lệnh tối thượng: Truyền link sang ExoPlayer Native (chiếu dọc)
                             window.SnifferBridge.play(video.src, headers);
                         }
                         clearInterval(checkInterval);
                     }
 
                     checkCount++;
-                    if (checkCount > 50) clearInterval(checkInterval); // Giải phóng sau 25s
+                    if (checkCount > 50) clearInterval(checkInterval); // Tự hủy sau 25s
                 } catch (err) {
                     if (window.SnifferBridge) window.SnifferBridge.log("Lỗi Hook: " + err.message);
                 }
