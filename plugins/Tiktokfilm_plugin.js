@@ -1,338 +1,300 @@
 // =============================================================================
-// PLUGIN VAAPP: PHIMNGAN.NET (Bản Hoàn Hảo - Sạch Lỗi Trang Chủ)
+// PLUGIN ĐỘNG PHIM NGẮN TRUNG (DONGPHIMNGAN.COM)
+// NATIVE PLAYER - GIẢI MÃ BASE64 LẤY LINK MP4 TRỰC TIẾP
 // =============================================================================
-
-var BASEURL = "https://phimngan.net";
 
 function getManifest() {
     return JSON.stringify({
-        "id": "phimngan_net",
-        "name": "PhimNgan.Net",
-        "description": "Bản Webview Gốc: Load siêu tốc, ép video dọc, xóa rác giao diện.",
-        "version": "1.8.6",
-        "baseUrl": BASEURL,
-        "iconUrl": BASEURL + "/icons/icon-192x192.png",
+        "id": "dongphimngan",
+        "name": "Động Phim Ngắn",
+        "version": "1.0.0", 
+        "baseUrl": "https://dongphimngan.com",
+        "iconUrl": "https://dongphimngan.com/uploads/4260e165-e0c7-45e7-9ac1-6740b4f50510-pc.webp",
         "isEnabled": true,
-        "hasLogin": true,                     
-        "loginUrl": BASEURL,    
-        "type": "shortfilm",                  
-        "layoutType": "VERTICAL",             
-        "playerType": "embed" // [QUAN TRỌNG] Vô hiệu hóa hoàn toàn Sniffer, sử dụng Webview Gốc
+        "isAdult": false,
+        "type": "MOVIE",
+        "layoutType": "VERTICAL",
+        "playerType": "auto" // Dùng Trình phát video gốc của App (Mượt, tự động lưu lịch sử)
     });
 }
 
-function log(msg) {
-    if (typeof nativeLog !== 'undefined') {
-        nativeLog("[phimngan] " + msg);
-    } else if (typeof console !== 'undefined' && console.log) {
-        console.log("[phimngan] " + msg);
-    }
-}
-
-// =============================================================================
-// MENU & TRANG CHỦ
-// =============================================================================
-
 function getHomeSections() {
     return JSON.stringify([
-        { slug: '', title: 'Mới Cập Nhật', type: 'Grid' },
-        { slug: 'genres/phim-ai', title: 'Phim AI', type: 'Horizontal' },
-        { slug: 'genres/ngon-tinh', title: 'Ngôn Tình', type: 'Horizontal' },
-        { slug: 'genres/tong-tai', title: 'Tổng Tài', type: 'Horizontal' },
-        { slug: 'genres/cung-dau', title: 'Cung Đấu', type: 'Grid' },
-        { slug: 'genres/hanh-dong', title: 'Hành Động', type: 'Horizontal' }
+        { slug: '', title: 'Phim Mới Cập Nhật', type: 'Grid', path: '' },
+        { slug: 'the-loai/ngon-tinh', title: 'Ngôn Tình', type: 'Horizontal', path: '' },
+        { slug: 'the-loai/cuoi-truoc-yeu-sau', title: 'Cưới Trước Yêu Sau', type: 'Horizontal', path: '' },
+        { slug: 'the-loai/tong-tai', title: 'Tổng Tài Bá Đạo', type: 'Horizontal', path: '' },
+        { slug: 'the-loai/nu-cuong', title: 'Nữ Cường', type: 'Horizontal', path: '' },
+        { slug: 'the-loai/ngot-sung', title: 'Ngọt Sủng', type: 'Horizontal', path: '' }
     ]);
 }
 
 function getPrimaryCategories() {
     return JSON.stringify([
-        { name: 'Mới Cập Nhật', slug: '' },
-        { name: 'Phim AI', slug: 'genres/phim-ai' },
-        { name: 'Ngôn Tình', slug: 'genres/ngon-tinh' },
-        { name: 'Tổng Tài', slug: 'genres/tong-tai' },
-        { name: 'Cung Đấu', slug: 'genres/cung-dau' },
-        { name: 'Gia Đình', slug: 'genres/gia-dinh' },
-        { name: 'Hài Hước', slug: 'genres/hai-huoc' },
-        { name: 'Phục Thù', slug: 'genres/phuc-thu' },
-        { name: 'Xuyên Không', slug: 'genres/xuyen-khong' }
+        { name: 'Trang Chủ', slug: '' },
+        { name: 'Ngôn Tình', slug: 'the-loai/ngon-tinh' },
+        { name: 'Chữa Lành', slug: 'the-loai/chua-lanh' },
+        { name: 'Cưới Trước Yêu Sau', slug: 'the-loai/cuoi-truoc-yeu-sau' },
+        { name: 'Nữ Cường', slug: 'the-loai/nu-cuong' },
+        { name: 'Ngọt Sủng', slug: 'the-loai/ngot-sung' },
+        { name: 'Tổng Tài Bá Đạo', slug: 'the-loai/tong-tai' },
+        { name: 'Xuyên Không', slug: 'the-loai/xuyen-khong' },
+        { name: 'Hiện Đại', slug: 'the-loai/hien-dai' },
+        { name: 'Cổ Trang', slug: 'the-loai/co-trang' }
     ]);
 }
 
-function getFilterConfig() {
-    return JSON.stringify({});
-}
+function getFilterConfig() { return JSON.stringify({}); }
 
 // =============================================================================
-// URL GENERATION
+// URL GENERATOR
 // =============================================================================
 
 function getUrlList(slug, filtersJson) {
-    try {
-        var page = 1;
-        if (filtersJson) {
-            var filters = JSON.parse(filtersJson);
-            page = parseInt(filters.page) || 1;
-        }
-
-        if (slug && slug.indexOf("http") === 0) return slug;
-
-        var resultUrl = BASEURL + (slug ? "/" + slug : "");
-
-        if (page > 1) {
-            resultUrl += (resultUrl.indexOf("?") > -1 ? "&" : "?") + "page=" + page;
-        }
-        
-        return resultUrl;
-    } catch (e) {
-        return BASEURL;
+    var filters = JSON.parse(filtersJson || "{}");
+    var page = filters.page || 1;
+    var baseUrl = "https://dongphimngan.com";
+    
+    var finalSlug = slug.replace(/^\//, ""); 
+    var url = baseUrl + "/" + finalSlug;
+    
+    if (page > 1) {
+        url += (url.indexOf('?') !== -1 ? "&page=" : "?page=") + page;
     }
+    return url;
 }
 
 function getUrlSearch(keyword, filtersJson) {
-    var encoded = encodeURIComponent(keyword.trim());
-    return BASEURL + "/search?q=" + encoded;
+    var page = 1;
+    if (filtersJson) {
+        try { page = JSON.parse(filtersJson).page || 1; } catch(e){}
+    }
+    var url = "https://dongphimngan.com/tim-kiem?q=" + encodeURIComponent(keyword);
+    if (page > 1) url += "&page=" + page;
+    return url;
 }
 
 function getUrlDetail(slug) {
-    if (!slug) return "";
     if (slug.indexOf("http") === 0) return slug;
-    return BASEURL + "/" + slug.replace(/^\//, "");
+    return "https://dongphimngan.com/" + slug.replace(/^\//, "");
 }
 
-function getUrlCategories() { return BASEURL + "/genres"; }
+function getUrlCategories() { return ""; }
 function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
+
+// =============================================================================
+// BỘ TIỆN ÍCH GIẢI MÃ BASE64 VÀ XỬ LÝ CHUỖI
+// =============================================================================
+
+var PluginUtils = {
+    cleanText: function (text) {
+        if (!text) return "";
+        return text.replace(/<[^>]*>/g, "")
+            .replace(/&amp;/g, "&")
+            .replace(/&quot;/g, '"')
+            .replace(/&#039;/g, "'")
+            .replace(/\\u0022/g, '"')
+            .replace(/\s+/g, " ")
+            .trim();
+    },
+    // Thuật toán bẻ khóa Link Base64 chuyên dụng
+    base64Decode: function(str) {
+        var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+        var output = '';
+        str = String(str).replace(/=+$/, '');
+        for (var bc = 0, bs, buffer, idx = 0;
+            buffer = str.charAt(idx++);
+            ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer, bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0
+        ) {
+            buffer = chars.indexOf(buffer);
+        }
+        return output;
+    }
+};
 
 // =============================================================================
 // PARSERS
 // =============================================================================
 
-function parseListResponse(html, apiUrl) {
-    var items = [];
-    
-    // CÁCH 1: Bóc trực tiếp mảng JSON ẩn của Next.js (Siêu nhanh, chuẩn xác 100%)
+function parseListResponse(html) {
     try {
-        var jsonMatch = html.match(/"videos"\s*:\s*(\[.+?\])\s*,\s*"totalCount"/);
-        if (jsonMatch) {
-            var videos = JSON.parse(jsonMatch[1]);
-            for (var i = 0; i < videos.length; i++) {
-                var v = videos[i];
-                var link = (v.is_series ? "/phim/" : "/watch/") + v.slug;
-                
-                var poster = v.poster_url || "";
-                if (poster && poster.indexOf("http") === -1) poster = "https:" + poster;
+        var items = [];
+        var seen = {};
+        
+        // Quét tất cả các thẻ <a> có chứa link /phim/
+        var aRegex = /<a[^>]+href="\/phim\/([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+        var match;
+        
+        while ((match = aRegex.exec(html)) !== null) {
+            var slug = match[1];
+            var innerHtml = match[2];
+            
+            var titleMatch = innerHtml.match(/alt="([^"]+)"/i) || innerHtml.match(/<h[34][^>]*>([^<]+)<\/h[34]>/i);
+            var imgMatch = innerHtml.match(/src="([^"]+)"/i);
 
-                items.push({
-                    id: BASEURL + link,
-                    title: v.title || "Không tên",
-                    posterUrl: poster,
-                    backdropUrl: poster,
-                    quality: "HD",
-                    episode_current: v.is_series ? (v.part_count + " Phần") : "Full"
-                });
+            if (titleMatch && imgMatch) {
+                var url = "https://dongphimngan.com/phim/" + slug;
+                var img = imgMatch[1].split(' ')[0]; 
+                if (img.indexOf("http") === -1) img = "https://dongphimngan.com" + img;
+                
+                var title = PluginUtils.cleanText(titleMatch[1]);
+                
+                if (!seen[slug]) {
+                    items.push({
+                        id: url,
+                        title: title,
+                        posterUrl: img,
+                        backdropUrl: img,
+                        episode_current: "Full Tập",
+                        quality: "FHD"
+                    });
+                    seen[slug] = true;
+                }
             }
         }
-    } catch(e) { log("JSON Parse Error: " + e.message); }
-
-    // CÁCH 2: Fallback bằng Regex thuần túy (Dự phòng nếu Cách 1 thất bại)
-    if (items.length === 0) {
-        try {
-            var regex = /<a[^>]+href=["'](\/(?:watch|phim)\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-            var match;
-            var seen = {};
-
-            while ((match = regex.exec(html)) !== null) {
-                var link = match[1];
-                var block = match[2];
-                var id = BASEURL + link;
-                
-                if (seen[id]) continue;
-                seen[id] = true;
-
-                var titleM = block.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
-                var title = titleM ? titleM[1].replace(/<[^>]+>/g, '').trim() : "";
-                if (!title) {
-                    var altM = block.match(/alt=["']([^"']+)["']/i);
-                    title = altM ? altM[1] : "Phim Ngắn";
-                }
-
-                var imgM = block.match(/src=["']([^"']+)["']/i);
-                var img = imgM ? imgM[1] : "";
-                if (img.indexOf('url=') > -1) {
-                    var uM = img.match(/url=([^&]+)/);
-                    if (uM) img = decodeURIComponent(uM[1]);
-                } else if (img !== "" && img.indexOf("http") === -1) {
-                    img = BASEURL + img;
-                }
-
-                var epM = block.match(/<span[^>]*uppercase[^>]*>([\s\S]*?)<\/span>/i);
-                var ep = epM ? epM[1].replace(/<[^>]+>/g, '').trim() : "Full";
-
-                items.push({
-                    id: id,
-                    title: title,
-                    posterUrl: img,
-                    backdropUrl: img,
-                    quality: "HD",
-                    episode_current: ep
-                });
-            }
-        } catch(e) { log("Regex Parse Error: " + e.message); }
-    }
-
-    return JSON.stringify({
-        items: items,
-        pagination: {
-            currentPage: 1,
-            totalPages: 99 // Nền tảng tự động cuộn trang
-        }
-    });
-}
-
-function parseSearchResponse(html, url) {
-    return parseListResponse(html, url);
-}
-
-function parseMovieDetail(html, url) {
-    try {
-        var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i);
-        var title = titleMatch ? titleMatch[1].replace(" - PhimNgan.Net", "") : "Phim Ngắn";
-
-        var imgMatch = html.match(/<meta property="og:image" content="([^"]+)"/i);
-        var poster = imgMatch ? imgMatch[1] : "";
-
-        var descMatch = html.match(/<meta property="og:description" content="([^"]+)"/i);
-        var desc = descMatch ? descMatch[1] : "";
-
-        // Trả trực tiếp 1 nút bấm để load giao diện Webview
-        var servers = [{
-            name: "Lướt Chuyển Tập",
-            episodes: [{
-                id: url,
-                name: "Bấm vào để Xem & Vuốt",
-                slug: "webview-player"
-            }]
-        }];
 
         return JSON.stringify({
-            id: url,
+            items: items,
+            pagination: { currentPage: 1, totalPages: 10, totalItems: 9999 } 
+        });
+    } catch (e) {
+        return JSON.stringify({ items: [] });
+    }
+}
+
+function parseSearchResponse(html) {
+    return parseListResponse(html);
+}
+
+// BẮT CHUẨN XÁC TẬP PHIM BẰNG CÁCH QUÉT NEXT.JS JSON
+function parseMovieDetail(html, currentUrl) {
+    try {
+        // Dọn dẹp dấu gạch chéo ngược (\") của Next.js để Regex dễ đọc
+        var cleanHtml = html.replace(/\\"/g, '"'); 
+        
+        var titleM = cleanHtml.match(/"title":"([^"]+)"/);
+        var title = titleM ? PluginUtils.cleanText(titleM[1]) : "Đang cập nhật";
+
+        var posterM = cleanHtml.match(/"posterUrl":"([^"]+)"/) || cleanHtml.match(/"image":"([^"]+)"/);
+        var poster = posterM ? posterM[1] : "";
+        if (poster && poster.indexOf('http') === -1) poster = "https://dongphimngan.com" + poster;
+
+        var descM = cleanHtml.match(/"description":"(.*?)"/);
+        var desc = descM ? PluginUtils.cleanText(descM[1]) : "";
+
+        var slugMatch = cleanHtml.match(/"movieSlug":"([^"]+)"/);
+        var movieSlug = slugMatch ? slugMatch[1] : currentUrl.split('/').pop();
+
+        var eps = [];
+        var added = {};
+        
+        // Quét tìm tất cả các tập (number và slug) trong mảng episodes
+        var epRegex = /"number":"([^"]+)","slug":"([^"]+)"/g;
+        var epMatch;
+        while ((epMatch = epRegex.exec(cleanHtml)) !== null) {
+            var num = epMatch[1];
+            var eSlug = epMatch[2];
+            if (!added[eSlug]) {
+                eps.push({ num: num, slug: eSlug });
+                added[eSlug] = true;
+            }
+        }
+
+        // Sắp xếp tập từ bé đến lớn
+        eps.sort(function(a, b) {
+            var na = parseInt((a.num.match(/\d+/) || ["0"])[0], 10);
+            var nb = parseInt((b.num.match(/\d+/) || ["0"])[0], 10);
+            return na - nb;
+        });
+
+        var servers = [];
+        if (eps.length > 0) {
+            var vsEps = [];
+            var tmEps = [];
+            
+            for (var i = 0; i < eps.length; i++) {
+                var name = eps[i].num;
+                // Nếu tập chỉ có số (vd: 1, 2, 3), tự động nối thêm chữ "Tập"
+                if (/^\d+$/.test(name)) name = "Tập " + name;
+
+                // GIẢ LẬP ĐƯỜNG DẪN XEM PHIM ĐỂ HÀM SAU NHẢY VÀO BẮT LINK
+                vsEps.push({
+                    id: "https://dongphimngan.com/xem-phim/" + movieSlug + "/1080/vietsub/" + eps[i].slug,
+                    name: name,
+                    slug: "vs_" + eps[i].slug
+                });
+                tmEps.push({
+                    id: "https://dongphimngan.com/xem-phim/" + movieSlug + "/1080/thuyet-minh/" + eps[i].slug,
+                    name: name,
+                    slug: "tm_" + eps[i].slug
+                });
+            }
+            servers.push({ name: "Phim Vietsub (Bản FHD)", episodes: vsEps });
+            servers.push({ name: "Thuyết Minh (Bản FHD)", episodes: tmEps });
+        } else {
+             servers.push({ name: "Hệ Thống", episodes: [{ id: currentUrl, name: "Trọn Bộ", slug: "full" }] });
+        }
+
+        return JSON.stringify({
+            id: currentUrl,
             title: title,
             posterUrl: poster,
             backdropUrl: poster,
             description: desc,
-            quality: "HD",
+            servers: servers,
+            quality: "FHD",
+            lang: "Vietsub / Thuyết Minh",
             year: 2026,
-            rating: 8.5,
-            status: "Full",
+            rating: 10,
             category: "Phim Ngắn",
-            episode_current: "Đang phát",
-            servers: servers
-        });
-    } catch (error) {
-        return JSON.stringify({ id: url, title: "Lỗi chi tiết", servers: [] });
-    }
-}
-
-function parseDetailResponse(html, url) {
-    try {
-        // Áp dụng chuẩn logic CustomJS từ mẫu shortflix
-        var pureWebviewJs = `
-            (function() {
-                try {
-                    var noop = function() { return Promise.resolve(); };
-                    Object.defineProperty(document, 'fullscreenEnabled', {get: function() { return false; }});
-                    Object.defineProperty(document, 'webkitFullscreenEnabled', {get: function() { return false; }});
-                    if(Element.prototype.requestFullscreen) Element.prototype.requestFullscreen = noop;
-                    if(Element.prototype.webkitRequestFullscreen) Element.prototype.webkitRequestFullscreen = noop;
-                    if(Element.prototype.mozRequestFullScreen) Element.prototype.mozRequestFullScreen = noop;
-                    if(Element.prototype.msRequestFullscreen) Element.prototype.msRequestFullscreen = noop;
-                    if(window.HTMLVideoElement) {
-                        HTMLVideoElement.prototype.webkitEnterFullscreen = noop;
-                        HTMLVideoElement.prototype.enterFullscreen = noop;
-                    }
-                } catch(e) {}
-
-                var EMAIL = "iamwilliamm6@gmail.com";
-                var PASS = "trung@123";
-
-                // CSS Ẩn Sidebar, Header và ép video tràn màn hình
-                var style = document.createElement('style');
-                style.innerHTML = 'aside, header, nav, footer, .sidebar, .menu, .comments, [class*="download"], [class*="ad-"] { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } ' +
-                                  'main, .w-full, .flex-1, body, html { width: 100vw !important; height: 100vh !important; padding: 0 !important; margin: 0 !important; max-width: 100% !important; overflow: hidden !important; background: #000 !important; overscroll-behavior-y: none; }';
-                document.head.appendChild(style);
-
-                setInterval(function() {
-                    var vids = document.querySelectorAll('video');
-                    for (var k = 0; k < vids.length; k++) {
-                        if (!vids[k].hasAttribute('playsinline')) {
-                            vids[k].setAttribute('playsinline', 'true');
-                            vids[k].setAttribute('webkit-playsinline', 'true');
-                        }
-                    }
-                    var appBanners = document.querySelectorAll('div[class*="download"], div[class*="banner"]');
-                    for (var i = 0; i < appBanners.length; i++) {
-                        if (appBanners[i]) appBanners[i].style.display = 'none';
-                    }
-                }, 500);
-
-                // Auto Login Logic
-                if (sessionStorage.getItem('vax_autologin_done')) return;
-                function doLogin() {
-                    var btns = document.querySelectorAll('button');
-                    var loginBtn = null;
-                    for (var i = 0; i < btns.length; i++) {
-                        if (btns[i].textContent.includes('Đăng Nhập')) {
-                            loginBtn = btns[i];
-                            break;
-                        }
-                    }
-                    
-                    if (loginBtn) {
-                        sessionStorage.setItem('vax_redirect_back', window.location.href);
-                        loginBtn.click();
-                        
-                        var checkForm = setInterval(function() {
-                            var emailInput = document.querySelector('input[type="email"], input[name="email"], input[placeholder*="mail"]');
-                            var passInput = document.querySelector('input[type="password"], input[name="password"]');
-                            var submitBtn = document.querySelector('button[type="submit"]');
-
-                            if (emailInput && passInput && submitBtn) {
-                                clearInterval(checkForm);
-                                var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-                                nativeInputValueSetter.call(emailInput, EMAIL);
-                                emailInput.dispatchEvent(new Event('input', { bubbles: true }));
-                                nativeInputValueSetter.call(passInput, PASS);
-                                passInput.dispatchEvent(new Event('input', { bubbles: true }));
-                                
-                                setTimeout(function() {
-                                    submitBtn.click();
-                                    sessionStorage.setItem('vax_autologin_done', 'true');
-                                }, 500);
-                            }
-                        }, 500);
-                    }
-                }
-                
-                setTimeout(doLogin, 1500);
-            })();
-        `;
-
-        return JSON.stringify({
-            "url": url,
-            "isEmbed": true, 
-            "headers": {
-                "Referer": BASEURL,
-                "Block-Ads": "true",
-                "Block-Redirects": "false", 
-                "Custom-Js": pureWebviewJs.replace(/\r\n|\r|\n/g, " ").trim()
-            }
+            status: eps.length > 0 ? eps.length + " Tập" : "Full"
         });
     } catch (e) {
-        return JSON.stringify({ "url": url, "isEmbed": true, "headers": {} });
+        return JSON.stringify({ id: currentUrl, title: "Lỗi chi tiết", servers: [] });
     }
 }
 
-function parseEmbedResponse(htmlContent, url) {
+// =============================================================================
+// BỘ GIẢI MÃ VIDEO GỐC NATIVE (HOÀN TOÀN KHÔNG DÙNG WEBVIEW)
+// =============================================================================
+function parseDetailResponse(html) {
+    try {
+        var streamUrl = "";
+        var cleanHtml = html.replace(/\\"/g, '"'); 
+        
+        // 1. Tìm chuỗi Base64 giấu trong "videoUrl"
+        var base64Match = cleanHtml.match(/"videoUrl":"(aHR0cHM[^"]+)"/i);
+        
+        if (base64Match) {
+            // 2. Kích hoạt thuật toán bẻ khóa thành Link MP4 nguyên chất
+            streamUrl = PluginUtils.base64Decode(base64Match[1]);
+        } else {
+            // Backup nếu web thả lỏng không mã hóa nữa
+            var rawMatch = cleanHtml.match(/"videoUrl":"(https?[^"]+)"/i);
+            if (rawMatch) streamUrl = rawMatch[1];
+        }
+
+        if (streamUrl) {
+            return JSON.stringify({
+                url: streamUrl,
+                isEmbed: false, // Ra lệnh cho App bật Native Player
+                mimeType: streamUrl.indexOf('.m3u8') !== -1 ? "application/x-mpegURL" : "video/mp4",
+                headers: { 
+                    "Referer": "https://dongphimngan.com/",
+                    "Origin": "https://dongphimngan.com",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+                }
+            });
+        }
+        
+        return JSON.stringify({});
+    } catch (e) {
+        return JSON.stringify({});
+    }
+}
+
+function parseEmbedResponse(htmlContent, sourceUrl) {
     return JSON.stringify({ url: "", isEmbed: false });
 }
 
