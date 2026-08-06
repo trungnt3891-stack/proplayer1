@@ -1,5 +1,5 @@
 // =============================================================================
-// PLUGIN VAAPP: PHIMNGAN.NET (Phim Ngắn / Phim Dọc)
+// PLUGIN VAAPP: PHIMNGAN.NET (Phim Ngắn / Phim Dọc) - BẢN SỬA LỖI
 // =============================================================================
 
 var BASEURL = "https://phimngan.net";
@@ -9,13 +9,13 @@ function getManifest() {
         "id": "phimngan_net",
         "name": "PhimNgan.Net",
         "description": "Nền tảng xem phim ngắn, phim dọc người thật đóng và phim AI.",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/icons/icon-192x192.png",
         "isEnabled": true,
-        "type": "shortfilm",           // Kích hoạt trình phát video dọc (Portrait Zoom) và vuốt chuyển tập
-        "layoutType": "VERTICAL",      // Hiển thị poster tỷ lệ 2:3
-        "playerType": "embedtoexoplay" // Dùng Webview ngầm bắt link gốc đưa qua ExoPlayer
+        "type": "shortfilm",           
+        "layoutType": "VERTICAL",      
+        "playerType": "embedtoexoplay" 
     });
 }
 
@@ -27,30 +27,27 @@ function log(msg) {
     }
 }
 
-// =============================================================================
-// MENU & TRANG CHỦ
-// =============================================================================
-
 function getHomeSections() {
     return JSON.stringify([
-        { slug: 'phim-ai', title: 'Phim AI', type: 'Horizontal', path: 'genres' },
-        { slug: 'ngon-tinh', title: 'Ngôn Tình', type: 'Horizontal', path: 'genres' },
-        { slug: 'tong-tai', title: 'Tổng Tài', type: 'Horizontal', path: 'genres' },
-        { slug: 'cung-dau', title: 'Cung Đấu', type: 'Grid', path: 'genres' },
-        { slug: 'hanh-dong', title: 'Hành Động', type: 'Horizontal', path: 'genres' }
+        { slug: '', title: 'Mới Cập Nhật', type: 'Grid' },
+        { slug: 'genres/phim-ai', title: 'Phim AI', type: 'Horizontal' },
+        { slug: 'genres/ngon-tinh', title: 'Ngôn Tình', type: 'Horizontal' },
+        { slug: 'genres/tong-tai', title: 'Tổng Tài', type: 'Horizontal' },
+        { slug: 'genres/cung-dau', title: 'Cung Đấu', type: 'Grid' }
     ]);
 }
 
 function getPrimaryCategories() {
     return JSON.stringify([
-        { name: 'Phim AI', slug: 'phim-ai' },
-        { name: 'Ngôn Tình', slug: 'ngon-tinh' },
-        { name: 'Tổng Tài', slug: 'tong-tai' },
-        { name: 'Cung Đấu', slug: 'cung-dau' },
-        { name: 'Gia Đình', slug: 'gia-dinh' },
-        { name: 'Hài Hước', slug: 'hai-huoc' },
-        { name: 'Phục Thù', slug: 'phuc-thu' },
-        { name: 'Xuyên Không', slug: 'xuyen-khong' }
+        { name: 'Mới Cập Nhật', slug: '' },
+        { name: 'Phim AI', slug: 'genres/phim-ai' },
+        { name: 'Ngôn Tình', slug: 'genres/ngon-tinh' },
+        { name: 'Tổng Tài', slug: 'genres/tong-tai' },
+        { name: 'Cung Đấu', slug: 'genres/cung-dau' },
+        { name: 'Gia Đình', slug: 'genres/gia-dinh' },
+        { name: 'Hài Hước', slug: 'genres/hai-huoc' },
+        { name: 'Phục Thù', slug: 'genres/phuc-thu' },
+        { name: 'Xuyên Không', slug: 'genres/xuyen-khong' }
     ]);
 }
 
@@ -58,29 +55,25 @@ function getFilterConfig() {
     return JSON.stringify({});
 }
 
-// =============================================================================
-// URL GENERATION
-// =============================================================================
-
 function getUrlList(slug, filtersJson) {
     try {
         var page = 1;
-        var path = slug || "phim-ngan";
-
         if (filtersJson) {
             var filters = JSON.parse(filtersJson);
             page = parseInt(filters.page) || 1;
         }
 
-        // Nếu path đã chứa đầy đủ url, giữ nguyên
-        if (path.indexOf("http") === 0) return path;
+        if (slug && slug.indexOf("http") === 0) return slug;
 
-        // PhimNgan.net sử dụng cấu trúc: /genres/{slug}
-        var targetPath = path.indexOf('/') > -1 ? path : "genres/" + path;
+        var resultUrl = BASEURL + (slug ? "/" + slug : "");
+
+        if (page > 1) {
+            resultUrl += (resultUrl.indexOf("?") > -1 ? "&" : "?") + "page=" + page;
+        }
         
-        return BASEURL + "/" + targetPath;
+        return resultUrl;
     } catch (e) {
-        return BASEURL + "/genres/phim-ngan";
+        return BASEURL;
     }
 }
 
@@ -99,45 +92,56 @@ function getUrlCategories() { return BASEURL + "/genres"; }
 function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
-// =============================================================================
-// PARSERS
-// =============================================================================
-
 function parseListResponse(html, apiUrl) {
     try {
         var items = [];
         
-        // PhimNgan.net trả về dữ liệu phim dưới dạng JSON nhúng trong Next.js payload (self.__next_f.push)
-        // Đây là cách an toàn và lấy dữ liệu sạch nhất thay vì parse DOM.
-        var jsonMatch = html.match(/"videos":(\[.+?\]),"totalCount"/);
+        // Quét trực tiếp cấu trúc HTML thay vì đọc mảng JSON của Next.js để tránh lỗi escape
+        var regex = /<a[^>]*href=["'](\/(?:phim|watch)\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+        var match;
         
-        if (jsonMatch && jsonMatch[1]) {
-            var videos = JSON.parse(jsonMatch[1]);
-            
-            for (var i = 0; i < videos.length; i++) {
-                var v = videos[i];
-                var itemUrl = BASEURL + (v.is_series ? "/phim/" : "/watch/") + v.slug;
-                
-                // Giải mã ảnh từ Next.js Image Optimizer
-                var poster = v.poster_url || "";
-                if (poster && poster.indexOf("http") !== 0) poster = "https:" + poster;
+        var seen = {}; // Chống trùng lặp
 
-                items.push({
-                    id: itemUrl,
-                    title: v.title || "Không tên",
-                    posterUrl: poster,
-                    backdropUrl: poster,
-                    quality: "HD",
-                    episode_current: v.is_series ? (v.part_count + " Phần") : "Full"
-                });
+        while ((match = regex.exec(html)) !== null) {
+            var link = match[1];
+            var block = match[2];
+            
+            if (seen[link]) continue;
+            seen[link] = true;
+
+            var titleMatch = block.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
+            if (!titleMatch) continue;
+            var title = titleMatch[1].replace(/<[^>]+>/g, '').trim();
+            
+            var imgMatch = block.match(/<img[^>]*src=["']([^"']+)["']/i);
+            var img = imgMatch ? imgMatch[1] : "";
+            
+            // Xử lý ảnh bọc qua bộ nén tối ưu của Next.js
+            if(img.indexOf("_next/image?url=") > -1) {
+                var urlMatch = img.match(/url=([^&]+)/);
+                if(urlMatch) img = decodeURIComponent(urlMatch[1]);
+            } else if(img !== "" && img.indexOf("http") !== 0) {
+                img = BASEURL + img;
             }
+            
+            var epMatch = block.match(/<span[^>]*uppercase[^>]*>([\s\S]*?)<\/span>/i);
+            var ep = epMatch ? epMatch[1].replace(/<[^>]+>/g, '').trim() : "Full";
+            
+            items.push({
+                id: BASEURL + link,
+                title: title,
+                posterUrl: img,
+                backdropUrl: img,
+                quality: "HD",
+                episode_current: ep
+            });
         }
 
         return JSON.stringify({
             items: items,
             pagination: {
                 currentPage: 1,
-                totalPages: 99 // Nền tảng dùng cuộn vô hạn/client-side, gán cứng để App cho phép cuộn
+                totalPages: 99 // Hỗ trợ cuộn load trang
             }
         });
     } catch (e) {
@@ -160,8 +164,7 @@ function parseMovieDetail(html, url) {
         var descMatch = html.match(/<meta property="og:description" content="([^"]+)"/i);
         var desc = descMatch ? descMatch[1] : "";
 
-        // Đối với phim ngắn/dọc, ta trả thẳng URL của phim để tạo nút "Xem Ngay". 
-        // App sẽ tự lo phần bắt link gốc và cơ chế vuốt chuyển tập.
+        // App tự lo phần bắt link gốc và cơ chế vuốt chuyển tập. Trả thẳng URL trang web làm ID tập.
         var servers = [{
             name: "Phim Ngắn",
             episodes: [{
@@ -185,7 +188,6 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// Sử dụng EmbedToExoPlay kết hợp Snipper để vượt qua cơ chế chặn của React/Next.js
 function parseDetailResponse(html, url) {
     try {
         var customJsCode = `
@@ -198,7 +200,6 @@ function parseDetailResponse(html, url) {
                 "User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
             });
 
-            // 1. Hook bắt Blob M3U8 (nếu website dùng HLS bảo mật)
             if (typeof URL !== 'undefined' && URL.createObjectURL) {
                 var originalCreateObjectURL = URL.createObjectURL;
                 URL.createObjectURL = function(blob) {
@@ -223,11 +224,9 @@ function parseDetailResponse(html, url) {
                 };
             }
 
-            // 2. Bắt link MP4/M3U8 truyền thống từ thẻ Video
             var checkCount = 0;
             var checkInterval = setInterval(function() {
                 try {
-                    // Tự động nhấn nút Play nếu có
                     var playBtn = document.querySelector('.vjs-big-play-button, .plyr__control--overlaid, button[aria-label="Play"]');
                     if (playBtn) playBtn.click();
 
@@ -240,7 +239,7 @@ function parseDetailResponse(html, url) {
                     }
                     
                     checkCount++;
-                    if (checkCount > 20) clearInterval(checkInterval);
+                    if (checkCount > 30) clearInterval(checkInterval);
                 } catch (err) {}
             }, 1000);
         })();
