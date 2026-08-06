@@ -1,6 +1,6 @@
 // =============================================================================
 // PLUGIN VAX APP: GÀ MỜ MÊ PHIM (GAMOMEPHIM.COM)
-// CHUYÊN GIA TỐI ƯU: NATIVE SHORTFILM + DIRECT MP4/M3U8
+// CHUYÊN GIA TỐI ƯU: NATIVE SHORTFILM + DIRECT MP4/M3U8 (NO WEBVIEW)
 // =============================================================================
 
 var BASEURL = "https://gamomephim.com";
@@ -9,15 +9,15 @@ function getManifest() {
     return JSON.stringify({
         "id": "gamomephim",
         "name": "Gà Mờ Mê Phim",
-        "description": "Nền tảng xem phim ngắn, phim tổng tài FULL HD siêu mượt.",
-        "version": "1.0.0",
+        "description": "Nền tảng xem phim ngắn, phim tổng tài FULL HD siêu mượt. Không Quảng Cáo.",
+        "version": "1.1.0",
         "baseUrl": BASEURL,
         "iconUrl": "https://r2.gamomephim.com/site/logo-1784305321242.png",
         "isEnabled": true,
         "isAdult": false,
-        "type": "shortfilm", // Kích hoạt giao diện vuốt dọc (TikTok-style)
+        "type": "shortfilm", // Bắt buộc: Kích hoạt giao diện Player Dọc (TikTok-style)
         "layoutType": "VERTICAL",
-        "playerType": "exoplayer" // Bắt trực tiếp link MP4 nên dùng ExoPlayer cho mượt
+        "playerType": "exoplayer" // Dùng Native Player thuần túy, tuyệt đối không dùng Webview
     });
 }
 
@@ -121,33 +121,43 @@ function parseListResponse(html, url) {
         var items = [];
         var added = {};
         
-        // Next.js của trang này lưu JSON danh sách phim vào mảng với key "item"
-        // Dùng regex.exec toàn cục để quét mảng JSON an toàn, không tốn RAM
-        var regex = /"item"\s*:\s*(\{"title":"[^"]+","slug":"[^"]+","img":"[^"]+","badge":"[^"]*","type":"[^"]*","year":\d+,"views":\d+\})/g;
+        // Tiền xử lý: Xóa dấu gạch chéo ngược (escape) để biến __next_f thành JSON string hợp lệ
+        var unescapedHtml = html.replace(/\\"/g, '"');
+        
+        // Quét mảng JSON phim từ khối Payload nội bộ (An toàn bộ nhớ bằng Regex toàn cục)
+        var regex = /"item"\s*:\s*(\{[^{}]*"slug":"[^"]+"[^{}]*\})/g;
         var match;
         
-        while ((match = regex.exec(html)) !== null) {
+        while ((match = regex.exec(unescapedHtml)) !== null) {
             try {
-                var obj = JSON.parse(match[1]);
-                var slug = obj.slug;
-                if (!added[slug]) {
-                    added[slug] = true;
-                    items.push({
-                        id: slug, // Sẽ được getUrlDetail xử lý thêm '/phim/'
-                        title: obj.title,
-                        posterUrl: obj.img,
-                        backdropUrl: obj.img,
-                        quality: obj.badge || "HD",
-                        year: obj.year || 0,
-                        episode_current: obj.badge ? obj.badge : "Cập nhật"
-                    });
+                var objStr = match[1];
+                var slugMatch = objStr.match(/"slug"\s*:\s*"([^"]+)"/);
+                var titleMatch = objStr.match(/"title"\s*:\s*"([^"]+)"/);
+                var imgMatch = objStr.match(/"img"\s*:\s*"([^"]+)"/);
+                var badgeMatch = objStr.match(/"badge"\s*:\s*"([^"]+)"/);
+                var yearMatch = objStr.match(/"year"\s*:\s*(\d+)/);
+                
+                if (slugMatch && titleMatch) {
+                    var slug = slugMatch[1];
+                    if (!added[slug]) {
+                        added[slug] = true;
+                        items.push({
+                            id: slug, 
+                            title: titleMatch[1],
+                            posterUrl: imgMatch ? imgMatch[1] : "",
+                            backdropUrl: imgMatch ? imgMatch[1] : "",
+                            quality: badgeMatch ? badgeMatch[1] : "HD",
+                            year: yearMatch ? parseInt(yearMatch[1]) : 0,
+                            episode_current: badgeMatch ? badgeMatch[1] : "Cập nhật"
+                        });
+                    }
                 }
             } catch (errJson) {}
         }
 
-        // Fallback: Tìm qua DOM HTML nếu web thay đổi cấu trúc payload
+        // Fallback: Tìm qua DOM HTML gốc nếu payload bị mất
         if (items.length === 0) {
-            var domRegex = /<a[^>]+href="\/phim\/([^"]+)"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"[\s\S]*?<span[^>]*>([^<]+)<\/span>[\s\S]*?<h3[^>]*>([^<]+)<\/h3>/gi;
+            var domRegex = /<a[^>]+href="\/phim\/([^"]+)"[^>]*title="([^"]+)"[\s\S]*?<img[^>]+src="([^"]+)"[\s\S]*?(?:<span[^>]*>([^<]+)<\/span>)?/gi;
             var domMatch;
             while ((domMatch = domRegex.exec(html)) !== null) {
                 var dSlug = domMatch[1];
@@ -155,10 +165,10 @@ function parseListResponse(html, url) {
                     added[dSlug] = true;
                     items.push({
                         id: dSlug,
-                        title: domMatch[4].trim(),
-                        posterUrl: domMatch[2],
-                        backdropUrl: domMatch[2],
-                        episode_current: domMatch[3].trim()
+                        title: domMatch[2].trim(),
+                        posterUrl: domMatch[3],
+                        backdropUrl: domMatch[3],
+                        episode_current: domMatch[4] ? domMatch[4].trim() : "Full"
                     });
                 }
             }
@@ -168,7 +178,7 @@ function parseListResponse(html, url) {
             items: items,
             pagination: {
                 currentPage: 1,
-                totalPages: items.length > 0 ? 99 : 1 // Cấp ảo số trang để App cho cuộn vô tận
+                totalPages: items.length > 0 ? 99 : 1 // Cấp ảo để App cuộn vô tận
             }
         });
 
@@ -186,85 +196,92 @@ function parseMovieDetail(html, url) {
     try {
         var title = "Đang cập nhật...";
         var posterUrl = "";
-        var description = "";
+        var description = "Không có mô tả.";
         var year = 2026;
         var casts = "";
         var duration = "";
         var status = "Đang cập nhật";
         var servers = [];
 
-        // 1. Lấy thông tin cơ bản từ ld+json hoặc Meta tags
-        var ldJsonMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
-        if (ldJsonMatch) {
-            try {
-                var ldData = JSON.parse(ldJsonMatch[1]);
-                if (ldData.name) title = ldData.name;
-                if (ldData.description) description = ldData.description;
-                if (ldData.thumbnailUrl && ldData.thumbnailUrl.length > 0) posterUrl = ldData.thumbnailUrl[0];
-            } catch(e) {}
-        }
-        
-        if (!title || title === "Đang cập nhật...") {
-            var metaTitle = html.match(/<meta property="og:title" content="([^"]+)"/);
-            if (metaTitle) title = metaTitle[1].replace(/ FULL - Gà Mờ Mê Phim/gi, "").trim();
-        }
-        if (!posterUrl) {
-            var metaImg = html.match(/<meta property="og:image" content="([^"]+)"/);
-            if (metaImg) posterUrl = metaImg[1];
-        }
+        // Giải mã toàn bộ HTML NextJS để đưa chuỗi JSON về nguyên dạng
+        var unescapedHtml = html.replace(/\\"/g, '"');
 
-        // 2. Trích xuất Payload chứa danh sách tập phim & link M3U8/MP4
-        var epsRegex = /"episodes"\s*:\s*(\[\{"id":"[^"]+",.*?\}\])/;
-        var epsMatch = html.match(epsRegex);
+        // BÓC THÔNG TIN METADATA BẰNG REGEX (Kháng lỗi thủng JSON của NextJS)
+        var titleMatch = unescapedHtml.match(/"title"\s*:\s*"([^"]+)"/);
+        if (titleMatch) title = titleMatch[1];
         
-        if (epsMatch) {
-            try {
-                var epsData = JSON.parse(epsMatch[1]);
-                var svSub = [];
-                var svTm = [];
-                
-                epsData.forEach(function(ep) {
-                    var epName = ep.title ? ep.title : ("Tập " + ep.episodeNumber);
-                    var epLink = ep.m3u8Url; 
-                    
-                    if (epLink) {
-                        // Truyền thẳng link file mp4/m3u8 vào ID
-                        if (ep.audioType === "VIETSUB") {
-                            svSub.push({ id: epLink, name: epName, slug: "vs-" + ep.episodeNumber });
-                        } else if (ep.audioType === "THUYET_MINH") {
-                            svTm.push({ id: epLink, name: epName, slug: "tm-" + ep.episodeNumber });
-                        } else {
-                            svSub.push({ id: epLink, name: epName, slug: "tap-" + ep.episodeNumber });
-                        }
-                    }
-                });
-                
-                if (svTm.length > 0) servers.push({ name: "Thuyết Minh", episodes: svTm });
-                if (svSub.length > 0) servers.push({ name: "Vietsub", episodes: svSub });
-                
-                status = "Full " + epsData.length + " Tập";
-            } catch(e) { log("Parse episodes error: " + e); }
-        }
-
-        // Lấy thêm Casts, Year từ HTML thô của Payload nếu có
-        var castMatch = html.match(/"cast"\s*:\s*"([^"]+)"/);
+        var descMatch = unescapedHtml.match(/"description"\s*:\s*"([^"]+)"/);
+        if (descMatch) description = descMatch[1].replace(/\\n/g, '\n');
+        
+        var imgMatch = unescapedHtml.match(/"thumbnailUrl"\s*:\s*"([^"]+)"/);
+        if (imgMatch) posterUrl = imgMatch[1];
+        
+        var castMatch = unescapedHtml.match(/"cast"\s*:\s*"([^"]+)"/);
         if (castMatch) casts = castMatch[1];
         
-        var yearMatch = html.match(/"releaseYear"\s*:\s*(\d+)/);
+        var yearMatch = unescapedHtml.match(/"releaseYear"\s*:\s*(\d+)/);
         if (yearMatch) year = parseInt(yearMatch[1]);
         
-        var durationMatch = html.match(/"durationString"\s*:\s*"([^"]+)"/);
+        var durationMatch = unescapedHtml.match(/"durationString"\s*:\s*"([^"]+)"/);
         if (durationMatch) duration = durationMatch[1];
 
-        // Fallback khẩn cấp nếu web đổi cấu trúc mảng JSON
+        // =====================================================================
+        // TRỤC CHÍNH: BÓC TRỰC TIẾP LINK MP4 TỪ KHỐI EPISODES
+        // =====================================================================
+        var epsRegex = /"episodes"\s*:\s*\[([\s\S]*?)\]\s*(?:,"taxonomies"|,"shopeeLockerConfig"|,"relatedVideosSlot"|\}\})/i;
+        var blockMatch = unescapedHtml.match(epsRegex);
+
+        var svSub = [];
+        var svTm = [];
+
+        if (blockMatch) {
+            var epBlock = blockMatch[1];
+            // Băm nhỏ mảng Object bằng {} không lồng nhau
+            var singleEpRegex = /\{[^{}]*?\}/g;
+            var epMatch;
+            
+            while ((epMatch = singleEpRegex.exec(epBlock)) !== null) {
+                try {
+                    var epStr = epMatch[0];
+                    var m3u8Match = epStr.match(/"m3u8Url"\s*:\s*"([^"]+)"/);
+                    var audioMatch = epStr.match(/"audioType"\s*:\s*"([^"]+)"/);
+                    var epNumMatch = epStr.match(/"episodeNumber"\s*:\s*(\d+)/);
+                    var epTitleMatch = epStr.match(/"title"\s*:\s*"([^"]+)"/);
+
+                    if (m3u8Match) {
+                        // NHÉT THẲNG LINK MP4 VÀO ID ĐỂ PLAYER PHÁT NGAY LẬP TỨC
+                        var epLink = m3u8Match[1];
+                        var epNum = epNumMatch ? epNumMatch[1] : "1";
+                        var epTitle = epTitleMatch && epTitleMatch[1] !== "null" ? epTitleMatch[1] : ("Tập " + epNum);
+                        var audio = audioMatch ? audioMatch[1] : "";
+
+                        if (audio === "THUYET_MINH") {
+                            svTm.push({ id: epLink, name: epTitle, slug: "tm-" + epNum });
+                        } else {
+                            svSub.push({ id: epLink, name: epTitle, slug: "vs-" + epNum });
+                        }
+                    }
+                } catch(e) {}
+            }
+        }
+
+        if (svTm.length > 0) servers.push({ name: "Thuyết Minh", episodes: svTm });
+        if (svSub.length > 0) servers.push({ name: "Vietsub", episodes: svSub });
+        
+        // Fallback khẩn cấp nếu web giấu cấu trúc JSON
         if (servers.length === 0) {
-             var fallbackMp4 = html.match(/(https:\/\/[^"'\s]+\.(?:mp4|m3u8))/);
-             if (fallbackMp4) {
-                 servers.push({
-                     name: "Mặc định",
-                     episodes: [{id: fallbackMp4[1], name: "Phát Phim", slug: "tap-1"}]
-                 });
-             }
+            var metaTitle = html.match(/<meta property="og:title" content="([^"]+)"/);
+            if (metaTitle) title = metaTitle[1].replace(/ FULL - Gà Mờ Mê Phim/gi, "").trim();
+            
+            var fallbackMp4 = html.match(/(https:\/\/[^"'\s]+\.(?:mp4|m3u8))/);
+            if (fallbackMp4) {
+                servers.push({
+                    name: "Full Trọn Bộ",
+                    episodes: [{id: fallbackMp4[1], name: "Tập 1", slug: "tap-1"}]
+                });
+            }
+        } else {
+            status = "Full " + (svSub.length || svTm.length) + " Tập";
         }
 
         return JSON.stringify({
@@ -288,22 +305,18 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// BƯỚC NÀY APP GỌI TRỰC TIẾP LINK MEDIA DO CHÚNG TA ĐÃ BÓC TỪ PARSE_MOVIE_DETAIL
+// BƯỚC CUỐI: TIẾP NHẬN LINK MP4 TỪ ID VÀ RA LỆNH CHO EXOPLAYER PHÁT NATIVE
 function parseDetailResponse(html, url) {
     try {
-        var mimeType = "video/mp4";
-        if (url.indexOf(".m3u8") > -1) {
-            mimeType = "application/x-mpegURL";
-        }
-        
+        var mimeType = url.indexOf(".m3u8") > -1 ? "application/x-mpegURL" : "video/mp4";
         return JSON.stringify({
             "url": url, 
-            "isEmbed": false, // False để Vax App mở ExoPlayer Native (không dùng Webview)
+            "isEmbed": false, // LỆNH CHẶT CẦU WEBVIEW: Buộc ExoPlayer phát thẳng link 100% Native
             "mimeType": mimeType,
             "headers": {
                 "Referer": BASEURL,
                 "Origin": BASEURL,
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             },
             "subtitles": []
         });
