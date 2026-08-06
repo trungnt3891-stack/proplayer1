@@ -10,7 +10,7 @@ function getManifest() {
         "id": "gamomephim",
         "name": "Gà Mờ Mê Phim",
         "description": "Vào Trang 1 siêu nhanh. Bấm Xem Ngay để Hook tóm link ở Trang 2.",
-        "version": "4.0.0",
+        "version": "4.1.0", // Đã fix load phim và ảnh bìa trang chủ
         "baseUrl": BASEURL,
         "iconUrl": "https://r2.gamomephim.com/site/logo-1784305321242.png",
         "isEnabled": true,
@@ -136,39 +136,68 @@ function getUrlYears() { return ""; }
 function parseListResponse(html, $url) {
     try {
         var items = [];
+        var added = {}; // Chống trùng lặp phim
         var calculatedPage = 1;
+        
         if ($url && $url.indexOf("page=") > -1) {
             var matchPage = $url.match(/page=(\d+)/);
             if (matchPage) calculatedPage = parseInt(matchPage[1]) || 1;
         }
 
-        _$(html).find(".grid").find(".relative").find("a").each(function() {
-            var href = this.attr("href").replace("/phim", "");
-            if (href.indexOf("http") == -1) href = BASEURL + href;
+        // CÁCH 1: BÓC NHANH TỪ CHUỖI JSON ẨN CỦA NEXTJS (CHUẨN XÁC NHẤT)
+        var unescapedHtml = html.replace(/\\"/g, '"');
+        var jsonRegex = /"item"\s*:\s*\{"title":"([^"]+)","slug":"([^"]+)","img":"([^"]+)"(?:,"badge":"([^"]*)")?/gi;
+        var jMatch;
+        while ((jMatch = jsonRegex.exec(unescapedHtml)) !== null) {
+            var jTitle = jMatch[1];
+            var jSlug = jMatch[2];
+            var jImg = jMatch[3];
+            var jBadge = jMatch[4] || "Full";
             
-            var title = this.attr("title") || this.text();
-            var src = this.find("img").attr("src");
-            if (src && src.indexOf("http") == -1) src = BASEURL + src;
-            
-            if (href && href.indexOf("http") > -1) {
-                var cleanThumb = (src || "").replace(/&amp;/g, '&');
+            if (!added[jSlug]) {
+                added[jSlug] = true;
                 items.push({
-                    "id": href,
-                    "title": (title || "").trim(),
-                    "posterUrl": cleanThumb,
-                    "backdropUrl": cleanThumb,
-                    "quality": "FULL",
-                    "lang": "Vietsub",
-                    "episode_current": "Full"
+                    "id": jSlug,
+                    "title": jTitle.trim(),
+                    "posterUrl": jImg,
+                    "backdropUrl": jImg,
+                    "quality": "HD",
+                    "episode_current": jBadge
                 });
             }
-        });
-        
+        }
+
+        // CÁCH 2: DỰ PHÒNG TÌM TỪ THẺ HTML (NẾU JSON BỊ THAY ĐỔI)
+        if (items.length === 0) {
+            var domRegex = /<a[^>]+title=["']([^"']+)["'][^>]+href=["'](?:\/phim)?\/([^"']+)["'][\s\S]*?<img[^>]+src=["']([^"']+)["'][\s\S]*?(?:<span[^>]*>([^<]+)<\/span>)?/gi;
+            var match;
+            while ((match = domRegex.exec(html)) !== null) {
+                var title = match[1];
+                var slug = match[2];
+                var img = match[3];
+                var badge = match[4] || "Full";
+                
+                // Tránh bắt nhầm link rác không phải phim
+                if (!added[slug] && slug.indexOf('/') === -1) {
+                    added[slug] = true;
+                    items.push({
+                        "id": slug,
+                        "title": title.trim(),
+                        "posterUrl": img,
+                        "backdropUrl": img,
+                        "quality": "HD",
+                        "episode_current": badge.trim()
+                    });
+                }
+            }
+        }
+
         return JSON.stringify({
             "items": items,
-            "pagination": { "currentPage": calculatedPage, "totalPages": 999 }
+            "pagination": { "currentPage": calculatedPage, "totalPages": items.length > 0 ? 999 : 1 }
         });
     } catch (e) {
+        log(e);
         return JSON.stringify({ "items": [], "pagination": { "currentPage": 1, "totalPages": 1 } });
     }
 }
