@@ -60,7 +60,7 @@
     },
     {
       "id": "gamomephim",
-      "name": "Gà Mê Phim Ngắn",
+      "name": "Mê Phim Ngắn",
       "version": "1.5.0",
       "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/gamomephim_plugin.js",
       "iconUrl": "https://r2.gamomephim.com/site/logo-1784305321242.png"
