@@ -1,5 +1,5 @@
 // =============================================================================
-// PLUGIN VAAPP: PHIMNGAN.NET (100% Webview Gốc giống Shortflix)
+// PLUGIN VAAPP: PHIMNGAN.NET (Bản Hoàn Hảo - Sạch Lỗi Trang Chủ)
 // =============================================================================
 
 var BASEURL = "https://phimngan.net";
@@ -8,13 +8,13 @@ function getManifest() {
     return JSON.stringify({
         "id": "phimngan_net",
         "name": "PhimNgan.Net",
-        "description": "Bản Webview Gốc: Ép video dọc, Auto Login, Xóa rác giao diện.",
-        "version": "1.8.5",
+        "description": "Bản Webview Gốc: Load siêu tốc, ép video dọc, xóa rác giao diện.",
+        "version": "1.8.6",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/icons/icon-192x192.png",
         "isEnabled": true,
         "hasLogin": true,                     
-        "loginUrl": BASEURL + "/login",    
+        "loginUrl": BASEURL,    
         "type": "shortfilm",                  
         "layoutType": "VERTICAL",             
         "playerType": "embed" // [QUAN TRỌNG] Vô hiệu hóa hoàn toàn Sniffer, sử dụng Webview Gốc
@@ -108,57 +108,85 @@ function getUrlYears() { return ""; }
 // =============================================================================
 
 function parseListResponse(html, apiUrl) {
+    var items = [];
+    
+    // CÁCH 1: Bóc trực tiếp mảng JSON ẩn của Next.js (Siêu nhanh, chuẩn xác 100%)
     try {
-        var items = [];
-        var seen = {};
+        var jsonMatch = html.match(/"videos"\s*:\s*(\[.+?\])\s*,\s*"totalCount"/);
+        if (jsonMatch) {
+            var videos = JSON.parse(jsonMatch[1]);
+            for (var i = 0; i < videos.length; i++) {
+                var v = videos[i];
+                var link = (v.is_series ? "/phim/" : "/watch/") + v.slug;
+                
+                var poster = v.poster_url || "";
+                if (poster && poster.indexOf("http") === -1) poster = "https:" + poster;
 
-        // Quét Regex an toàn bắt mọi thẻ <a> có chứa link phim
-        var regex = /<a[^>]+href=["'](\/(?:phim|watch)\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-        var match;
-
-        while ((match = regex.exec(html)) !== null) {
-            var link = match[1];
-            var block = match[2];
-            
-            var id = BASEURL + link;
-            if (seen[id]) continue;
-            seen[id] = true;
-
-            var titleMatch = block.match(/alt=["']([^"']+)["']/i) || block.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
-            var title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : "Phim Ngắn";
-            
-            var imgMatch = block.match(/src=["']([^"']+)["']/i) || block.match(/url=([^&]+)/i);
-            var img = "";
-            if (imgMatch) {
-                img = imgMatch[1];
-                if (img.indexOf('%') > -1) img = decodeURIComponent(img);
-                if (img.startsWith('/_next')) img = BASEURL + img;
-                else if (!img.startsWith('http')) img = "https:" + img;
+                items.push({
+                    id: BASEURL + link,
+                    title: v.title || "Không tên",
+                    posterUrl: poster,
+                    backdropUrl: poster,
+                    quality: "HD",
+                    episode_current: v.is_series ? (v.part_count + " Phần") : "Full"
+                });
             }
-            
-            var epMatch = block.match(/<span[^>]*uppercase[^>]*>([\s\S]*?)<\/span>/i);
-            var ep = epMatch ? epMatch[1].replace(/<[^>]+>/g, '').trim() : "Full";
-            
-            items.push({
-                id: id,
-                title: title,
-                posterUrl: img,
-                backdropUrl: img,
-                quality: "HD",
-                episode_current: ep
-            });
         }
+    } catch(e) { log("JSON Parse Error: " + e.message); }
 
-        return JSON.stringify({
-            items: items,
-            pagination: {
-                currentPage: 1,
-                totalPages: 99 // Nền tảng tự động cuộn trang
+    // CÁCH 2: Fallback bằng Regex thuần túy (Dự phòng nếu Cách 1 thất bại)
+    if (items.length === 0) {
+        try {
+            var regex = /<a[^>]+href=["'](\/(?:watch|phim)\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+            var match;
+            var seen = {};
+
+            while ((match = regex.exec(html)) !== null) {
+                var link = match[1];
+                var block = match[2];
+                var id = BASEURL + link;
+                
+                if (seen[id]) continue;
+                seen[id] = true;
+
+                var titleM = block.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
+                var title = titleM ? titleM[1].replace(/<[^>]+>/g, '').trim() : "";
+                if (!title) {
+                    var altM = block.match(/alt=["']([^"']+)["']/i);
+                    title = altM ? altM[1] : "Phim Ngắn";
+                }
+
+                var imgM = block.match(/src=["']([^"']+)["']/i);
+                var img = imgM ? imgM[1] : "";
+                if (img.indexOf('url=') > -1) {
+                    var uM = img.match(/url=([^&]+)/);
+                    if (uM) img = decodeURIComponent(uM[1]);
+                } else if (img !== "" && img.indexOf("http") === -1) {
+                    img = BASEURL + img;
+                }
+
+                var epM = block.match(/<span[^>]*uppercase[^>]*>([\s\S]*?)<\/span>/i);
+                var ep = epM ? epM[1].replace(/<[^>]+>/g, '').trim() : "Full";
+
+                items.push({
+                    id: id,
+                    title: title,
+                    posterUrl: img,
+                    backdropUrl: img,
+                    quality: "HD",
+                    episode_current: ep
+                });
             }
-        });
-    } catch (e) {
-        return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
+        } catch(e) { log("Regex Parse Error: " + e.message); }
     }
+
+    return JSON.stringify({
+        items: items,
+        pagination: {
+            currentPage: 1,
+            totalPages: 99 // Nền tảng tự động cuộn trang
+        }
+    });
 }
 
 function parseSearchResponse(html, url) {
@@ -178,7 +206,7 @@ function parseMovieDetail(html, url) {
 
         // Trả trực tiếp 1 nút bấm để load giao diện Webview
         var servers = [{
-            name: "Lướt Chuyển Tập Tự Động",
+            name: "Lướt Chuyển Tập",
             episodes: [{
                 id: url,
                 name: "Bấm vào để Xem & Vuốt",
@@ -197,7 +225,7 @@ function parseMovieDetail(html, url) {
             rating: 8.5,
             status: "Full",
             category: "Phim Ngắn",
-            episode_current: "Full",
+            episode_current: "Đang phát",
             servers: servers
         });
     } catch (error) {
@@ -207,10 +235,9 @@ function parseMovieDetail(html, url) {
 
 function parseDetailResponse(html, url) {
     try {
-        // Áp dụng chuẩn logic CustomJS từ mẫu shortflix bạn vừa đưa
+        // Áp dụng chuẩn logic CustomJS từ mẫu shortflix
         var pureWebviewJs = `
             (function() {
-                // Vô hiệu hóa tính năng Fullscreen của Web Player để Android không bốc ra ngoài
                 try {
                     var noop = function() { return Promise.resolve(); };
                     Object.defineProperty(document, 'fullscreenEnabled', {get: function() { return false; }});
@@ -228,13 +255,13 @@ function parseDetailResponse(html, url) {
                 var EMAIL = "iamwilliamm6@gmail.com";
                 var PASS = "trung@123";
 
-                // CSS Giấu rác, quảng cáo và ẩn nút phóng to của trình phát web
+                // CSS Ẩn Sidebar, Header và ép video tràn màn hình
                 var style = document.createElement('style');
-                style.innerHTML = 'header, .header, nav, footer, .footer, .download-app, .app-download, [class*="ad-"], [id*="ad-"], .popup, .modal, .google-auto-placed, iframe[src*="ads"], .bottom-nav, .navigation, .sidebar, .comments, .vjs-fullscreen-control, .plyr__controls [data-plyr="fullscreen"], .jw-fullscreen, .fullscreen-btn, video::-webkit-media-controls-fullscreen-button { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } body, html { margin: 0 !important; padding: 0 !important; overflow-x: hidden !important; background: #000 !important; overscroll-behavior-y: none; }';
+                style.innerHTML = 'aside, header, nav, footer, .sidebar, .menu, .comments, [class*="download"], [class*="ad-"] { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } ' +
+                                  'main, .w-full, .flex-1, body, html { width: 100vw !important; height: 100vh !important; padding: 0 !important; margin: 0 !important; max-width: 100% !important; overflow: hidden !important; background: #000 !important; overscroll-behavior-y: none; }';
                 document.head.appendChild(style);
 
                 setInterval(function() {
-                    // Ép thẻ video chạy inline để player của web hoạt động trọn vẹn bên trong khung dọc
                     var vids = document.querySelectorAll('video');
                     for (var k = 0; k < vids.length; k++) {
                         if (!vids[k].hasAttribute('playsinline')) {
@@ -242,57 +269,51 @@ function parseDetailResponse(html, url) {
                             vids[k].setAttribute('webkit-playsinline', 'true');
                         }
                     }
-
                     var appBanners = document.querySelectorAll('div[class*="download"], div[class*="banner"]');
                     for (var i = 0; i < appBanners.length; i++) {
                         if (appBanners[i]) appBanners[i].style.display = 'none';
-                    }
-                    var closeBtns = document.querySelectorAll('.close, .btn-close, [aria-label="Close"]');
-                    for (var j = 0; j < closeBtns.length; j++) {
-                        try { closeBtns[j].click(); } catch(e){}
                     }
                 }, 500);
 
                 // Auto Login Logic
                 if (sessionStorage.getItem('vax_autologin_done')) return;
                 function doLogin() {
-                    var loginBtn = document.querySelector('a[href*="/login"]');
+                    var btns = document.querySelectorAll('button');
+                    var loginBtn = null;
+                    for (var i = 0; i < btns.length; i++) {
+                        if (btns[i].textContent.includes('Đăng Nhập')) {
+                            loginBtn = btns[i];
+                            break;
+                        }
+                    }
+                    
                     if (loginBtn) {
                         sessionStorage.setItem('vax_redirect_back', window.location.href);
-                        window.location.href = loginBtn.href; 
-                    } else {
-                        sessionStorage.setItem('vax_autologin_done', 'true');
+                        loginBtn.click();
+                        
+                        var checkForm = setInterval(function() {
+                            var emailInput = document.querySelector('input[type="email"], input[name="email"], input[placeholder*="mail"]');
+                            var passInput = document.querySelector('input[type="password"], input[name="password"]');
+                            var submitBtn = document.querySelector('button[type="submit"]');
+
+                            if (emailInput && passInput && submitBtn) {
+                                clearInterval(checkForm);
+                                var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                                nativeInputValueSetter.call(emailInput, EMAIL);
+                                emailInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                nativeInputValueSetter.call(passInput, PASS);
+                                passInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                
+                                setTimeout(function() {
+                                    submitBtn.click();
+                                    sessionStorage.setItem('vax_autologin_done', 'true');
+                                }, 500);
+                            }
+                        }, 500);
                     }
                 }
-
-                if (window.location.href.indexOf('/login') > -1) {
-                    var checkForm = setInterval(function() {
-                        var emailInput = document.querySelector('input[type="email"], input[name="email"], input[placeholder*="mail"]');
-                        var passInput = document.querySelector('input[type="password"], input[name="password"]');
-                        var submitBtn = document.querySelector('button[type="submit"]');
-
-                        if (emailInput && passInput && submitBtn) {
-                            clearInterval(checkForm);
-                            var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-                            nativeInputValueSetter.call(emailInput, EMAIL);
-                            emailInput.dispatchEvent(new Event('input', { bubbles: true }));
-                            nativeInputValueSetter.call(passInput, PASS);
-                            passInput.dispatchEvent(new Event('input', { bubbles: true }));
-                            
-                            setTimeout(function() {
-                                submitBtn.click();
-                                sessionStorage.setItem('vax_autologin_done', 'true');
-                                setTimeout(function() {
-                                    var backUrl = sessionStorage.getItem('vax_redirect_back');
-                                    if (backUrl) window.location.href = backUrl;
-                                    else window.location.href = '/';
-                                }, 2000);
-                            }, 500);
-                        }
-                    }, 500);
-                } else {
-                    setTimeout(doLogin, 1500);
-                }
+                
+                setTimeout(doLogin, 1500);
             })();
         `;
 
