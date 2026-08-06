@@ -37,19 +37,19 @@
             "iconUrl": "https://m.media-amazon.com/images/I/61fJ78I23IL.png",
             "info": "Phim ngắn hay, đăng nhập ggacount phụ để xem."
     },
+     {
+      "id": "ShortTV",
+      "name": "ShortTV",
+      "version": "1.1.0",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/Tiktokfilm_plugin.js",
+      "iconUrl": "https://static.vecteezy.com/system/resources/thumbnails/016/716/450/small/tiktok-icon-free-png.png"
+    },
     {
             "id": "hh3d",
             "name": "HH3D - Hoạt Hình 3D",
             "version": "1.0.5",
             "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/hh3d_plugin.js",
             "iconUrl": "https://hoathinh3d.co/wp-content/uploads/2023/09/favicon.png"
-    },
-    {
-      "id": "TikTokShort",
-      "name": "Shortfilm",
-      "version": "1.7.6",
-      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/Tiktokfilm_plugin.js",
-      "iconUrl": "https://static.vecteezy.com/system/resources/thumbnails/016/716/450/small/tiktok-icon-free-png.png"
     },
     {
       "id": "bilutv",
