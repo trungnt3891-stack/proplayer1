@@ -1,5 +1,5 @@
 // =============================================================================
-// PLUGIN VAAPP: PHIMNGAN.NET (Bản Chuẩn - Quét HTML Trực Tiếp)
+// PLUGIN VAAPP: PHIMNGAN.NET (Bản Chuẩn - Load Siêu Tốc & Sạch Lỗi)
 // =============================================================================
 
 var BASEURL = "https://phimngan.net";
@@ -9,7 +9,7 @@ function getManifest() {
         "id": "phimngan_net",
         "name": "PhimNgan.Net",
         "description": "Bản Webview Gốc: Load siêu tốc, ép video dọc, xóa rác giao diện.",
-        "version": "1.8.8",
+        "version": "1.9.0",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/icons/icon-192x192.png",
         "isEnabled": true,
@@ -107,47 +107,57 @@ function getUrlYears() { return ""; }
 // PARSERS
 // =============================================================================
 
+// Thuật toán cắt chuỗi cực kỳ an toàn, bỏ qua thư viện ngoài để tránh sập App
 function parseListResponse(html, apiUrl) {
     var items = [];
-    
     try {
-        // Quét chính xác cấu trúc HTML giao diện hiển thị của web phimngan.net
-        var regex = /<a[^>]+href=["'](\/(?:phim|watch)\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-        var match;
+        var chunks = html.split('<a ');
         var seen = {};
 
-        while ((match = regex.exec(html)) !== null) {
-            var link = match[1];
-            var block = match[2];
+        for (var i = 1; i < chunks.length; i++) {
+            var chunk = chunks[i];
+            
+            // Chỉ bắt các block <a> có chứa link tới /phim/ hoặc /watch/
+            var hrefMatch = chunk.match(/href=["'](\/(?:phim|watch)\/[^"']+)["']/i);
+            if (!hrefMatch) continue;
+
+            var link = hrefMatch[1];
             var id = BASEURL + link;
 
-            // Bỏ qua các link rác
-            if (link === "/watch" || link === "/phim" || seen[id]) continue;
+            // Chống lặp phim
+            if (seen[id]) continue;
             seen[id] = true;
 
-            // Lấy tên phim
-            var titleM = block.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
-            var title = titleM ? titleM[1].replace(/<[^>]+>/g, '').trim() : "";
-            if (!title) {
-                var altM = block.match(/alt=["']([^"']+)["']/i);
-                title = altM ? altM[1] : "Phim Ngắn";
+            // Lấy tiêu đề
+            var title = "";
+            var titleMatch = chunk.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
+            if (titleMatch) {
+                title = titleMatch[1].replace(/<[^>]+>/g, '').trim();
+            } else {
+                var altMatch = chunk.match(/alt=["']([^"']+)["']/i);
+                if (altMatch) title = altMatch[1];
             }
 
-            // Lấy ảnh bìa
-            var imgM = block.match(/<img[^>]+src=["']([^"']+)["']/i);
-            var img = imgM ? imgM[1] : "";
-            if (img.indexOf('url=') > -1) {
-                var uM = img.match(/url=([^&]+)/);
-                if (uM) {
-                    img = decodeURIComponent(uM[1]); // Giải mã link ảnh của Next.js
+            // Lấy ảnh poster (Giải mã base64 URL của Next.js)
+            var img = "";
+            var imgMatch = chunk.match(/<img[^>]*src=["']([^"']+)["']/i);
+            if (imgMatch) {
+                img = imgMatch[1];
+                if (img.indexOf('url=') > -1) {
+                    var uMatch = img.match(/url=([^&]+)/);
+                    if (uMatch) img = decodeURIComponent(uMatch[1]);
                 }
-            } else if (img !== "" && img.indexOf("http") === -1) {
+            }
+            if (img && img.indexOf('http') === -1) {
                 img = BASEURL + img;
             }
 
-            // Lấy số phần/tập
-            var epM = block.match(/<span[^>]+uppercase[^>]*>([\s\S]*?)<\/span>/i);
-            var ep = epM ? epM[1].replace(/<[^>]+>/g, '').trim() : "Full";
+            // Lấy trạng thái tập (nằm trong thẻ span chữ in hoa)
+            var ep = "Full";
+            var epMatch = chunk.match(/<span[^>]*uppercase[^>]*>([\s\S]*?)<\/span>/i);
+            if (epMatch) {
+                ep = epMatch[1].replace(/<[^>]+>/g, '').trim();
+            }
 
             if (title && img) {
                 items.push({
@@ -161,14 +171,14 @@ function parseListResponse(html, apiUrl) {
             }
         }
     } catch(e) {
-        log("Regex Parse Error: " + e.message);
+        log("Lỗi Parse: " + e.message);
     }
 
     return JSON.stringify({
         items: items,
         pagination: {
             currentPage: 1,
-            totalPages: 99 // Nền tảng tự động cuộn trang
+            totalPages: 99 // Hỗ trợ Load More vô tận
         }
     });
 }
@@ -188,7 +198,7 @@ function parseMovieDetail(html, url) {
         var descMatch = html.match(/<meta property="og:description" content="([^"]+)"/i);
         var desc = descMatch ? descMatch[1] : "";
 
-        // Trả trực tiếp 1 nút bấm để load giao diện Webview
+        // Trả trực tiếp 1 nút bấm để load giao diện Webview (Vuốt chuyển tập tự do)
         var servers = [{
             name: "Lướt Chuyển Tập",
             episodes: [{
@@ -219,7 +229,7 @@ function parseMovieDetail(html, url) {
 
 function parseDetailResponse(html, url) {
     try {
-        // Áp dụng chuẩn logic CustomJS từ mẫu shortflix
+        // Áp dụng chuẩn logic CustomJS từ mẫu shortflix (Xóa quảng cáo & Đăng nhập tự động)
         var pureWebviewJs = `
             (function() {
                 try {
