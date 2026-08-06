@@ -37,6 +37,13 @@
             "iconUrl": "https://m.media-amazon.com/images/I/61fJ78I23IL.png",
             "info": "Phim ngắn hay, đăng nhập ggacount phụ để xem."
     },
+    {
+      "id": "gamomephim",
+      "name": "Mê Phim Ngắn",
+      "version": "5.0.0",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/gamomephim_plugin.js",
+      "iconUrl": "https://r2.gamomephim.com/site/logo-1784305321242.png"
+    },
      {
       "id": "ShortTV",
       "name": "ShortTV",
@@ -52,18 +59,18 @@
             "iconUrl": "https://hoathinh3d.co/wp-content/uploads/2023/09/favicon.png"
     },
     {
+      "id": "Anime09",
+      "name": "Anime09",
+      "version": "1.0.3",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/Anime09_plugin.js",
+      "iconUrl": "https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/i/c72e2f68-1a1c-48a2-aa5f-edf7eaaf3548/d77q5ev-af22ff5c-be81-4e24-bf0e-13836c6c939e.png"
+    },
+    {
       "id": "bilutv",
       "name": "Nguồn Bilutv",
       "version": "1.4",
       "scriptUrl": "https://rawcdn.githack.com/alokillgtv-gif/VAXAPPSCRIPT/4fda37b345d013471e4267298f7af73ea389f621/Plugins/bilutv_plugin.js",
       "iconUrl": "https://bilutv.asia/img/bilutvlogo-ngang.jpg"
-    },
-    {
-      "id": "gamomephim",
-      "name": "Mê Phim Ngắn",
-      "version": "5.0.0",
-      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/gamomephim_plugin.js",
-      "iconUrl": "https://r2.gamomephim.com/site/logo-1784305321242.png"
     },
     {
       "id": "phimhdcs",
@@ -92,13 +99,6 @@
       "version": "1.0.3",
       "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/VTV_plugin.js",
       "iconUrl": "https://thuvienvector.vn/wp-content/uploads/2025/09/logo-vtv-png.jpg"
-    },
-    {
-      "id": "Anime09",
-      "name": "Anime09",
-      "version": "1.0.3",
-      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/Anime09_plugin.js",
-      "iconUrl": "https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/i/c72e2f68-1a1c-48a2-aa5f-edf7eaaf3548/d77q5ev-af22ff5c-be81-4e24-bf0e-13836c6c939e.png"
     }
     ]
 }
