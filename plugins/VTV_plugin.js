@@ -1,6 +1,6 @@
 // =============================================================================
 // PLUGIN VAX APP: TIVI TRỰC TUYẾN (TINHLAGI.PRO)
-// FIX: CHỐNG BYPASS HEADER FPT + GIAO DIỆN LOGO VUÔNG CHUẨN IPTV
+// TỐI ƯU: LOGO VUÔNG + LƯỚT NGANG + BẤM LÀ PHÁT + MỞ KHÓA VTV (FPT)
 // =============================================================================
 
 var BASEURL = "https://tinhlagi.pro/tivi";
@@ -9,13 +9,13 @@ function getManifest() {
     return JSON.stringify({
         "id": "tinhlagitv",
         "name": "Tinhlagi TV",
-        "version": "8.0.0", // Fix VTV triệt để & Layout Logo
+        "version": "9.0.0", // Fix VTV triệt để + Logo vuông
         "baseUrl": BASEURL,
         "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
         "isEnabled": true,
         "isAdult": false,
-        "type": "IPTV", // Chế độ bấm là phát
-        "layoutType": "SQUARE", // TUYỆT CHIÊU: Hiện Logo vuông vắn, không bị kéo giãn thành hình phim
+        "type": "IPTV",         // Chế độ Tivi: Bấm vào kênh là MỞ TRÌNH PHÁT LUÔN
+        "layoutType": "SQUARE", // Đổi giao diện từ Phim (Dọc) sang Logo Kênh (Vuông nhỏ gọn)
         "playerType": "auto"
     });
 }
@@ -68,7 +68,7 @@ function getUrlList(slug, filtersJson) {
 function getUrlSearch(keyword, filtersJson) { return BASEURL; }
 
 function getUrlDetail(id) {
-    // Truyền ID đã ngụy trang vào URL để Cấp 3 hứng lấy
+    // Đẩy link vào tham số ẩn để ép App phải chạy qua hàm nạp Header (Cấp 3)
     return BASEURL + "?play=" + encodeURIComponent(id);
 }
 
@@ -80,7 +80,7 @@ function getUrlYears() { return ""; }
 // PARSERS
 // =============================================================================
 
-// --- HÀM 1: LỌC HTML -> CẮT LINK TRONG THẺ <a> -> XUẤT RA DÒNG KÊNH ---
+// --- HÀM 1: LỌC HTML -> CẮT LINK VÀ LOGO KÊNH THẬT SỰ ---
 function parseListResponse(html, url) {
     try {
         var slug = "";
@@ -121,29 +121,25 @@ function parseListResponse(html, url) {
             for (var k = 1; k < channelParts.length; k++) {
                 var cp = channelParts[k];
                 
-                var urlMatch = cp.match(/(.*?)(?:&amp;|&)name=/);
+                // Lấy URL trước chữ &name
+                var urlMatch = cp.match(/^(.*?)(?:&amp;|&)name=/);
                 if (!urlMatch) continue;
                 
+                // Lấy Tên và Logo kênh từ HTML
                 var nameMatch = cp.match(/(?:&amp;|&)name=([^#"']+)/);
                 var imgMatch = cp.match(/<img[^>]+src=["']([^"']+)["']/i);
                 
-                var streamLinkEncoded = urlMatch[1];
-                var channelNameEncoded = nameMatch ? nameMatch[1] : "Kênh TV";
+                var streamLink = decodeURIComponent(urlMatch[1]);
+                var channelName = nameMatch ? decodeURIComponent(nameMatch[1]).replace(/\+/g, " ").trim() : "Kênh TV";
                 var logo = imgMatch ? imgMatch[1] : "https://tinhlagi.pro/tinhlagi.ico";
 
-                var streamLink = decodeURIComponent(streamLinkEncoded);
-                var channelName = decodeURIComponent(channelNameEncoded).replace(/\+/g, " ").trim();
-
-                // NGỤY TRANG ID: Thêm chữ 'tivi|' để App không bypass hàm parseDetailResponse
-                var safeId = "tivi|" + streamLink;
-                
                 items.push({
-                    id: safeId, 
+                    id: streamLink, // Gửi link m3u8 vào ID
                     title: channelName,
-                    posterUrl: logo,
+                    posterUrl: logo,   // HIỂN THỊ LOGO THẬT
                     backdropUrl: logo,
                     quality: "LIVE",
-                    episode_current: "HD"
+                    episode_current: "Live"
                 });
             }
         }
@@ -159,36 +155,36 @@ function parseListResponse(html, url) {
 
 function parseSearchResponse(html, url) { return parseListResponse(html, url); }
 
-// --- HÀM 2: TRANG CHI TIẾT (BỎ QUA DO ĐÃ DÙNG IPTV) ---
+// --- HÀM 2: TRANG CHI TIẾT (BỎ QUA VÌ DÙNG CHẾ ĐỘ IPTV BẤM LÀ PHÁT) ---
 function parseMovieDetail(html, url) {
     return JSON.stringify({});
 }
 
-// --- HÀM 3: NẠP HEADER VÀ GIAO LINK CHO PLAYER CHẠY (FIX DỨT ĐIỂM FPT) ---
+// --- HÀM 3: NẠP HEADER TRỰC TIẾP VÀO URL (CHÌA KHÓA MỞ VTV) ---
 function parseDetailResponse(html, apiUrl) {
     try {
         var realUrl = "";
-        
-        // Tháo lớp ngụy trang 'tivi|' để lấy lại link m3u8 gốc
         var encodedId = apiUrl.split("?play=")[1];
         if (encodedId) {
-            var decodedId = decodeURIComponent(encodedId);
-            realUrl = decodedId.split("|")[1]; // Lấy phần link thực tế
+            realUrl = decodeURIComponent(encodedId);
         }
+
+        // ==============================================================
+        // TUYỆT CHIÊU EXOPLAYER: NỐI CHUỖI HEADER TRỰC TIẾP VÀO URL
+        // Máy chủ FPT Play (vips-livecdn.fptplay.net) BẮT BUỘC có cái này.
+        // ==============================================================
+        var playUrl = realUrl + "|User-Agent=cvmedia/1.1.0|Referer=https://tinhlagi.pro/|Origin=https://tinhlagi.pro";
 
         var mimeType = "application/x-mpegURL"; 
-        if (realUrl.indexOf(".mpd") > -1) {
-            mimeType = "application/dash+xml"; 
-        } else if (realUrl.indexOf(".ts") > -1) {
-            mimeType = "video/mp2t"; 
-        }
+        if (realUrl.indexOf(".mpd") > -1) mimeType = "application/dash+xml"; 
+        if (realUrl.indexOf(".ts") > -1) mimeType = "video/mp2t"; 
 
-        // Ép Header cvmedia/1.1.0 vào Player. Chìa khóa vàng cho VTV1->VTV10!
         return JSON.stringify({
-            "url": realUrl,
+            "url": playUrl, // Gửi URL đã bọc Header cho Player
             "isEmbed": false, 
             "mimeType": mimeType,
             "headers": {
+                // Thêm vào JSON phòng trường hợp trình phát hỗ trợ đọc từ headers
                 "User-Agent": "cvmedia/1.1.0",
                 "Referer": "https://tinhlagi.pro/",
                 "Origin": "https://tinhlagi.pro"
