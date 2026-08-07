@@ -9,7 +9,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "tinhlagitv",
         "name": "Tinhlagi TV",
-        "version": "5.0.0", // Fix lỗi VTV1, VTV2 bị chặn + Giao diện lướt ngang
+        "version": "5.1.0", // Fix lỗi cào trượt Link và Ảnh bìa
         "baseUrl": BASEURL,
         "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
         "isEnabled": true,
@@ -60,14 +60,12 @@ function getFilterConfig() { return JSON.stringify({}); }
 // =============================================================================
 
 function getUrlList(slug, filtersJson) {
-    // Truyền slug vào URL để hàm parseListResponse biết đang tải dòng (folder) nào
     return BASEURL + "?slug=" + slug;
 }
 
 function getUrlSearch(keyword, filtersJson) { return BASEURL; }
 
 function getUrlDetail(id) {
-    // Trả thẳng ID về để parseMovieDetail bóc tách
     return id;
 }
 
@@ -90,13 +88,12 @@ function parseListResponse(html, url) {
         var blocks = html.split('<h2 class="group-title">');
         var targetHtml = "";
 
-        // Tìm đúng khối HTML của nhóm đài tương ứng với dòng trên trang chủ
+        // Tìm đúng khối HTML của nhóm đài
         for (var i = 1; i < blocks.length; i++) {
             var block = blocks[i];
             var titleMatch = block.match(/^([^<]+)<\/h2>/i);
             if (!titleMatch) continue;
 
-            // Bỏ đi các con số trong ngoặc đơn, ví dụ: "VTV (12)" -> "vtv"
             var groupName = titleMatch[1].split('(')[0].trim().toLowerCase();
             var isMatch = false;
 
@@ -116,32 +113,26 @@ function parseListResponse(html, url) {
 
         var items = [];
         if (targetHtml) {
-            var channelParts = targetHtml.split('class="channel-card');
+            // FIX: Dùng Regex thần thánh tóm trọn gói (Link + Tên + Ảnh bìa) an toàn 100%
+            var itemRegex = /href=["']\?url=([^&"']+)&name=([^#"']+)[^>]*>[\s\S]*?<img[^>]*src=["']([^"']+)["']/gi;
+            var match;
             
-            for (var k = 1; k < channelParts.length; k++) {
-                var cp = channelParts[k];
-                var urlM = cp.match(/href=["']\?url=([^&"']+)/i);
-                var nameM = cp.match(/&name=([^"']+)/i);
-                var imgM = cp.match(/<img[^>]+src=["']([^"']+)["']/i);
+            while ((match = itemRegex.exec(targetHtml)) !== null) {
+                var streamLink = decodeURIComponent(match[1]); // Giải mã link mp4/m3u8
+                var channelName = decodeURIComponent(match[2]).replace(/\+/g, " ").trim(); // Lấy tên kênh
+                var logo = match[3]; // Lấy link ảnh
                 
-                if (urlM && nameM) {
-                    var streamLink = decodeURIComponent(urlM[1]); 
-                    var rawName = nameM[1].split('#')[0];
-                    var channelName = decodeURIComponent(rawName).replace(/\+/g, " ").trim(); 
-                    var logo = imgM ? imgM[1] : "https://tinhlagi.pro/tinhlagi.ico";
-                    
-                    // Gói toàn bộ dữ liệu (Link + Tên + Ảnh) vào 1 chuỗi làm ID
-                    var combinedId = streamLink + "|||" + channelName + "|||" + logo;
-                    
-                    items.push({
-                        id: combinedId, 
-                        title: channelName,
-                        posterUrl: logo,
-                        backdropUrl: logo,
-                        quality: "HD",
-                        episode_current: "Live"
-                    });
-                }
+                // Gói toàn bộ dữ liệu (Link + Tên + Ảnh) vào 1 chuỗi làm ID
+                var combinedId = streamLink + "|||" + channelName + "|||" + logo;
+                
+                items.push({
+                    id: combinedId, 
+                    title: channelName,
+                    posterUrl: logo,
+                    backdropUrl: logo,
+                    quality: "HD",
+                    episode_current: "Live"
+                });
             }
         }
 
@@ -173,7 +164,7 @@ function parseMovieDetail(html, url) {
             title: channelName,
             posterUrl: logo,
             backdropUrl: logo,
-            description: "Đang phát trực tiếp " + channelName + " tốc độ cao.",
+            description: "Đang phát trực tiếp kênh " + channelName + " tốc độ cao. Dữ liệu cung cấp bởi Tinhlagi.pro.",
             servers: [{
                 name: "Tivi Trực Tuyến",
                 episodes: [{
