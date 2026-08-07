@@ -5,22 +5,22 @@ var MAIN_DOMAIN = "dramawave.dramafren.org";
 var BASEURL = "https://" + MAIN_DOMAIN; 
 
 // =============================================================================
-// PLUGIN VAX APP: DRAMAWAVE (NATIVE TO WEBVIEW)
-// BẢN CẬP NHẬT: THUẬT TOÁN "BĂM HTML" BẮT BÌA VÀ LINK SIÊU CHUẨN
+// PLUGIN VAX APP: DRAMAWAVE UNLOCKED 
+// CHIẾN THUẬT: HIỂN THỊ NATIVE TRANG CHỦ -> PHÁT PHIM BẰNG WEBVIEW 100%
 // =============================================================================
 
 function getManifest() {
     return JSON.stringify({
         "id": "dramawave_webview",
         "name": "DramaWave",
-        "description": "Thuật toán băm HTML bắt bìa siêu chuẩn. Xem phim bằng Webview Player.",
-        "version": "1.5.0", 
+        "description": "Thuật toán Block Extraction. Phát bằng Trình duyệt Web 100%.",
+        "version": "2.0.0", 
         "baseUrl": BASEURL,
         "iconUrl": "https://via.placeholder.com/100x100/ec4899/ffffff?text=DW",
         "isEnabled": true,
         "type": "shortfilm", 
         "layoutType": "VERTICAL",
-        "playerType": "embed" // [QUAN TRỌNG] Tắt ExoPlayer, sử dụng Trình duyệt Webview để xem
+        "playerType": "embed" // [QUAN TRỌNG] Vô hiệu hóa ExoPlayer, ép xem bằng Trình duyệt Webview
     });
 }
 
@@ -34,13 +34,13 @@ function log(msg) {
 
 function getHomeSections() {
     return JSON.stringify([
-        { slug: 'recent-watched', title: 'Phim Xem Gần Đây (Đề Cử)', type: 'Grid', path: '' }
+        { slug: 'recent-watched', title: 'Phim Xem Gần Đây', type: 'Grid', path: '' }
     ]);
 }
 
 function getPrimaryCategories() {
     return JSON.stringify([
-        { name: 'Phim Xem Gần Đây', slug: 'recent-watched' }
+        { name: 'Mới Cập Nhật', slug: 'recent-watched' }
     ]);
 }
 
@@ -53,8 +53,7 @@ function getFilterConfig() { return JSON.stringify({}); }
 function getUrlList(slug, filtersJson) {
     var page = 1;
     try { page = JSON.parse(filtersJson || "{}").page || 1; } catch(e){}
-    // Lấy danh sách phim bằng tham số hp (phân trang)
-    return BASEURL + "/index.php?hp=" + page; 
+    return BASEURL + "/index.php?hp=" + page + "#recent-watched"; 
 }
 
 function getUrlSearch(keyword, filtersJson) {
@@ -73,7 +72,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSERS: THUẬT TOÁN "BĂM HTML" ĐỂ LẤY DANH SÁCH PHIM
+// PARSERS: THUẬT TOÁN "TRÍCH XUẤT KHỐI TĨNH" LẤY BÌA & LINK CHUẨN XÁC
 // =============================================================================
 
 function parseListResponse(html, url) {
@@ -81,11 +80,11 @@ function parseListResponse(html, url) {
         var items = [];
         var added = {};
         
-        // CẢNH BÁO NẾU BỊ CLOUDFLARE CHẶN LẠI MÀ KHÔNG TRẢ VỀ HTML PHIM
-        if (html.indexOf('cf-turnstile') > -1 || html.indexOf('Just a moment...') > -1) {
+        // CẢNH BÁO NẾU BỊ TƯỜNG LỬA CLOUDFLARE CHẶN LẠI
+        if (html.indexOf('Just a moment...') > -1 || html.indexOf('cf-turnstile') > -1) {
             items.push({
                 id: BASEURL,
-                title: "⚠️ Mạng bị Cloudflare chặn. Hãy bấm vào đây để mở Webview giải Captcha.",
+                title: "⚠️ Bị Cloudflare chặn. Bấm vào đây để mở xác minh Mạng.",
                 posterUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/y/y5/Cloudflare_Icon.svg/1024px-Cloudflare_Icon.svg.png",
                 backdropUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/y/y5/Cloudflare_Icon.svg/1024px-Cloudflare_Icon.svg.png",
                 episode_current: "Lỗi Mạng",
@@ -94,35 +93,35 @@ function parseListResponse(html, url) {
             return JSON.stringify({ items: items, pagination: { currentPage: 1, totalPages: 1 } });
         }
 
-        // BĂM HTML: Cắt nhỏ HTML theo từng thẻ <a 
-        var blocks = html.split('<a ');
+        // BĂM HTML THEO CLASS CỦA CARD PHIM ('class="block group')
+        var blocks = html.split('class="block group');
         
+        // Bỏ qua phần tử đầu tiên vì nó không chứa nội dung card
         for (var i = 1; i < blocks.length; i++) {
-            var block = "<a " + blocks[i];
+            var block = blocks[i];
             
-            // 1. TÌM LINK
-            var hrefMatch = block.match(/href=["']([^"']+)["']/i);
-            if (!hrefMatch) continue;
-            var link = hrefMatch[1].replace(/&amp;/g, "&"); // Fix lỗi HTML encode
+            // 1. TÌM LINK PHIM
+            var linkMatch = block.match(/href=["']([^"']+)["']/i);
+            if (!linkMatch) continue;
+            var link = linkMatch[1].replace(/&amp;/g, "&"); // Fix lỗi encode HTML
             
-            // Chỉ lấy các thẻ a trỏ vào trang chi tiết phim
-            if (link.indexOf('page=detail&id=') === -1) continue;
+            // Lọc: Chỉ lấy các link đi vào trang chi tiết (có id)
+            if (link.indexOf('id=') === -1) continue;
             
-            // 2. TÌM TIÊU ĐỀ
-            var titleMatch = block.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i) || block.match(/title=["']([^"']+)["']/i);
-            var title = titleMatch ? titleMatch[1].replace(/<[^>]*>/g, "").trim() : "";
-            if (!title || title.toLowerCase() === "watch") continue; // Lọc rác
-            
-            // 3. TÌM ẢNH BÌA
-            var imgMatch = block.match(/<img[^>]+src=["']([^"'\s]+)["']/i);
+            // 2. TÌM ẢNH BÌA
+            var imgMatch = block.match(/src=["']([^"']+)["']/i);
             var imgStr = imgMatch ? imgMatch[1] : "https://via.placeholder.com/600x800/1e293b/ec4899?text=DramaWave";
             
-            // 4. CHUẨN HÓA VÀ GOM DỮ LIỆU
-            var finalUrl = BASEURL + "/" + link.replace(/^\//, "");
-            var slugMatch = link.match(/id=([^&]+)/);
-            var slug = slugMatch ? slugMatch[1] : finalUrl;
+            // 3. TÌM TÊN PHIM
+            var titleMatch = block.match(/<h[34][^>]*>([\s\S]*?)<\/h[34]>/i);
+            var title = titleMatch ? titleMatch[1].replace(/<[^>]*>/g, "").trim() : "Phim Hay";
             
-            if (!added[slug]) {
+            // 4. CHUẨN HÓA GÓI DỮ LIỆU
+            var slugMatch = link.match(/id=([^&]+)/);
+            var slug = slugMatch ? slugMatch[1] : link;
+            var finalUrl = link.indexOf("http") === 0 ? link : BASEURL + "/" + link.replace(/^\//, "");
+            
+            if (!added[slug] && title) {
                 items.push({
                     id: finalUrl,
                     title: title,
@@ -135,7 +134,7 @@ function parseListResponse(html, url) {
             }
         }
 
-        // TÍNH TOÁN PHÂN TRANG
+        // TÍNH TOÁN PHÂN TRANG (Dựa trên thông số 'hp' truyền vào URL)
         var currentPage = 1;
         var hpMatch = url.match(/hp=(\d+)/);
         if (hpMatch) currentPage = parseInt(hpMatch[1]);
@@ -155,17 +154,16 @@ function parseSearchResponse(html, url) {
 }
 
 // =============================================================================
-// TRANG CHI TIẾT: TẠO NÚT BẤM MỞ TRÌNH DUYỆT CỦA WEB
+// TRANG CHI TIẾT: GỌI WEBVIEW ĐỂ XEM
 // =============================================================================
 
 function parseMovieDetail(html, url) {
     try {
         log("Load Trang Chi Tiết: " + url);
-        var title = "Phim DramaWave";
+        var title = "Xem Bằng Trình Duyệt Web";
         var img = "https://via.placeholder.com/600x800/1e293b/ec4899?text=Play+Video"; 
-        var des = "Vui lòng bấm vào nút Phát bên dưới để mở giao diện Trình duyệt. Video sẽ được tối ưu chạy dọc và tự động ẩn các quảng cáo / popup làm phiền.";
+        var des = "Vui lòng bấm Phát để mở Trình duyệt Web của DramaWave. Video sẽ được ép chạy màn hình dọc và dọn dẹp quảng cáo.";
 
-        // Trích xuất Tiêu đề & Bìa từ thẻ Meta OG
         var metaTitle = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([^<]+)<\/title>/i);
         if (metaTitle) {
             var tempTitle = metaTitle[1].replace('DramaWave Unlocked - Watch Trending Short Dramas & Mini Series Online', '').trim();
@@ -175,8 +173,14 @@ function parseMovieDetail(html, url) {
         var metaImg = html.match(/<meta property="og:image" content="([^"]+)"/i);
         if (metaImg && metaImg[1].indexOf('placeholder') === -1) img = metaImg[1];
 
-        // TẠO NÚT "WEBVIEW PLAYER" CHỨA LINK TRANG CHI TIẾT
-        var episodes = [{ id: url, name: "Phát Bằng Trình Duyệt Web", slug: "webview-player" }];
+        // Tìm nút Watch Play Now nếu có
+        var playUrl = url;
+        var watchMatch = html.match(/href=["']([^"']+)["'][^>]*>\s*Watch/i);
+        if (watchMatch) {
+            playUrl = watchMatch[1].indexOf('http') === 0 ? watchMatch[1] : BASEURL + "/" + watchMatch[1].replace(/^\//, '');
+        }
+
+        var episodes = [{ id: playUrl, name: "Phát Phim Màn Hình Dọc", slug: "webview-player" }];
         
         return JSON.stringify({
             id: url,
@@ -189,7 +193,7 @@ function parseMovieDetail(html, url) {
             quality: "HD",
             category: "Short Drama",
             status: "Hoàn Thành",
-            servers: [{ name: "Trình Phát Webview", episodes: episodes }]
+            servers: [{ name: "Trình Phát Web Gốc", episodes: episodes }]
         });
     } catch (e) {
         return JSON.stringify({ id: "error", title: "Lỗi tải dữ liệu chi tiết", servers: [] });
