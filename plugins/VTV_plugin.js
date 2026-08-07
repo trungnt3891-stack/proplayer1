@@ -1,16 +1,13 @@
 // =============================================================================
-// PLUGIN VAX APP: TIVI TRỰC TUYẾN (TINHLAGI.PRO)
-// PHIÊN BẢN CHUẨN XÁC: FIX LỌC VTV/HTV + LÀM SẠCH TÊN KÊNH KHÔNG CÒN PLAYER-AREA
+// CONFIGURATION & METADATA
 // =============================================================================
-
-var BASEURL = "https://tinhlagi.pro/tivi";
 
 function getManifest() {
     return JSON.stringify({
         "id": "tinhlagitv",
         "name": "Tinhlagi TV",
-        "version": "1.1.4",
-        "baseUrl": BASEURL,
+        "version": "1.1.5",
+        "baseUrl": "https://tinhlagi.pro/tivi",
         "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
         "isEnabled": true,
         "isAdult": false,
@@ -34,9 +31,9 @@ function getPrimaryCategories() {
 
 function getFilterConfig() { return JSON.stringify({}); }
 
-function getUrlList(slug, filtersJson) { return BASEURL; }
-function getUrlSearch(keyword, filtersJson) { return BASEURL; }
-function getUrlDetail(slug) { return BASEURL; }
+function getUrlList(slug, filtersJson) { return "https://tinhlagi.pro/tivi"; }
+function getUrlSearch(keyword, filtersJson) { return "https://tinhlagi.pro/tivi"; }
+function getUrlDetail(slug) { return "https://tinhlagi.pro/tivi"; }
 
 function getUrlCategories() { return ""; }
 function getUrlCountries() { return ""; }
@@ -85,33 +82,37 @@ function parseSearchResponse(html) { return parseListResponse(html); }
 
 function parseMovieDetail(html) {
     try {
-        var requiredGroups = ["VTV", "VTVcab", "SCTV", "HTV", "HTVC", "Địa phương", "Thiết yếu"];
         var servers = [];
         var groupBlocks = html.split('<h2 class="group-title">');
         
         for (var i = 1; i < groupBlocks.length; i++) {
             var block = groupBlocks[i];
             var titleEnd = block.indexOf('</h2>');
-            var rawTitle = block.substring(0, titleEnd);
-            var groupName = PluginUtils.cleanText(rawTitle).split('(')[0].trim();
+            if (titleEnd === -1) continue;
             
-            // Xử lý bắt đúng tên nhóm chuẩn xác (tránh bị nhầm lẫn giữa VTV và VTVcab, HTV và HTVC)
+            var rawTitle = block.substring(0, titleEnd);
+            var groupNameClean = PluginUtils.cleanText(rawTitle).split('(')[0].trim();
+            var groupLower = groupNameClean.toLowerCase();
+            
             var matchedGroup = "";
-            for (var j = 0; j < requiredGroups.length; j++) {
-                var req = requiredGroups[j];
-                if (groupName.toLowerCase() === req.toLowerCase() || 
-                    (req === "VTV" && groupName.toLowerCase() === "vtv") ||
-                    (req === "HTV" && groupName.toLowerCase() === "htv") ||
-                    (groupName.indexOf(req) !== -1)) {
-                    
-                    // Tránh trường hợp VTV nhận nhầm sang VTVcab hoặc HTV nhận nhầm sang HTVC
-                    if (req === "VTV" && groupName.toLowerCase().indexOf("vtvcab") !== -1) continue;
-                    if (req === "HTV" && groupName.toLowerCase().indexOf("htvc") !== -1) continue;
-                    
-                    matchedGroup = req;
-                    break;
-                }
+            
+            // Phân loại nhóm chính xác bằng từ khóa không phân biệt chữ hoa/thường hay ký hiệu rác
+            if (groupLower.indexOf("vtvcab") !== -1) {
+                matchedGroup = "VTVcab";
+            } else if (groupLower.indexOf("vtv") !== -1) {
+                matchedGroup = "VTV";
+            } else if (groupLower.indexOf("sctv") !== -1) {
+                matchedGroup = "SCTV";
+            } else if (groupLower.indexOf("htvc") !== -1) {
+                matchedGroup = "HTVC";
+            } else if (groupLower.indexOf("htv") !== -1) {
+                matchedGroup = "HTV";
+            } else if (groupLower.indexOf("địa phương") !== -1 || groupLower.indexOf("dia phuong") !== -1) {
+                matchedGroup = "Địa phương";
+            } else if (groupLower.indexOf("thiết yếu") !== -1 || groupLower.indexOf("thiet yeu") !== -1) {
+                matchedGroup = "Thiết yếu";
             }
+
             if (!matchedGroup) continue;
 
             var episodes = [];
