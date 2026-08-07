@@ -9,7 +9,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "tinhlagi_iptv",
         "name": "Tivi Trực Tuyến",
-        "description": "Tổng hợp các kênh VTV, VTVcab, SCTV, HTV, Địa Phương tốc độ cao.",
+        "description": "Hệ thống kênh truyền hình VTV, HTV, SCTV tốc độ cao.",
         "version": "1.0.0",
         "baseUrl": BASEURL,
         "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
@@ -54,9 +54,7 @@ function getPrimaryCategories() {
     ]);
 }
 
-function getFilterConfig() {
-    return "{}";
-}
+function getFilterConfig() { return "{}"; }
 
 // =============================================================================
 // URL GENERATION
@@ -67,10 +65,7 @@ function getUrlList(slug, filtersJson) {
     return BASEURL + "/tivi|data:slug=" + slug;
 }
 
-function getUrlSearch(keyword, filtersJson) {
-    // Thường IPTV/Tivi ít dùng chức năng Search, trả về rỗng để bỏ qua
-    return ""; 
-}
+function getUrlSearch(keyword, filtersJson) { return ""; }
 
 function getUrlDetail(id) {
     // Với chế độ IPTV, "id" chính là link m3u8/mpd đã bóc được ở parseListResponse
@@ -91,9 +86,9 @@ function parseListResponse(html, apiUrl) {
         var items = [];
         var slug = "vtv"; // Mặc định
         
-        // Trích xuất cờ đánh dấu slug từ apiUrl
+        // Trích xuất cờ đánh dấu slug từ apiUrl (Ví dụ: "vtv", "vtvcab")
         if (apiUrl && apiUrl.indexOf("data:slug=") > -1) {
-            slug = apiUrl.split("data:slug=")[1];
+            slug = apiUrl.split("data:slug=")[1].toLowerCase().trim();
         }
 
         // Cắt HTML thành các khối dựa trên thẻ <h2 class="group-title">
@@ -106,10 +101,10 @@ function parseListResponse(html, apiUrl) {
             var titleMatch = block.match(/^([^<]+)<\/h2>/);
             if (!titleMatch) continue;
 
-            var title = titleMatch[1].toLowerCase();
+            var title = titleMatch[1].toLowerCase().trim();
             var isMatch = false;
 
-            // Kiểm tra khớp từ khóa nhóm
+            // Xử lý logic lọc chuẩn xác tên nhóm trong thẻ <h2>
             if (slug === 'vtv' && title.indexOf('vtv (') > -1) isMatch = true;
             else if (slug === 'vtvcab' && title.indexOf('vtvcab') > -1) isMatch = true;
             else if (slug === 'sctv' && title.indexOf('sctv') > -1) isMatch = true;
@@ -120,7 +115,7 @@ function parseListResponse(html, apiUrl) {
 
             if (isMatch) {
                 targetHtml = block;
-                break; // Tìm thấy thì thoát vòng lặp
+                break; // Tìm thấy nhóm tương ứng thì dừng lại
             }
         }
 
@@ -134,14 +129,14 @@ function parseListResponse(html, apiUrl) {
                 // Giải mã URL từ định dạng an toàn (https%3A%2F%2F...) về bình thường
                 var streamUrl = decodeURIComponent(itemMatch[1]); 
                 var logo = itemMatch[2];
-                var name = itemMatch[3].trim();
+                var name = itemMatch[3].trim().replace(/\+/g, " ");
 
                 items.push({
                     "id": streamUrl, // Nhét thẳng link luồng phát vào ID
                     "title": name,
                     "posterUrl": logo,
                     "backdropUrl": logo,
-                    "quality": "HD"
+                    "quality": "LIVE"
                 });
             }
         }
@@ -161,7 +156,7 @@ function parseSearchResponse(html, url) {
 }
 
 function parseMovieDetail(html, url) { 
-    // IPTV không dùng trang Chi Tiết
+    // IPTV không dùng trang Chi Tiết, hàm này sẽ bị bỏ qua
     return "{}"; 
 }
 
