@@ -8,7 +8,7 @@
             "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/Vsmov_plugin.js",
             "iconUrl": "https://vsmov.com/VSmov.png",
     },
-      {
+    {
       "id": "kkphim",
       "name": "KKPhim",
       "version": "1.0.2",
