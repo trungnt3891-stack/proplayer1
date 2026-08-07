@@ -1,6 +1,6 @@
 // =============================================================================
 // PLUGIN VAX APP: TIVI TRỰC TUYẾN (TINHLAGI.PRO)
-// CHIẾN THUẬT: KÊNH LƯỚT NGANG TRÊN TRANG CHỦ -> BẮT LINK SIÊU TỐC
+// CHIẾN THUẬT: FOLDER TRANG CHỦ + VƯỢT TƯỜNG LỬA FPT BẰNG HEADER
 // =============================================================================
 
 var BASEURL = "https://tinhlagi.pro/tivi";
@@ -9,14 +9,14 @@ function getManifest() {
     return JSON.stringify({
         "id": "tinhlagitv",
         "name": "Tinhlagi TV",
-        "version": "4.0.0", // Layout Lướt ngang (Horizontal) + Fast Stream
+        "version": "5.0.0", // Fix lỗi VTV1, VTV2 bị chặn + Giao diện lướt ngang
         "baseUrl": BASEURL,
         "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
         "isEnabled": true,
         "isAdult": false,
-        "type": "MOVIE", 
+        "type": "MOVIE",
         "layoutType": "VERTICAL",
-        "playerType": "auto" 
+        "playerType": "auto"
     });
 }
 
@@ -60,15 +60,14 @@ function getFilterConfig() { return JSON.stringify({}); }
 // =============================================================================
 
 function getUrlList(slug, filtersJson) {
-    // Truyền slug (vtv, sctv...) vào URL để hàm parseListResponse biết đường cắt đúng HTML
+    // Truyền slug vào URL để hàm parseListResponse biết đang tải dòng (folder) nào
     return BASEURL + "?slug=" + slug;
 }
 
 function getUrlSearch(keyword, filtersJson) { return BASEURL; }
 
 function getUrlDetail(id) {
-    // Vì ta đã gói toàn bộ dữ liệu (Link + Tên + Ảnh) vào tham số ID ở bước dưới
-    // Ở đây chỉ cần trả thẳng ID đó về để parseMovieDetail sử dụng
+    // Trả thẳng ID về để parseMovieDetail bóc tách
     return id;
 }
 
@@ -80,7 +79,7 @@ function getUrlYears() { return ""; }
 // PARSERS
 // =============================================================================
 
-// --- HÀM 1: LỌC HTML VÀ ĐƯA CÁC KÊNH VÀO TỪNG DÒNG (FOLDER) ---
+// --- HÀM 1: LỌC HTML VÀ ĐƯA KÊNH VÀO TỪNG DÒNG (FOLDER) ---
 function parseListResponse(html, url) {
     try {
         var slug = "";
@@ -91,22 +90,22 @@ function parseListResponse(html, url) {
         var blocks = html.split('<h2 class="group-title">');
         var targetHtml = "";
 
-        // Tìm đúng khối HTML của Đài truyền hình đó
+        // Tìm đúng khối HTML của nhóm đài tương ứng với dòng trên trang chủ
         for (var i = 1; i < blocks.length; i++) {
             var block = blocks[i];
-            var titleMatch = block.match(/^([^<]+)<\/h2>/);
+            var titleMatch = block.match(/^([^<]+)<\/h2>/i);
             if (!titleMatch) continue;
 
-            var groupName = titleMatch[1].toLowerCase().trim();
+            // Bỏ đi các con số trong ngoặc đơn, ví dụ: "VTV (12)" -> "vtv"
+            var groupName = titleMatch[1].split('(')[0].trim().toLowerCase();
             var isMatch = false;
 
-            // Xử lý điều kiện bắt đúng tên khối
-            if (slug === 'vtv' && groupName.indexOf('vtv (') > -1) isMatch = true;
-            else if (slug === 'vtvcab' && groupName.indexOf('vtvcab') > -1) isMatch = true;
-            else if (slug === 'sctv' && groupName.indexOf('sctv') > -1) isMatch = true;
-            else if (slug === 'htv' && groupName.indexOf('htv (') > -1) isMatch = true;
-            else if (slug === 'htvc' && groupName.indexOf('htvc') > -1) isMatch = true;
-            else if (slug === 'diaphuong' && groupName.indexOf('địa phương') > -1) isMatch = true;
+            if (slug === 'vtv' && groupName === 'vtv') isMatch = true;
+            else if (slug === 'vtvcab' && groupName === 'vtvcab') isMatch = true;
+            else if (slug === 'sctv' && groupName === 'sctv') isMatch = true;
+            else if (slug === 'htv' && groupName === 'htv') isMatch = true;
+            else if (slug === 'htvc' && groupName === 'htvc') isMatch = true;
+            else if (slug === 'diaphuong' && groupName === 'địa phương') isMatch = true;
             else if (slug === 'thietyeu' && groupName.indexOf('thiết yếu') > -1) isMatch = true;
 
             if (isMatch) {
@@ -127,12 +126,11 @@ function parseListResponse(html, url) {
                 
                 if (urlM && nameM) {
                     var streamLink = decodeURIComponent(urlM[1]); 
-                    // Bỏ đi thẻ rác #player-area để lấy tên kênh sạch
                     var rawName = nameM[1].split('#')[0];
                     var channelName = decodeURIComponent(rawName).replace(/\+/g, " ").trim(); 
                     var logo = imgM ? imgM[1] : "https://tinhlagi.pro/tinhlagi.ico";
                     
-                    // TUYỆT CHIÊU: Gói toàn bộ dữ liệu thành 1 chuỗi nhét vào ID
+                    // Gói toàn bộ dữ liệu (Link + Tên + Ảnh) vào 1 chuỗi làm ID
                     var combinedId = streamLink + "|||" + channelName + "|||" + logo;
                     
                     items.push({
@@ -158,14 +156,17 @@ function parseListResponse(html, url) {
 
 function parseSearchResponse(html, url) { return parseListResponse(html, url); }
 
-// --- HÀM 2: TRANG CHI TIẾT CỦA KÊNH ĐÓ ---
+// --- HÀM 2: TRANG CHI TIẾT TỪNG KÊNH ---
 function parseMovieDetail(html, url) {
     try {
-        // url ở đây chính là cái combinedId (chuỗi gói gọn) mà ta đã nhét ở parseListResponse
         var parts = url.split("|||");
         var streamLink = parts[0];
         var channelName = parts[1] || "Kênh TV";
         var logo = parts[2] || "https://tinhlagi.pro/tinhlagi.ico";
+
+        // BÍ QUYẾT: Gắn thêm chữ |||cvmedia vào link để ngăn App phát luồng trần.
+        // Ép App phải nhảy xuống hàm Cấp 3 để nạp User-Agent!
+        var magicEpisodeId = streamLink + "|||cvmedia";
 
         return JSON.stringify({
             id: url,
@@ -176,8 +177,7 @@ function parseMovieDetail(html, url) {
             servers: [{
                 name: "Tivi Trực Tuyến",
                 episodes: [{
-                    // GÁN THẲNG M3U8 VÀO ID CỦA TẬP THEO ĐÚNG CÁCH CỦA BẠN
-                    id: streamLink, 
+                    id: magicEpisodeId, 
                     name: "Phát Ngay",
                     slug: "live"
                 }]
@@ -194,10 +194,32 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// --- HÀM 3: XỬ LÝ PHÁT LINK (AUTO FALLBACK SIÊU TỐC) ---
-function parseDetailResponse(html) {
-    // Trả về rỗng. Trình phát Vax App sẽ tự dùng cái streamLink (m3u8) truyền ở bước trên để phát ngay lập tức.
-    return JSON.stringify({}); 
+// --- HÀM 3: NẠP HEADER & PHÁT VIDEO (VƯỢT TƯỜNG LỬA FPT/VTV) ---
+function parseDetailResponse(html, apiUrl) {
+    try {
+        // apiUrl ở đây là cái magicEpisodeId ta tạo ở trên
+        var realUrl = apiUrl.split("|||")[0];
+        
+        var mimeType = "application/x-mpegURL"; 
+        if (realUrl.indexOf(".mpd") > -1) {
+            mimeType = "application/dash+xml"; 
+        }
+
+        // Trả về JSON cấu hình Player siêu tốc (0% Webview)
+        return JSON.stringify({
+            "url": realUrl,
+            "isEmbed": false, 
+            "mimeType": mimeType,
+            "headers": {
+                // ĐÂY LÀ CHÌA KHÓA MỞ KHÓA KÊNH VTV1, VTV2 CỦA FPT PLAY!
+                "User-Agent": "cvmedia/1.1.0",
+                "Referer": "https://tinhlagi.pro/"
+            },
+            "subtitles": []
+        });
+    } catch (e) {
+        return JSON.stringify({ "url": "", "isEmbed": false, "headers": {} });
+    }
 }
 
 function parseEmbedResponse(html, sourceUrl) {
