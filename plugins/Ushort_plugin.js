@@ -1,29 +1,26 @@
 // =============================================================================
-// CẤU HÌNH DOMAIN VÀ API 
+// CẤU HÌNH DOMAIN 
 // =============================================================================
 var MAIN_DOMAIN = "enlessdrama.online"; 
 var BASEURL = "https://" + MAIN_DOMAIN + "/vi"; 
 
-// ⚠️ QUAN TRỌNG: Link API chứa dữ liệu JSON để load Trang chủ
-var API_LIST_URL = "https://api.enlessdrama.online/v1/movies"; 
-
 // =============================================================================
-// PLUGIN VAX APP: ENLESS DRAMA 
-// CHIẾN THUẬT: 100% TRÌNH PHÁT WEB CỦA HỌ (KHÔNG DÙNG EXOPLAYER)
+// PLUGIN VAX APP: CỔNG WEBVIEW TRỰC TIẾP
+// CHIẾN THUẬT: DUYỆT VÀ XEM PHIM BẰNG TRÌNH PHÁT WEB, ÉP GIAO DIỆN DỌC
 // =============================================================================
 
 function getManifest() {
     return JSON.stringify({
-        "id": "enlessdrama",
+        "id": "enlessdrama_portal",
         "name": "Enless Drama",
-        "description": "100% Player Web, cố định dọc, ẩn rác. Fix lỗi tìm kiếm SPA.",
-        "version": "3.5.0", 
+        "description": "Duyệt web trực tiếp, 100% Player Web, Tự động ẩn rác.",
+        "version": "4.0.0", 
         "baseUrl": BASEURL,
         "iconUrl": "https://enlessdrama.online/apple-touch-icon.png",
         "isEnabled": true,
         "type": "shortfilm", 
         "layoutType": "VERTICAL",
-        "playerType": "embed" // [QUAN TRỌNG] Vô hiệu hóa ExoPlayer, ép xem bằng Trình duyệt
+        "playerType": "embed" // [QUAN TRỌNG] Vô hiệu hóa ExoPlayer, ép xem bằng Webview
     });
 }
 
@@ -35,15 +32,16 @@ function log(msg) {
     }
 }
 
+// CHỈ TẠO 1 MỤC DUY NHẤT LÀM CỔNG VÀO
 function getHomeSections() {
     return JSON.stringify([
-        { slug: 'phim-moi', title: 'Phim Mới Cập Nhật', type: 'Grid', path: '' }
+        { slug: 'portal', title: 'Cổng Vào Enless Drama', type: 'Grid', path: '' }
     ]);
 }
 
 function getPrimaryCategories() {
     return JSON.stringify([
-        { name: 'Mới Cập Nhật', slug: 'phim-moi' }
+        { name: 'Mở Trang Web', slug: 'portal' }
     ]);
 }
 
@@ -53,159 +51,74 @@ function getFilterConfig() { return JSON.stringify({}); }
 // URL GENERATOR
 // =============================================================================
 
-function getUrlList(slug, filtersJson) {
-    var page = 1;
-    try { page = JSON.parse(filtersJson || "{}").page || 1; } catch(e){}
-    return API_LIST_URL + "?page=" + page; 
-}
-
-function getUrlSearch(keyword, filtersJson) {
-    // Với trang SPA, link Search Web sẽ được dùng để xử lý ở parseSearchResponse
-    return BASEURL + "/search?q=" + encodeURIComponent(keyword);
-}
-
-function getUrlDetail(slug) {
-    return slug; 
-}
+function getUrlList(slug, filtersJson) { return BASEURL; }
+function getUrlSearch(keyword, filtersJson) { return BASEURL + "/search?q=" + encodeURIComponent(keyword); }
+function getUrlDetail(slug) { return slug; }
 
 function getUrlCategories() { return ""; }
 function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSERS: XỬ LÝ LƯỠNG CỰC (JSON NATIVE VÀ HTML SPA)
+// TẠO GIAO DIỆN "MỒI" ĐỂ MỞ WEBVIEW
 // =============================================================================
 
 function parseListResponse(html, url) {
-    try {
-        var items = [];
-        // Nếu lấy được JSON từ API
-        if (html.trim().indexOf('{') === 0) {
-            var data = JSON.parse(html);
-            var list = data.items || data.data || [];
-            
-            for (var i = 0; i < list.length; i++) {
-                var item = list[i];
-                var movieData = {
-                    title: item.title,
-                    coverUrl: item.coverUrl,
-                    desc: item.description,
-                    slug: item.slug,
-                    totalEps: item.episodeCount,
-                    episodes: item.episodeIds || []
-                };
-                
-                var encodedSlug = "vaxdata://" + encodeURIComponent(JSON.stringify(movieData));
-                
-                items.push({
-                    id: encodedSlug,
-                    title: item.title,
-                    posterUrl: item.coverUrl,
-                    backdropUrl: item.coverUrl,
-                    episode_current: item.episodeCount + " Tập",
-                    quality: "HD"
-                });
-            }
-            return JSON.stringify({
-                items: items,
-                pagination: { currentPage: data.page || 1, totalPages: data.totalPages || 10 } 
-            });
-        } 
-        return JSON.stringify({ items: items });
-    } catch (e) {
-        return JSON.stringify({ items: [] });
-    }
+    // Trả về đúng 1 Item để người dùng bấm vào mở Webview
+    var items = [{
+        id: BASEURL,
+        title: "👉 Bấm vào đây để Mở Giao Diện Duyệt Phim",
+        posterUrl: "https://enlessdrama.online/og-image.jpg",
+        backdropUrl: "https://enlessdrama.online/og-image.jpg",
+        episode_current: "Trang Web",
+        quality: "VIP"
+    }];
+
+    return JSON.stringify({
+        items: items,
+        pagination: { currentPage: 1, totalPages: 1, totalItems: 1 } 
+    });
 }
 
-// XỬ LÝ FIX LỖI PHẦN TÌM KIẾM
 function parseSearchResponse(html, url) {
-    try {
-        // TẠO NÚT MỞ WEBVIEW ĐỂ TÌM KIẾM TRỰC TIẾP TRÊN WEB
-        var items = [];
-        var kwMatch = url.match(/(?:search|q)=([^&]+)/);
-        var kw = kwMatch ? decodeURIComponent(kwMatch[1]) : "";
-        var webSearchUrl = BASEURL + (kw ? "/search?q=" + encodeURIComponent(kw) : "");
+    var kwMatch = url.match(/(?:search|q)=([^&]+)/);
+    var kw = kwMatch ? decodeURIComponent(kwMatch[1]) : "";
+    var webSearchUrl = BASEURL + (kw ? "/search?q=" + encodeURIComponent(kw) : "");
 
-        items.push({
-            id: "webview://" + webSearchUrl,
-            title: kw ? '👉 Mở Trình Duyệt Tìm: "' + kw + '"' : "👉 Bấm để mở Tìm Kiếm",
-            posterUrl: "https://enlessdrama.online/og-image.jpg",
-            backdropUrl: "https://enlessdrama.online/og-image.jpg",
-            episode_current: "Duyệt Web",
-            quality: "VIP"
-        });
-        
-        return JSON.stringify({ items: items, pagination: { currentPage: 1, totalPages: 1 } });
-    } catch (e) {
-        return JSON.stringify({ items: [] });
-    }
+    var items = [{
+        id: webSearchUrl,
+        title: kw ? '👉 Mở Web Tìm: "' + kw + '"' : "👉 Mở Trang Tìm Kiếm",
+        posterUrl: "https://enlessdrama.online/og-image.jpg",
+        backdropUrl: "https://enlessdrama.online/og-image.jpg",
+        episode_current: "Duyệt Web",
+        quality: "VIP"
+    }];
+    return JSON.stringify({ items: items, pagination: { currentPage: 1, totalPages: 1 } });
 }
-
-// =============================================================================
-// TRANG CHI TIẾT
-// =============================================================================
 
 function parseMovieDetail(html, url) {
-    try {
-        // TRƯỜNG HỢP 1: TỪ NÚT TÌM KIẾM WEBVIEW
-        if (url.indexOf("webview://") === 0) {
-            var targetUrl = url.split("webview://")[1];
-            return JSON.stringify({
-                id: url,
-                title: "Trình Duyệt Tìm Kiếm",
-                posterUrl: "https://enlessdrama.online/og-image.jpg",
-                backdropUrl: "https://enlessdrama.online/og-image.jpg",
-                description: "Bấm vào nút bên dưới để mở giao diện website và tìm kiếm phim. Bạn sẽ xem phim trực tiếp bằng Trình phát của Web.",
-                servers: [{ name: "Enless Drama Web", episodes: [{ id: targetUrl, name: "Vào Web Tìm Phim", slug: "web-search" }] }],
-                quality: "HD",
-                year: 2026,
-                rating: 10,
-                category: "Short Drama",
-                status: "Webview"
-            });
-        }
-        
-        // TRƯỜNG HỢP 2: DỮ LIỆU TỪ TRANG CHỦ NATIVE API
-        var encodedData = url.split("vaxdata://")[1];
-        var movieData = JSON.parse(decodeURIComponent(encodedData));
-        var eps = [];
-        var epList = movieData.episodes || [];
-        
-        for (var i = 0; i < epList.length; i++) {
-            var epNumber = i + 1;
-            // Tạo URL thực tế trên web để Webview load lên
-            var webUrl = BASEURL + "/episode/" + movieData.slug + "-" + epNumber;
-            
-            eps.push({
-                id: webUrl,
-                name: "Tập " + epNumber,
-                slug: epList[i]
-            });
-        }
-        
-        return JSON.stringify({
-            id: url,
-            title: movieData.title,
-            posterUrl: movieData.coverUrl,
-            backdropUrl: movieData.coverUrl,
-            description: movieData.desc,
-            servers: [{ name: "Player Gốc Của Web", episodes: eps }],
-            quality: "HD",
-            year: 2026,
-            rating: 10,
-            category: "Short Drama",
-            status: movieData.totalEps + " Tập"
-        });
-    } catch (e) {
-        return JSON.stringify({ id: "error", title: "Lỗi hiển thị dữ liệu", servers: [] });
-    }
+    // Tạo 1 nút duy nhất để kích hoạt Webview
+    var episodes = [{ id: url, name: "Vào Trình Duyệt Enless Drama", slug: "webview-play" }];
+    
+    return JSON.stringify({
+        id: url,
+        title: "Duyệt Web Trực Tiếp",
+        posterUrl: "https://enlessdrama.online/og-image.jpg",
+        backdropUrl: "https://enlessdrama.online/og-image.jpg",
+        description: "Bấm nút bên dưới để mở giao diện web. App đã tích hợp mã chặn quảng cáo, chặn banner tải app và tối ưu hóa trải nghiệm vuốt dọc cho bạn.",
+        year: 2026,
+        rating: 10,
+        quality: "HD",
+        servers: [{ name: "Duyệt Web 100%", episodes: episodes }]
+    });
 }
 
 // =============================================================================
-// WEBVIEW LOADER: KHÓA BẮT LINK, ÉP PLAYSINLINE, CHẶN FULLSCREEN
+// WEBVIEW LOADER: ÉP GIAO DIỆN CHUẨN APP, CHẶN FULLSCREEN, ẨN RÁC
 // =============================================================================
 
 function parseDetailResponse(html, url) {
+    log("Mở Cổng Webview tại: " + url);
     try {
         var pureWebviewJs = `
             (function() {
@@ -224,9 +137,9 @@ function parseDetailResponse(html, url) {
                     }
                 } catch(e) {}
 
-                // 2. CSS Giấu rác, quảng cáo và ẩn nút phóng to của trình phát web
+                // 2. CSS Giấu rác, quảng cáo, header, footer và ẩn nút phóng to của trình phát web
                 var style = document.createElement('style');
-                style.innerHTML = 'header, .header, nav, footer, .footer, .download-app, .app-download, [class*="ad-"], [id*="ad-"], .popup, .modal, .google-auto-placed, iframe[src*="ads"], .bottom-nav, .navigation, .sidebar, .comments, .vjs-fullscreen-control, .plyr__controls [data-plyr="fullscreen"], .jw-fullscreen, .fullscreen-btn, video::-webkit-media-controls-fullscreen-button { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } body, html { margin: 0 !important; padding: 0 !important; overflow-x: hidden !important; background: #000 !important; overscroll-behavior-y: none; }';
+                style.innerHTML = 'header, .header, nav, footer, .footer, .download-app, .app-download, [class*="ad-"], [id*="ad-"], .popup, .modal, .google-auto-placed, iframe[src*="ads"], .bottom-nav, .navigation, .sidebar, .comments, .vjs-fullscreen-control, .plyr__controls [data-plyr="fullscreen"], .jw-fullscreen, .fullscreen-btn, video::-webkit-media-controls-fullscreen-button { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } body, html { margin: 0 !important; padding: 0 !important; overflow-x: hidden !important; background: #08090d !important; overscroll-behavior-y: none; }';
                 document.head.appendChild(style);
 
                 // 3. Ép thẻ video chạy inline để player của web hoạt động trọn vẹn bên trong khung dọc
@@ -254,11 +167,11 @@ function parseDetailResponse(html, url) {
 
         return JSON.stringify({
             "url": url,
-            "isEmbed": true, 
+            "isEmbed": true, // Bắt buộc mở bằng Webview
             "headers": {
-                "Referer": BASEURL,
+                "Referer": BASEURL + "/",
                 "Block-Ads": "true",
-                "Block-Redirects": "false", 
+                "Block-Redirects": "true", // Chặn web tự động chuyển hướng sang tab khác
                 "Custom-Js": checkRaw(pureWebviewJs, true)
             }
         });
