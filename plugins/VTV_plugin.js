@@ -3,24 +3,26 @@
 // CHIẾN THUẬT: FOLDER TRANG CHỦ -> LỌC KÊNH -> BẮT LINK BẰNG REGEX (NORMAL WAY)
 // =============================================================================
 
+var BASEURL = "https://tinhlagi.pro/tivi";
+
 function getManifest() {
     return JSON.stringify({
         "id": "tinhlagitv",
         "name": "Tinhlagi TV",
-        "version": "1.0.4", // Đã fix Bắt link trực tiếp từ window.tiviPlayUrl
-        "baseUrl": "https://tinhlagi.pro/tivi",
+        "version": "2.1.0", // Bắt link trực tiếp bằng Regex (Không Webview)
+        "baseUrl": BASEURL,
         "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
         "isEnabled": true,
         "isAdult": false,
-        "type": "MOVIE", // Bắt buộc là MOVIE để chia Folder
+        "type": "MOVIE", // Bắt buộc là MOVIE để chia Folder và Kênh
         "layoutType": "VERTICAL",
-        "playerType": "auto" 
+        "playerType": "auto" // Giữ nguyên Auto để bắt link siêu tốc
     });
 }
 
 function getHomeSections() {
     return JSON.stringify([
-        { slug: 'truyen-hinh', title: 'Danh Mục Kênh Truyền Hình', type: 'Grid', path: '' }
+        { slug: 'truyen-hinh', title: 'Danh Mục Đài Truyền Hình', type: 'Grid', path: '' }
     ]);
 }
 
@@ -37,19 +39,20 @@ function getFilterConfig() { return JSON.stringify({}); }
 // =============================================================================
 
 function getUrlList(slug, filtersJson) {
-    return "https://tinhlagi.pro/tivi";
+    return BASEURL;
 }
 
 function getUrlSearch(keyword, filtersJson) {
-    return "https://tinhlagi.pro/tivi"; 
+    return BASEURL; 
 }
 
 function getUrlDetail(slug) {
-    // 1. Nếu App yêu cầu link để xem phim (slug là URL của kênh)
+    // 1. Nếu App gửi lên 1 link trang phát (ví dụ: https://tinhlagi.pro/tivi?url=...)
+    // Hàm này sẽ trả đúng link đó để Vax App chuyển sang Cấp 3 (parseDetailResponse)
     if (slug.indexOf("http") === 0) return slug;
 
-    // 2. Nếu App yêu cầu mở Folder (slug là vtv, htv...) -> Mở trang chủ để lọc
-    return "https://tinhlagi.pro/tivi|data:slug=" + slug;
+    // 2. Nếu App yêu cầu mở Folder (slug là vtv, htv...) -> Mở trang chủ để lọc kênh
+    return BASEURL + "|data:slug=" + slug;
 }
 
 function getUrlCategories() { return ""; }
@@ -80,14 +83,14 @@ function parseListResponse(html) {
         { id: "sctv", name: "Kênh SCTV", img: "https://raw.githubusercontent.com/vuminhthanh12/vuminhthanh12/refs/heads/main/sctv1.png" },
         { id: "htv", name: "Kênh HTV", img: "https://s7771.cdn.mytvnet.vn/vimages/8c/ce/ee/e7/79/98/8cee7-phtv1hd-channel-unkn.png" },
         { id: "htvc", name: "Kênh HTVC", img: "https://raw.githubusercontent.com/vuminhthanh12/Logo/refs/heads/main/htvcthuanviet.png" },
-        { id: "địa phương", name: "Kênh Địa Phương", img: "https://upload.wikimedia.org/wikipedia/vi/9/90/THP-Logo.png" },
+        { id: "địa phương", name: "Đài Địa Phương", img: "https://upload.wikimedia.org/wikipedia/vi/9/90/THP-Logo.png" },
         { id: "thiết yếu", name: "Kênh Thiết Yếu", img: "https://i.ytimg.com/vi/sFLUmdwp0Z8/maxresdefault.jpg" }
     ];
 
     var items = [];
     for (var i = 0; i < groups.length; i++) {
         items.push({
-            id: groups[i].id, // Truyền ID này vào getUrlDetail
+            id: groups[i].id, // Gửi id này vào getUrlDetail
             title: groups[i].name,
             posterUrl: groups[i].img,
             backdropUrl: groups[i].img,
@@ -111,6 +114,7 @@ function parseSearchResponse(html) {
 // --- HÀM 2: LỌC KÊNH CHÍNH XÁC VÀ TẠO URL TRANG PHÁT ---
 function parseMovieDetail(html, apiUrl) {
     try {
+        // Lấy thông tin Folder mà người dùng vừa click (Ví dụ: "vtv")
         var slug = "";
         if (apiUrl && apiUrl.indexOf("data:slug=") > -1) {
             slug = apiUrl.split("data:slug=")[1].toLowerCase().trim();
@@ -145,16 +149,17 @@ function parseMovieDetail(html, apiUrl) {
             
             for (var k = 1; k < channelParts.length; k++) {
                 var cp = channelParts[k];
+                // Lấy phần phía sau dấu '?' để nối vào BaseUrl thành link thật
                 var hrefM = cp.match(/href=["'](\?url=[^"']+)/i);
                 var nameM = cp.match(/&name=([^"']+)/i);
                 
                 if (hrefM && nameM) {
                     // ID CỦA TẬP CHÍNH LÀ ĐƯỜNG LINK TRANG PHÁT VIDEO MÀ BẠN VỪA GỬI (Ví dụ trang VTV3)
-                    var playerPageUrl = "https://tinhlagi.pro/tivi" + hrefM[1]; 
+                    var playerPageUrl = BASEURL + hrefM[1]; 
                     var channelName = decodeURIComponent(nameM[1]).replace(/\+/g, " ").trim(); 
                     
                     episodes.push({
-                        id: playerPageUrl, 
+                        id: playerPageUrl, // Gửi link trang phát sang Cấp 3
                         name: channelName,
                         slug: "live-channel-" + k
                     });
@@ -167,7 +172,7 @@ function parseMovieDetail(html, apiUrl) {
                     episodes: episodes
                 });
             }
-            break; 
+            break; // Tìm thấy thì dừng luôn để tránh lộn xộn
         }
 
         // Lấy ảnh bìa theo đài
@@ -177,8 +182,8 @@ function parseMovieDetail(html, apiUrl) {
             "sctv": "https://raw.githubusercontent.com/vuminhthanh12/vuminhthanh12/refs/heads/main/sctv1.png",
             "htv": "https://s7771.cdn.mytvnet.vn/vimages/8c/ce/ee/e7/79/98/8cee7-phtv1hd-channel-unkn.png",
             "htvc": "https://raw.githubusercontent.com/vuminhthanh12/Logo/refs/heads/main/htvcthuanviet.png",
-            "diaphuong": "https://upload.wikimedia.org/wikipedia/vi/9/90/THP-Logo.png",
-            "thietyeu": "https://i.ytimg.com/vi/sFLUmdwp0Z8/maxresdefault.jpg"
+            "địa phương": "https://upload.wikimedia.org/wikipedia/vi/9/90/THP-Logo.png",
+            "thiết yếu": "https://i.ytimg.com/vi/sFLUmdwp0Z8/maxresdefault.jpg"
         };
         var poster = groupImages[slug] || "https://tinhlagi.pro/tinhlagi.ico";
 
@@ -201,25 +206,27 @@ function parseMovieDetail(html, apiUrl) {
     }
 }
 
-// --- HÀM 3: BẮT LINK CHUẨN TỪ HTML (KHÔNG CẦN WEBVIEW) ---
+// --- HÀM 3: BẮT LINK BẰNG REGEX (THẦN TỐC) ---
 function parseDetailResponse(html, apiUrl) {
     try {
         var finalUrl = "";
         
-        // 1. Tuyệt chiêu: Tóm gọn trực tiếp biến window.tiviPlayUrl từ mã HTML của trang phát
+        // CÁCH 1: Moi thẳng từ biến window.tiviPlayUrl của Javascript như HTML bạn gửi
         var playUrlMatch = html.match(/window\.tiviPlayUrl\s*=\s*["']([^"']+)["']/);
         if (playUrlMatch && playUrlMatch[1]) {
             // Xóa bỏ các ký tự gạch chéo ngược \/ bị mã hóa
             finalUrl = playUrlMatch[1].replace(/\\\//g, '/'); 
-        } else {
-            // Dự phòng: Lấy link từ URL nếu web đổi cấu trúc
+        } 
+        
+        // CÁCH 2 (Dự phòng): Lấy link từ chính tham số truyền vào nếu biến JS kia bị ẩn
+        if (!finalUrl) {
             var urlParamMatch = apiUrl.match(/\?url=([^&]+)/);
             if (urlParamMatch) {
                 finalUrl = decodeURIComponent(urlParamMatch[1]);
             }
         }
 
-        // 2. Bắt User-Agent nếu trang web yêu cầu
+        // 2. Bắt User-Agent nếu trang web yêu cầu (Đẩy sang cho Player giả mạo)
         var headers = {
             "Referer": "https://tinhlagi.pro/",
             "Origin": "https://tinhlagi.pro"
@@ -229,9 +236,9 @@ function parseDetailResponse(html, apiUrl) {
             headers["User-Agent"] = uaMatch[1].replace(/\\\//g, '/');
         }
 
-        var mimeType = "application/x-mpegURL";
+        var mimeType = "application/x-mpegURL"; // Mặc định .m3u8 (HLS)
         if (finalUrl.indexOf(".mpd") > -1) {
-            mimeType = "application/dash+xml";
+            mimeType = "application/dash+xml"; // Hỗ trợ luôn luồng DASH
         }
 
         return JSON.stringify({
