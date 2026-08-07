@@ -55,8 +55,8 @@
             "id": "Ushort",
             "name": "Ushort",
             "version": "1.0.1",
-            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/shortflix_plugin.js",
-            "iconUrl": "https://m.media-amazon.com/images/I/61fJ78I23IL.png",
+            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/Ushort_plugin.js",
+            "iconUrl": "https://ushort.cloud/assets/logo_ushort_circle.png",
     },
     {
             "id": "hh3d",
