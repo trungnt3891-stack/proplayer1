@@ -4,26 +4,26 @@
 var MAIN_DOMAIN = "enlessdrama.online"; 
 var BASEURL = "https://" + MAIN_DOMAIN + "/vi"; 
 
-// ⚠️ QUAN TRỌNG: Thay link API chứa dữ liệu JSON của bạn vào đây
+// ⚠️ QUAN TRỌNG: Link API chứa dữ liệu JSON để load Trang chủ
 var API_LIST_URL = "https://api.enlessdrama.online/v1/movies"; 
 
 // =============================================================================
-// PLUGIN VAX APP: ENLESS DRAMA (HYBRID NATIVE + WEBVIEW HOOK)
-// CẬP NHẬT: TỰ ĐỘNG CHỐNG LỖI TÌM KIẾM SPA REACT
+// PLUGIN VAX APP: ENLESS DRAMA 
+// CHIẾN THUẬT: 100% TRÌNH PHÁT WEB CỦA HỌ (KHÔNG DÙNG EXOPLAYER)
 // =============================================================================
 
 function getManifest() {
     return JSON.stringify({
         "id": "enlessdrama",
         "name": "Enless Drama",
-        "description": "Kết hợp Native JSON và Webview Hook. Fix lỗi tìm kiếm trắng trang.",
-        "version": "2.1.0", 
+        "description": "100% Player Web, cố định dọc, ẩn rác. Fix lỗi tìm kiếm SPA.",
+        "version": "3.5.0", 
         "baseUrl": BASEURL,
         "iconUrl": "https://enlessdrama.online/apple-touch-icon.png",
         "isEnabled": true,
         "type": "shortfilm", 
         "layoutType": "VERTICAL",
-        "playerType": "embedtoexoplay" // Kích hoạt Webview ẩn tóm link video
+        "playerType": "embed" // [QUAN TRỌNG] Vô hiệu hóa ExoPlayer, ép xem bằng Trình duyệt
     });
 }
 
@@ -60,11 +60,8 @@ function getUrlList(slug, filtersJson) {
 }
 
 function getUrlSearch(keyword, filtersJson) {
-    var page = 1;
-    try { page = JSON.parse(filtersJson || "{}").page || 1; } catch(e){}
-    
-    // Đánh thẳng vào API tìm kiếm (Nếu API của họ dùng tham số ?search= hoặc ?q=)
-    return API_LIST_URL + "?search=" + encodeURIComponent(keyword) + "&page=" + page;
+    // Với trang SPA, link Search Web sẽ được dùng để xử lý ở parseSearchResponse
+    return BASEURL + "/search?q=" + encodeURIComponent(keyword);
 }
 
 function getUrlDetail(slug) {
@@ -82,8 +79,7 @@ function getUrlYears() { return ""; }
 function parseListResponse(html, url) {
     try {
         var items = [];
-        
-        // NẾU LÀ JSON (Lấy được API thành công)
+        // Nếu lấy được JSON từ API
         if (html.trim().indexOf('{') === 0) {
             var data = JSON.parse(html);
             var list = data.items || data.data || [];
@@ -115,82 +111,52 @@ function parseListResponse(html, url) {
                 pagination: { currentPage: data.page || 1, totalPages: data.totalPages || 10 } 
             });
         } 
-        
-        // NẾU LÀ HTML TRẮNG (Bị React SPA chặn hoặc API lỗi) -> TẠO NÚT MỞ WEBVIEW
-        else {
-            var kwMatch = url.match(/(?:search|q)=([^&]+)/);
-            var kw = kwMatch ? decodeURIComponent(kwMatch[1]) : "";
-            var webSearchUrl = BASEURL + (kw ? "/search?q=" + encodeURIComponent(kw) : "");
-
-            items.push({
-                id: webSearchUrl,
-                title: kw ? '👉 Mở Web để tìm: "' + kw + '"' : "👉 Bấm để mở EnlessDrama",
-                posterUrl: "https://enlessdrama.online/og-image.jpg",
-                backdropUrl: "https://enlessdrama.online/og-image.jpg",
-                episode_current: "Duyệt Web",
-                quality: "VIP"
-            });
-            return JSON.stringify({ items: items, pagination: { currentPage: 1, totalPages: 1 } });
-        }
+        return JSON.stringify({ items: items });
     } catch (e) {
-        log("Lỗi Parse: " + e.message);
         return JSON.stringify({ items: [] });
     }
 }
 
+// XỬ LÝ FIX LỖI PHẦN TÌM KIẾM
 function parseSearchResponse(html, url) {
-    return parseListResponse(html, url);
+    try {
+        // TẠO NÚT MỞ WEBVIEW ĐỂ TÌM KIẾM TRỰC TIẾP TRÊN WEB
+        var items = [];
+        var kwMatch = url.match(/(?:search|q)=([^&]+)/);
+        var kw = kwMatch ? decodeURIComponent(kwMatch[1]) : "";
+        var webSearchUrl = BASEURL + (kw ? "/search?q=" + encodeURIComponent(kw) : "");
+
+        items.push({
+            id: "webview://" + webSearchUrl,
+            title: kw ? '👉 Mở Trình Duyệt Tìm: "' + kw + '"' : "👉 Bấm để mở Tìm Kiếm",
+            posterUrl: "https://enlessdrama.online/og-image.jpg",
+            backdropUrl: "https://enlessdrama.online/og-image.jpg",
+            episode_current: "Duyệt Web",
+            quality: "VIP"
+        });
+        
+        return JSON.stringify({ items: items, pagination: { currentPage: 1, totalPages: 1 } });
+    } catch (e) {
+        return JSON.stringify({ items: [] });
+    }
 }
 
 // =============================================================================
-// TRANG CHI TIẾT: RẼ NHÁNH TÙY THEO LOẠI DỮ LIỆU ĐƯỢC CHUYỂN TỚI
+// TRANG CHI TIẾT
 // =============================================================================
 
 function parseMovieDetail(html, url) {
     try {
-        // TRƯỜNG HỢP 1: DỮ LIỆU TỪ NATIVE API JSON
-        if (url.indexOf("vaxdata://") === 0) {
-            var encodedData = url.split("vaxdata://")[1];
-            var movieData = JSON.parse(decodeURIComponent(encodedData));
-            var eps = [];
-            var epList = movieData.episodes || [];
-            
-            for (var i = 0; i < epList.length; i++) {
-                var epNumber = i + 1;
-                // Tạo URL thực tế trên web để Hook Sniffer chạy vào bắt link
-                var webUrl = BASEURL + "/episode/" + movieData.slug + "-" + epNumber;
-                
-                eps.push({
-                    id: webUrl,
-                    name: "Tập " + epNumber,
-                    slug: epList[i]
-                });
-            }
-            
-            return JSON.stringify({
-                id: url,
-                title: movieData.title,
-                posterUrl: movieData.coverUrl,
-                backdropUrl: movieData.coverUrl,
-                description: movieData.desc,
-                servers: [{ name: "Máy Chủ Auto Hook", episodes: eps }],
-                quality: "HD",
-                year: 2026,
-                rating: 10,
-                category: "Short Drama",
-                status: movieData.totalEps + " Tập"
-            });
-        } 
-        
-        // TRƯỜNG HỢP 2: MỞ CỔNG WEBVIEW ĐỂ TÌM KIẾM
-        else {
+        // TRƯỜNG HỢP 1: TỪ NÚT TÌM KIẾM WEBVIEW
+        if (url.indexOf("webview://") === 0) {
+            var targetUrl = url.split("webview://")[1];
             return JSON.stringify({
                 id: url,
                 title: "Trình Duyệt Tìm Kiếm",
                 posterUrl: "https://enlessdrama.online/og-image.jpg",
                 backdropUrl: "https://enlessdrama.online/og-image.jpg",
-                description: "Bấm vào nút bên dưới để mở giao diện website. Khi bạn gõ tìm kiếm và bấm xem 1 bộ phim bất kỳ, hệ thống sẽ tự động tóm link video và phát trên App.",
-                servers: [{ name: "Cổng Không Gian", episodes: [{ id: url, name: "Vào Web Tìm Phim", slug: "webview-hook" }] }],
+                description: "Bấm vào nút bên dưới để mở giao diện website và tìm kiếm phim. Bạn sẽ xem phim trực tiếp bằng Trình phát của Web.",
+                servers: [{ name: "Enless Drama Web", episodes: [{ id: targetUrl, name: "Vào Web Tìm Phim", slug: "web-search" }] }],
                 quality: "HD",
                 year: 2026,
                 rating: 10,
@@ -198,36 +164,111 @@ function parseMovieDetail(html, url) {
                 status: "Webview"
             });
         }
+        
+        // TRƯỜNG HỢP 2: DỮ LIỆU TỪ TRANG CHỦ NATIVE API
+        var encodedData = url.split("vaxdata://")[1];
+        var movieData = JSON.parse(decodeURIComponent(encodedData));
+        var eps = [];
+        var epList = movieData.episodes || [];
+        
+        for (var i = 0; i < epList.length; i++) {
+            var epNumber = i + 1;
+            // Tạo URL thực tế trên web để Webview load lên
+            var webUrl = BASEURL + "/episode/" + movieData.slug + "-" + epNumber;
+            
+            eps.push({
+                id: webUrl,
+                name: "Tập " + epNumber,
+                slug: epList[i]
+            });
+        }
+        
+        return JSON.stringify({
+            id: url,
+            title: movieData.title,
+            posterUrl: movieData.coverUrl,
+            backdropUrl: movieData.coverUrl,
+            description: movieData.desc,
+            servers: [{ name: "Player Gốc Của Web", episodes: eps }],
+            quality: "HD",
+            year: 2026,
+            rating: 10,
+            category: "Short Drama",
+            status: movieData.totalEps + " Tập"
+        });
     } catch (e) {
         return JSON.stringify({ id: "error", title: "Lỗi hiển thị dữ liệu", servers: [] });
     }
 }
 
 // =============================================================================
-// CHẠY WEBVIEW NGẦM & BẬT SNIFFER ĐỂ TÓM LINK MP4/M3U8
+// WEBVIEW LOADER: KHÓA BẮT LINK, ÉP PLAYSINLINE, CHẶN FULLSCREEN
 // =============================================================================
 
 function parseDetailResponse(html, url) {
-    log("Kích hoạt Hook Webview tại: " + url);
     try {
-        var rawJS = checkRaw(runJS(), true);
+        var pureWebviewJs = `
+            (function() {
+                // 1. Vô hiệu hóa tính năng Fullscreen của Web Player để Android không bốc ra ngoài
+                try {
+                    var noop = function() { return Promise.resolve(); };
+                    Object.defineProperty(document, 'fullscreenEnabled', {get: function() { return false; }});
+                    Object.defineProperty(document, 'webkitFullscreenEnabled', {get: function() { return false; }});
+                    if(Element.prototype.requestFullscreen) Element.prototype.requestFullscreen = noop;
+                    if(Element.prototype.webkitRequestFullscreen) Element.prototype.webkitRequestFullscreen = noop;
+                    if(Element.prototype.mozRequestFullScreen) Element.prototype.mozRequestFullScreen = noop;
+                    if(Element.prototype.msRequestFullscreen) Element.prototype.msRequestFullscreen = noop;
+                    if(window.HTMLVideoElement) {
+                        HTMLVideoElement.prototype.webkitEnterFullscreen = noop;
+                        HTMLVideoElement.prototype.enterFullscreen = noop;
+                    }
+                } catch(e) {}
+
+                // 2. CSS Giấu rác, quảng cáo và ẩn nút phóng to của trình phát web
+                var style = document.createElement('style');
+                style.innerHTML = 'header, .header, nav, footer, .footer, .download-app, .app-download, [class*="ad-"], [id*="ad-"], .popup, .modal, .google-auto-placed, iframe[src*="ads"], .bottom-nav, .navigation, .sidebar, .comments, .vjs-fullscreen-control, .plyr__controls [data-plyr="fullscreen"], .jw-fullscreen, .fullscreen-btn, video::-webkit-media-controls-fullscreen-button { display: none !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } body, html { margin: 0 !important; padding: 0 !important; overflow-x: hidden !important; background: #000 !important; overscroll-behavior-y: none; }';
+                document.head.appendChild(style);
+
+                // 3. Ép thẻ video chạy inline để player của web hoạt động trọn vẹn bên trong khung dọc
+                setInterval(function() {
+                    var vids = document.querySelectorAll('video');
+                    for (var k = 0; k < vids.length; k++) {
+                        if (!vids[k].hasAttribute('playsinline')) {
+                            vids[k].setAttribute('playsinline', 'true');
+                            vids[k].setAttribute('webkit-playsinline', 'true');
+                        }
+                    }
+
+                    // Tắt các banner tải app hoặc nút close ngầm
+                    var appBanners = document.querySelectorAll('div[class*="download"], div[class*="banner"]');
+                    for (var i = 0; i < appBanners.length; i++) {
+                        if (appBanners[i]) appBanners[i].style.display = 'none';
+                    }
+                    var closeBtns = document.querySelectorAll('.close, .btn-close, [aria-label="Close"]');
+                    for (var j = 0; j < closeBtns.length; j++) {
+                        try { closeBtns[j].click(); } catch(e){}
+                    }
+                }, 500);
+            })();
+        `;
 
         return JSON.stringify({
-            url: url, 
-            isEmbed: true, // Lệnh bắt buộc để bật Webview
-            headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-                "Referer": BASEURL + "/",
-                "Custom-Js": rawJS
+            "url": url,
+            "isEmbed": true, 
+            "headers": {
+                "Referer": BASEURL,
+                "Block-Ads": "true",
+                "Block-Redirects": "false", 
+                "Custom-Js": checkRaw(pureWebviewJs, true)
             }
         });
     } catch (e) {
-        return JSON.stringify({ url: "", isEmbed: false, headers: {} });
+        return JSON.stringify({ "url": url, "isEmbed": true, "headers": {} });
     }
 }
 
-function parseEmbedResponse(html, url) {
-    return JSON.stringify({ url: url, isEmbed: false });
+function parseEmbedResponse(htmlContent, url) {
+    return JSON.stringify({ url: "", isEmbed: false });
 }
 
 // =============================================================================
@@ -251,149 +292,6 @@ function checkRaw(scriptStr, returnFixed) {
     } catch (e) {
         return scriptStr;
     }
-}
-
-// =============================================================================
-// MÃ HOOK SNIFFER (JAVASCRIPT CHẠY BÊN TRONG WEBVIEW NGẦM)
-// =============================================================================
-function runJS() {
-    return `
-HTMLRAW = 0; 
-BODYRAW = 0; 
-CSSBLOCK = 1; 
-VIDEOEND = 0; 
-NUMBERRAW = 0; 
-
-(function() {
-    'use strict';
-    
-    function bridgeLog(msg, check) {
-        try {
-            if (window.SnifferBridge && typeof window.SnifferBridge.log === 'function') {
-                window.SnifferBridge.log(msg);
-                if (check === true && typeof window.SnifferBridge.toast === 'function') {
-                    window.SnifferBridge.toast(msg, 1000);
-                }
-            }
-        } catch(e) {}
-    }
-
-    // 1. DỌN SẠCH GIAO DIỆN WEB ĐỂ NHƯỜNG TÀI NGUYÊN BĂNG THÔNG CHO SNIFFER
-    (function injectCSS() {
-        try {
-            const cssStyle = "header, footer, nav, aside, .ads, iframe[sandbox], .sidebar { display: none !important; opacity: 0 !important; }";
-            const styleElement = document.createElement('style');
-            styleElement.type = 'text/css';
-            if (styleElement.styleSheet) { styleElement.styleSheet.cssText = cssStyle; } 
-            else { styleElement.appendChild(document.createTextNode(cssStyle)); }
-            document.head.appendChild(styleElement);
-        } catch (error) {}
-    })();
-
-    // 2. AUTO CLICKER: TỰ ĐỘNG BẤM NÚT PLAY ĐỂ VƯỢT QUA LỚP CHỜ CỦA WEB
-    var autoPlayTimer = setInterval(function() {
-        try {
-            var playBtns = document.querySelectorAll('.play-button, button[class*="play"], div[class*="play"]');
-            for (var i = 0; i < playBtns.length; i++) {
-                playBtns[i].click();
-            }
-            var v = document.querySelector('video');
-            if (v && typeof v.play === 'function') v.play().catch(function(){});
-        } catch(e) {}
-    }, 1000);
-
-    // 3. BỘ SNIFFER NETWORK VÀ DOM: GIĂNG LƯỚI TÓM LINK M3U8/MP4
-    (function initLocalBlobSniffer() {
-        if (window.__BLOB_SNIFFER_INITIALIZED__) return;
-        window.__BLOB_SNIFFER_INITIALIZED__ = 1;
-
-        var hasDispatchedAny = 0;
-        var isFinished = 0;
-        var timeoutTimer = null;
-        var domScanInterval = null;
-
-        bridgeLog("Đang rình link Video...", true);
-
-        function stopTimeout() {
-            if (timeoutTimer) { clearTimeout(timeoutTimer); timeoutTimer = null; }
-            if (domScanInterval) { clearInterval(domScanInterval); domScanInterval = null; }
-            if (autoPlayTimer) { clearInterval(autoPlayTimer); autoPlayTimer = null; }
-        }
-
-        // Ném link về Trình phát Video gốc của App
-        function dispatchDirectLinkToApp(directUrl) {
-            if (!directUrl || hasDispatchedAny === 1) return;
-            hasDispatchedAny = 1;
-            isFinished = 1;
-            stopTimeout();
-
-            bridgeLog("🎯 Bắt link thành công! Đang chuyển sang Trình phát...", true);
-            try {
-                if (window.SnifferBridge && typeof window.SnifferBridge.play === 'function') {
-                    window.SnifferBridge.play(directUrl, JSON.stringify({"Referer": window.location.href}));
-                }
-            } catch(e) {}
-        }
-
-        // HOOK FETCH 
-        try {
-            if (typeof window.fetch !== 'undefined') {
-                var originalFetch = window.fetch;
-                window.fetch = function() {
-                    var args = arguments;
-                    return originalFetch.apply(this, args).then(function(response) {
-                        if (isFinished === 0 && response) {
-                            var url = (typeof args[0] === 'string') ? args[0] : (args[0] && args[0].url ? args[0].url : '');
-                            if (url.indexOf('.mp4') > -1 || url.indexOf('.m3u8') > -1 || url.indexOf('m3u8') > -1) {
-                                bridgeLog('🎯 Tóm link từ Fetch: ' + url);
-                                dispatchDirectLinkToApp(url);
-                            }
-                        }
-                        return response;
-                    });
-                };
-            }
-        } catch (e) {}
-
-        // HOOK XHR
-        try {
-            if (typeof XMLHttpRequest !== 'undefined') {
-                var originalXHR = XMLHttpRequest.prototype.open;
-                XMLHttpRequest.prototype.open = function(method, url) {
-                    if (url.indexOf('.mp4') > -1 || url.indexOf('.m3u8') > -1 || url.indexOf('m3u8') > -1) {
-                        bridgeLog('🎯 Tóm link từ XHR: ' + url);
-                        dispatchDirectLinkToApp(url);
-                    }
-                    return originalXHR.apply(this, arguments);
-                };
-            }
-        } catch (e) {}
-
-        // HOOK DOM
-        domScanInterval = setInterval(function() {
-            if (isFinished === 1) return;
-            var videos = document.getElementsByTagName('video');
-            for (var i = 0; i < videos.length; i++) {
-                var src = videos[i].src || videos[i].currentSrc;
-                if (src && (src.indexOf('.mp4') > -1 || src.indexOf('.m3u8') > -1) && src.indexOf('blob:') !== 0) {
-                    bridgeLog('🔍 Tóm link từ thẻ Video: ' + src);
-                    dispatchDirectLinkToApp(src);
-                }
-            }
-        }, 500);
-
-        // BẢO VỆ TIMEOUT 20S 
-        timeoutTimer = setTimeout(function() {
-            if (hasDispatchedAny === 0 && isFinished === 0) {
-                isFinished = 1;
-                stopTimeout();
-                bridgeLog("❌ Vui lòng thao tác trên Web để phát Video!", false);
-            }
-        }, 20000);
-
-    })();
-})();
-    `;
 }
 
 function parseCategoriesResponse() { return "[]"; }
