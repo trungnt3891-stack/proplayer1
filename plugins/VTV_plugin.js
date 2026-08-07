@@ -1,16 +1,13 @@
 // =============================================================================
-// PLUGIN VAX APP: TIVI TRỰC TUYẾN (TINHLAGI.PRO)
-// PHIÊN BẢN KHÔI PHỤC: GIỮ NGUYÊN MỌI THỨ, CHỈ FIX LỖI LẶP KÊNH
+// CONFIGURATION & METADATA
 // =============================================================================
-
-var BASEURL = "https://tinhlagi.pro/tivi";
 
 function getManifest() {
     return JSON.stringify({
         "id": "tinhlagitv",
         "name": "Tinhlagi TV",
-        "version": "1.0.0",
-        "baseUrl": BASEURL,
+        "version": "1.1.2",
+        "baseUrl": "https://tinhlagi.pro/tivi",
         "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
         "isEnabled": true,
         "isAdult": false,
@@ -34,9 +31,9 @@ function getPrimaryCategories() {
 
 function getFilterConfig() { return JSON.stringify({}); }
 
-function getUrlList(slug, filtersJson) { return BASEURL; }
-function getUrlSearch(keyword, filtersJson) { return BASEURL; }
-function getUrlDetail(slug) { return BASEURL; }
+function getUrlList(slug, filtersJson) { return "https://tinhlagi.pro/tivi"; }
+function getUrlSearch(keyword, filtersJson) { return "https://tinhlagi.pro/tivi"; }
+function getUrlDetail(slug) { return "https://tinhlagi.pro/tivi"; }
 
 function getUrlCategories() { return ""; }
 function getUrlCountries() { return ""; }
@@ -95,11 +92,11 @@ function parseMovieDetail(html) {
             var rawTitle = block.substring(0, titleEnd);
             var groupName = PluginUtils.cleanText(rawTitle).split('(')[0].trim();
             
-            // FIX LỖI LẶP: Dùng kiểm tra chính xác tên nhóm
             var isRequired = false;
             for (var j = 0; j < requiredGroups.length; j++) {
-                if (groupName === requiredGroups[j]) { 
+                if (groupName.indexOf(requiredGroups[j]) !== -1) { 
                     isRequired = true;
+                    groupName = requiredGroups[j];
                     break;
                 }
             }
@@ -111,10 +108,16 @@ function parseMovieDetail(html) {
                 var cp = channelParts[k];
                 var urlM = cp.match(/href=["']\?url=([^&"']+)/i);
                 var nameM = cp.match(/&name=([^"']+)/i);
+                
                 if (urlM && nameM) {
+                    var streamLink = decodeURIComponent(urlM[1]); 
+                    // Bỏ đoạn #player-area ở tên kênh bằng cách cắt chuỗi theo dấu #
+                    var rawChannelName = decodeURIComponent(nameM[1]).replace(/\+/g, " ");
+                    var channelName = rawChannelName.split('#')[0].trim();
+                    
                     episodes.push({
-                        id: decodeURIComponent(urlM[1]), 
-                        name: decodeURIComponent(nameM[1]).replace(/\+/g, " "),
+                        id: streamLink, 
+                        name: channelName,
                         slug: "live-channel"
                     });
                 }
