@@ -1,24 +1,25 @@
 // =============================================================================
-// CONFIGURATION & METADATA
+// PLUGIN VAX APP: TIVI TRỰC TUYẾN (TINHLAGI.PRO)
 // =============================================================================
+
+var BASEURL = "https://tinhlagi.pro/tivi";
 
 function getManifest() {
     return JSON.stringify({
         "id": "tinhlagitv",
         "name": "Tinhlagi TV",
-        "version": "1.0.1", // Đã sửa lỗi Load Player
-        "baseUrl": "https://tinhlagi.pro/tivi",
+        "version": "1.0.2", // Khôi phục 100% logic phát video của code cũ
+        "baseUrl": BASEURL,
         "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
         "isEnabled": true,
         "isAdult": false,
-        "type": "MOVIE", // Bắt buộc là MOVIE để gọi Trình phát Video
+        "type": "MOVIE", // Bắt buộc là MOVIE theo đúng logic cũ
         "layoutType": "VERTICAL",
         "playerType": "auto"
     });
 }
 
 function getHomeSections() {
-    // VAX coi mỗi nhóm kênh như 1 bộ phim, ta hiển thị chúng ra Trang Chủ
     return JSON.stringify([
         { slug: 'truyen-hinh', title: 'Danh Mục Kênh Truyền Hình', type: 'Grid', path: '' }
     ]);
@@ -37,20 +38,16 @@ function getFilterConfig() { return JSON.stringify({}); }
 // =============================================================================
 
 function getUrlList(slug, filtersJson) {
-    // Trang web này load toàn bộ kênh trên 1 trang duy nhất
-    return "https://tinhlagi.pro/tivi";
+    return BASEURL;
 }
 
 function getUrlSearch(keyword, filtersJson) {
-    return "https://tinhlagi.pro/tivi"; // Giao diện web không có API search trả về HTML tách biệt
+    return BASEURL;
 }
 
 function getUrlDetail(slug) {
-    // Nếu ID là đường link m3u8 thì ném thẳng vào ParseDetailResponse
-    if (slug && slug.indexOf('http') === 0) return slug;
-
-    // Để lấy danh sách tập (các kênh con), ta lại tải trang chủ 1 lần nữa
-    return "https://tinhlagi.pro/tivi";
+    // GIỮ NGUYÊN LOGIC CŨ CỦA BẠN: Luôn tải trang chủ để quét toàn bộ 7 Server
+    return BASEURL;
 }
 
 function getUrlCategories() { return ""; }
@@ -73,8 +70,7 @@ var PluginUtils = {
     }
 };
 
-// --- HÀM 1: TẠO DANH MỤC TRÊN TRANG CHỦ ---
-// Thay vì in ra hàng trăm kênh rối mắt, ta in ra 7 "Cục" đại diện cho 7 nhóm kênh
+// --- HÀM 1: TẠO 7 FOLDER GIAO DIỆN TRÊN TRANG CHỦ ---
 function parseListResponse(html) {
     var groups = [
         { id: "VTV", name: "Kênh VTV", img: "https://raw.githubusercontent.com/vuminhthanh12/Logo/refs/heads/main/VTV6.png" },
@@ -89,7 +85,7 @@ function parseListResponse(html) {
     var items = [];
     for (var i = 0; i < groups.length; i++) {
         items.push({
-            id: groups[i].id, // VD: "VTV". Sẽ ném vào hàm getUrlDetail
+            id: groups[i].id, 
             title: groups[i].name,
             posterUrl: groups[i].img,
             backdropUrl: groups[i].img,
@@ -110,50 +106,52 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// --- HÀM 2: LẤY DANH SÁCH KÊNH (TẬP PHIM) TỪ TỪNG NHÓM ---
-// Khi người dùng ấn vào Cục "VTV", hàm này sẽ quét HTML và moi ra VTV1, VTV2, VTV3... làm danh sách tập
+// --- HÀM 2: MOI LINK VÀ CHIA CÁC KÊNH VÀO TỪNG SERVER ---
 function parseMovieDetail(html) {
     try {
         var requiredGroups = ["VTV", "VTVcab", "SCTV", "HTV", "HTVC", "Địa phương", "Thiết yếu"];
         var servers = [];
 
+        // Cắt theo từng nhóm <h2 class="group-title">
         var groupBlocks = html.split('<h2 class="group-title">');
         
         for (var i = 1; i < groupBlocks.length; i++) {
             var block = groupBlocks[i];
             
-            // Tìm tên nhóm kênh (ví dụ "VTV (13)")
+            // Tìm tên nhóm
             var titleEnd = block.indexOf('</h2>');
-            var rawTitle = block.substring(0, titleEnd);
-            var groupName = PluginUtils.cleanText(rawTitle).split('(')[0].trim(); // Bỏ số lượng (13)
+            if (titleEnd === -1) continue;
             
-            // Lọc: Nếu tên nhóm không nằm trong danh sách yêu cầu, bỏ qua luôn!
+            var rawTitle = block.substring(0, titleEnd);
+            var groupName = PluginUtils.cleanText(rawTitle).split('(')[0].trim(); 
+            
+            // Lọc: Chỉ lấy những nhóm nằm trong danh sách yêu cầu
             var isRequired = false;
             for (var j = 0; j < requiredGroups.length; j++) {
-                if (groupName.indexOf(requiredGroups[j]) !== -1) {
+                if (groupName.toLowerCase().indexOf(requiredGroups[j].toLowerCase()) !== -1) {
                     isRequired = true;
-                    groupName = requiredGroups[j]; // Chuẩn hóa tên
+                    groupName = requiredGroups[j]; // Chuẩn hóa lại tên hiển thị (Ví dụ: "Địa phương")
                     break;
                 }
             }
             if (!isRequired) continue;
 
-            // Moi danh sách kênh trong nhóm đó (Các thẻ <a href="?url=...">)
+            // Moi danh sách kênh trong nhóm
             var episodes = [];
             var channelParts = block.split('class="channel-card');
             
             for (var k = 1; k < channelParts.length; k++) {
                 var cp = channelParts[k];
+                // Bóc link URL và Tên Kênh từ mã HTML
                 var urlM = cp.match(/href=["']\?url=([^&"']+)/i);
                 var nameM = cp.match(/&name=([^"']+)/i);
                 
                 if (urlM && nameM) {
-                    var streamLink = decodeURIComponent(urlM[1]); // Đã giải mã link https%3A...
-                    var channelName = decodeURIComponent(nameM[1]).replace(/\+/g, " "); // Xóa dấu +
+                    var streamLink = decodeURIComponent(urlM[1]); // Giải mã link từ web
+                    var channelName = decodeURIComponent(nameM[1]).replace(/\+/g, " "); 
                     
-                    // Gom thẳng link luồng m3u8 vào làm ID của tập phim
                     episodes.push({
-                        id: streamLink, 
+                        id: streamLink, // Nhét thẳng link m3u8 vào ID như code cũ của bạn
                         name: channelName,
                         slug: "live-channel"
                     });
@@ -173,12 +171,12 @@ function parseMovieDetail(html) {
             title: "Tivi Trực Tuyến",
             posterUrl: "https://tinhlagi.pro/tinhlagi.ico",
             backdropUrl: "https://tinhlagi.pro/tinhlagi.ico",
-            description: "Hệ thống Xem Tivi trực tuyến tốc độ cao. Hãy chọn danh sách kênh (Server) ở bên dưới.",
+            description: "Hệ thống Xem Tivi trực tuyến tốc độ cao. Hãy chọn danh mục đài (Server) và nhấn vào kênh muốn xem.",
             servers: servers,
             quality: "LIVE",
             lang: "Viet",
-            year: 0,
-            rating: 0,
+            year: 2026,
+            rating: 10,
             category: "Truyền Hình",
             status: "Đang phát sóng"
         });
@@ -187,39 +185,18 @@ function parseMovieDetail(html) {
     }
 }
 
-// --- HÀM 3: XỬ LÝ LINK STREAM VÀO PLAYER (ĐÃ FIX) ---
-function parseDetailResponse(html, apiUrl) {
-    try {
-        // apiUrl lúc này chính là đường link m3u8 mà bạn đã nhét vào id ở hàm parseMovieDetail
-        var url = apiUrl; 
-        
-        var mimeType = "application/x-mpegURL"; // Mặc định HLS
-        if (url.indexOf('.mpd') > -1) {
-            mimeType = "application/dash+xml"; // Hỗ trợ DASH
-        }
-
-        // BẮT BUỘC TRẢ VỀ URL VÀ HEADER. NẾU TRẢ VỀ RỖNG NHƯ CODE CŨ THÌ PLAYER SẼ BÁO LỖI
-        return JSON.stringify({
-            "url": url,
-            "isEmbed": false, 
-            "mimeType": mimeType,
-            "headers": {
-                // Header giả mạo để vượt rào chặn leech của đài truyền hình
-                "User-Agent": "cvmedia/1.1.0", 
-                "Referer": "https://tinhlagi.pro/"
-            },
-            "subtitles": []
-        });
-    } catch (e) {
-        return JSON.stringify({ "url": apiUrl, "isEmbed": false, "headers": {} });
-    }
+// --- HÀM 3: XỬ LÝ LINK STREAM ---
+function parseDetailResponse(html) {
+    // TRẢ VỀ RỖNG THEO ĐÚNG CƠ CHẾ AUTO-FALLBACK CỦA CODE GỐC CỦA BẠN!
+    // App sẽ tự thấy rỗng và lôi cái ID (là link m3u8) ra phát trực tiếp.
+    return JSON.stringify({}); 
 }
 
 function parseEmbedResponse(html, sourceUrl) {
-    return JSON.stringify({ url: sourceUrl, isEmbed: false });
+    return JSON.stringify({ url: "", isEmbed: false });
 }
 
-// CÁC HÀM BẮT BUỘC ĐỂ TRÁNH LỖI "FILE KHÔNG HỢP LỆ"
+// CÁC HÀM BẮT BUỘC
 function parseCategoriesResponse(html) { return "[]"; }
 function parseCountriesResponse(html) { return "[]"; }
 function parseYearsResponse(html) { return "[]"; }
