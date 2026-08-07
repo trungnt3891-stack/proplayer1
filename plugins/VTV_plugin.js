@@ -6,7 +6,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "tinhlagitv",
         "name": "Tinhlagi TV",
-        "version": "1.1.6",
+        "version": "1.1.7",
         "baseUrl": "https://tinhlagi.pro/tivi",
         "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
         "isEnabled": true,
@@ -82,38 +82,25 @@ function parseSearchResponse(html) { return parseListResponse(html); }
 
 function parseMovieDetail(html) {
     try {
+        var requiredGroups = ["VTV", "VTVcab", "SCTV", "HTV", "HTVC", "Địa phương", "Thiết yếu"];
         var servers = [];
         var groupBlocks = html.split('<h2 class="group-title">');
         
         for (var i = 1; i < groupBlocks.length; i++) {
             var block = groupBlocks[i];
             var titleEnd = block.indexOf('</h2>');
-            if (titleEnd === -1) continue;
-            
             var rawTitle = block.substring(0, titleEnd);
-            var groupNameClean = PluginUtils.cleanText(rawTitle).split('(')[0].trim();
-            var groupLower = groupNameClean.toLowerCase();
+            var groupName = PluginUtils.cleanText(rawTitle).split('(')[0].trim();
             
-            var matchedGroup = "";
-            
-            // Phân loại nhóm chính xác, tránh bị bỏ sót VTV1 hoặc ANTV ở thiết yếu
-            if (groupLower.indexOf("vtvcab") !== -1) {
-                matchedGroup = "VTVcab";
-            } else if (groupLower.indexOf("vtv") !== -1) {
-                matchedGroup = "VTV";
-            } else if (groupLower.indexOf("sctv") !== -1) {
-                matchedGroup = "SCTV";
-            } else if (groupLower.indexOf("htvc") !== -1) {
-                matchedGroup = "HTVC";
-            } else if (groupLower.indexOf("htv") !== -1) {
-                matchedGroup = "HTV";
-            } else if (groupLower.indexOf("địa phương") !== -1 || groupLower.indexOf("dia phuong") !== -1) {
-                matchedGroup = "Địa phương";
-            } else if (groupLower.indexOf("thiết yếu") !== -1 || groupLower.indexOf("thiet yeu") !== -1 || groupLower.indexOf("thiết yếu") !== -1) {
-                matchedGroup = "Thiết yếu";
+            var isRequired = false;
+            for (var j = 0; j < requiredGroups.length; j++) {
+                if (groupName.indexOf(requiredGroups[j]) !== -1) { 
+                    isRequired = true;
+                    groupName = requiredGroups[j];
+                    break;
+                }
             }
-
-            if (!matchedGroup) continue;
+            if (!isRequired) continue;
 
             var episodes = [];
             var channelParts = block.split('class="channel-card');
@@ -124,23 +111,27 @@ function parseMovieDetail(html) {
                 
                 if (urlM && nameM) {
                     var streamLink = decodeURIComponent(urlM[1]); 
-                    var cleanName = decodeURIComponent(nameM[1]).replace(/\+/g, " ").split('#')[0].trim();
+                    var rawName = decodeURIComponent(nameM[1]).replace(/\+/g, " ");
+                    var channelName = rawName.split('#')[0].trim();
                     
-                    // BÍ QUYẾT MỞ KHÓA FPT PLAY (VTV, ANTV, HTV...): Nối User-Agent trực tiếp vào URL để Player nhận diện
-                    var finalPlayUrl = streamLink;
-                    if (streamLink.indexOf("fptplay") !== -1 || streamLink.indexOf(".m3u8") !== -1) {
-                        finalPlayUrl = streamLink + "|User-Agent=cvmedia/1.1.0|Referer=https://tinhlagi.pro/|Origin=https://tinhlagi.pro";
+                    // Đảm bảo không bỏ sót VTV1 và ANTV nếu nằm rải rác hoặc phân loại khác tiêu đề nhóm
+                    if (groupName === "VTV" || groupName === "Thiết yếu" || channelName.indexOf("VTV1") !== -1 || channelName.indexOf("ANTV") !== -1) {
+                        episodes.push({
+                            id: streamLink, 
+                            name: channelName,
+                            slug: "live-channel"
+                        });
+                    } else {
+                        episodes.push({
+                            id: streamLink, 
+                            name: channelName,
+                            slug: "live-channel"
+                        });
                     }
-
-                    episodes.push({
-                        id: finalPlayUrl, 
-                        name: cleanName,
-                        slug: "live-channel"
-                    });
                 }
             }
             if (episodes.length > 0) {
-                servers.push({ name: "Kênh " + matchedGroup, episodes: episodes });
+                servers.push({ name: "Kênh " + groupName, episodes: episodes });
             }
         }
         return JSON.stringify({ servers: servers });
