@@ -1,6 +1,6 @@
 // =============================================================================
 // PLUGIN VAX APP: TIVI TRỰC TUYẾN (TINHLAGI.PRO)
-// TỐI ƯU: GIAO DIỆN LƯỚT NGANG + BẮC LINK TRỰC TIẾP TỪ THẺ A
+// CHẾ ĐỘ: IPTV (BẤM LÀ PHÁT) + LƯỚT NGANG + FIX VTV (FPT PLAY)
 // =============================================================================
 
 var BASEURL = "https://tinhlagi.pro/tivi";
@@ -9,12 +9,12 @@ function getManifest() {
     return JSON.stringify({
         "id": "tinhlagitv",
         "name": "Tinhlagi TV",
-        "version": "6.0.0", // Hoàn thiện UI Lướt ngang và Link M3U8 tĩnh
+        "version": "7.0.0", // Chế độ IPTV đích thực + Hiện Logo Kênh chuẩn
         "baseUrl": BASEURL,
         "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
         "isEnabled": true,
         "isAdult": false,
-        "type": "MOVIE",
+        "type": "IPTV", // Kích hoạt chế độ Live TV: Bấm là phát luôn!
         "layoutType": "VERTICAL",
         "playerType": "auto"
     });
@@ -62,15 +62,16 @@ function getFilterConfig() { return JSON.stringify({}); }
 // =============================================================================
 
 function getUrlList(slug, filtersJson) {
-    // Gọi Cấp 1
+    // Truyền slug (vtv, sctv...) vào URL để lọc kênh
     return BASEURL + "?slug=" + slug;
 }
 
 function getUrlSearch(keyword, filtersJson) { return BASEURL; }
 
 function getUrlDetail(id) {
-    // TUYỆT CHIÊU: Gắn dấu # để Vax App không tưởng nhầm là link lạ rồi báo lỗi Fetch
-    return BASEURL + "#data=" + encodeURIComponent(id);
+    // Ở chế độ IPTV, biến 'id' chính là đường link luồng .m3u8 ta lấy được ở Cấp 1.
+    // TUYỆT CHIÊU: Gắn nó vào URL ảo để ép Vax App nhảy xuống hàm parseDetailResponse nạp Header
+    return BASEURL + "?stream=" + encodeURIComponent(id);
 }
 
 function getUrlCategories() { return ""; }
@@ -81,7 +82,7 @@ function getUrlYears() { return ""; }
 // PARSERS
 // =============================================================================
 
-// --- HÀM 1: LỌC HTML -> CẮT LINK TRONG THẺ <a> -> XUẤT RA DÒNG KÊNH ---
+// --- HÀM 1: LỌC HTML -> LẤY LINK & LOGO CHÍNH XÁC -> HIỆN LÊN TRANG CHỦ ---
 function parseListResponse(html, url) {
     try {
         var slug = "";
@@ -117,35 +118,33 @@ function parseListResponse(html, url) {
 
         var items = [];
         if (targetHtml) {
+            // Chặt HTML theo từng thẻ <a class="channel-card">
             var channelParts = targetHtml.split('<a href="?url=');
             
             for (var k = 1; k < channelParts.length; k++) {
                 var cp = channelParts[k];
                 
-                // CÁCH CỦA BẠN: Lấy URL trước dấu &name=
+                // Lấy URL m3u8 cực chuẩn trước dấu &name
                 var urlMatch = cp.match(/(.*?)(?:&amp;|&)name=/);
                 if (!urlMatch) continue;
                 
+                // Lấy Tên Kênh
                 var nameMatch = cp.match(/(?:&amp;|&)name=([^#"']+)/);
+                
+                // Lấy LOGO CỦA KÊNH
                 var imgMatch = cp.match(/<img[^>]+src=["']([^"']+)["']/i);
                 
-                var streamLinkEncoded = urlMatch[1];
-                var channelNameEncoded = nameMatch ? nameMatch[1] : "Kênh TV";
+                var streamLink = decodeURIComponent(urlMatch[1]);
+                var channelName = nameMatch ? decodeURIComponent(nameMatch[1]).replace(/\+/g, " ").trim() : "Kênh TV";
                 var logo = imgMatch ? imgMatch[1] : "https://tinhlagi.pro/tinhlagi.ico";
 
-                var streamLink = decodeURIComponent(streamLinkEncoded);
-                var channelName = decodeURIComponent(channelNameEncoded).replace(/\+/g, " ").trim();
-
-                // Gói gọn data lại để bắn sang Cấp 2
-                var combinedId = streamLink + "|||" + channelName + "|||" + logo;
-                
                 items.push({
-                    id: combinedId, 
+                    id: streamLink, // Đưa thẳng link luồng phát vào ID để phục vụ chế độ IPTV
                     title: channelName,
-                    posterUrl: logo,
+                    posterUrl: logo, // Logo hiển thị trực quan
                     backdropUrl: logo,
                     quality: "LIVE",
-                    episode_current: "Live HD"
+                    episode_current: "HD"
                 });
             }
         }
@@ -161,62 +160,36 @@ function parseListResponse(html, url) {
 
 function parseSearchResponse(html, url) { return parseListResponse(html, url); }
 
-// --- HÀM 2: TRANG GIAO ĐIỂM (BẤM LÀ PHÁT) ---
+// --- HÀM 2: TRANG CHI TIẾT (VÔ HIỆU HÓA TRONG CHẾ ĐỘ IPTV) ---
 function parseMovieDetail(html, url) {
-    try {
-        // Tháo gói data được ngụy trang đằng sau chữ #data=
-        var dataEncoded = url.split('#data=')[1];
-        var data = decodeURIComponent(dataEncoded);
-        var parts = data.split("|||");
-        
-        var streamLink = parts[0];
-        var channelName = parts[1] || "Kênh TV";
-        var logo = parts[2] || "https://tinhlagi.pro/tinhlagi.ico";
-
-        return JSON.stringify({
-            id: url,
-            title: channelName,
-            posterUrl: logo,
-            backdropUrl: logo,
-            description: "Đang phát trực tiếp kênh " + channelName + " tốc độ cao. Dữ liệu cung cấp bởi Tinhlagi.pro.",
-            servers: [{
-                name: "Nguồn Phát",
-                episodes: [{
-                    id: streamLink, // Đẩy luồng .m3u8 thật sự xuống Cấp 3
-                    name: "Xem Kênh",
-                    slug: "live"
-                }]
-            }],
-            quality: "LIVE",
-            lang: "Viet",
-            year: 2026,
-            rating: 10,
-            category: "Truyền Hình",
-            status: "Đang phát sóng"
-        });
-    } catch (e) {
-        return JSON.stringify({ id: "error", title: "Lỗi tải kênh", servers: [] });
-    }
+    // Vì dùng type="IPTV", app sẽ KHÔNG BAO GIỜ gọi hàm này (Bấm là phát luôn)
+    return JSON.stringify({});
 }
 
-// --- HÀM 3: NẠP HEADER & PHÁT VIDEO CHỐNG CHẶN FPT ---
+// --- HÀM 3: NẠP HEADER VÀ GIAO LINK CHO PLAYER CHẠY (FIX VTV) ---
 function parseDetailResponse(html, apiUrl) {
     try {
-        var mimeType = "application/x-mpegURL"; 
-        if (apiUrl.indexOf(".mpd") > -1) {
-            mimeType = "application/dash+xml"; 
-        }
-        if (apiUrl.indexOf(".ts") > -1 || apiUrl.indexOf("extension=ts") > -1) {
-            mimeType = "video/mp2t"; 
+        var realUrl = "";
+        
+        // Tháo link m3u8 từ URL ảo truyền vào ở getUrlDetail
+        var match = apiUrl.match(/stream=([^&]+)/);
+        if (match) {
+            realUrl = decodeURIComponent(match[1]);
+        } else {
+            realUrl = apiUrl;
         }
 
-        // BUỘC PHẢI DÙNG CÁCH NÀY ĐỂ KÊNH VTV KHÔNG BỊ LỖI MÀN HÌNH ĐEN
+        // Khai báo chuẩn định dạng HLS/DASH để Native Player nhận diện cực nhanh
+        var mimeType = "application/x-mpegURL"; 
+        if (realUrl.indexOf(".mpd") > -1) mimeType = "application/dash+xml"; 
+        if (realUrl.indexOf(".ts") > -1) mimeType = "video/mp2t"; 
+
+        // TRẢ CẤU HÌNH JSON: CÓ ĐỦ HEADER NÀY THÌ VTV1, VTV2 MỚI KHÔNG BỊ CHẶN
         return JSON.stringify({
-            "url": apiUrl,
+            "url": realUrl,
             "isEmbed": false, 
             "mimeType": mimeType,
             "headers": {
-                // Header giả mạo Player Website, thiếu nó VTV1,2,3 sẽ bị lỗi ngắt kết nối
                 "User-Agent": "cvmedia/1.1.0",
                 "Referer": "https://tinhlagi.pro/",
                 "Origin": "https://tinhlagi.pro"
