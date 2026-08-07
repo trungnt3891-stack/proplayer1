@@ -1,6 +1,6 @@
 // =============================================================================
 // PLUGIN VAX APP: TIVI TRỰC TUYẾN (TINHLAGI.PRO)
-// CHIẾN THUẬT: FOLDER TRANG CHỦ -> LỌC KÊNH -> GÁN THẲNG LINK M3U8 (SIÊU TỐC)
+// CHIẾN THUẬT: KÊNH LƯỚT NGANG TRÊN TRANG CHỦ -> BẮT LINK SIÊU TỐC
 // =============================================================================
 
 var BASEURL = "https://tinhlagi.pro/tivi";
@@ -9,26 +9,47 @@ function getManifest() {
     return JSON.stringify({
         "id": "tinhlagitv",
         "name": "Tinhlagi TV",
-        "version": "3.0.0", // Tối giản tuyệt đối, tốc độ bàn thờ
+        "version": "4.0.0", // Layout Lướt ngang (Horizontal) + Fast Stream
         "baseUrl": BASEURL,
         "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
         "isEnabled": true,
         "isAdult": false,
-        "type": "MOVIE",
+        "type": "MOVIE", 
         "layoutType": "VERTICAL",
         "playerType": "auto" 
     });
 }
 
+function log(msg) {
+    if (typeof nativeLog !== 'undefined') {
+        nativeLog("[Tivi_TinhLaGi] " + msg);
+    } else if (typeof console !== 'undefined' && console.log) {
+        console.log("[Tivi_TinhLaGi] " + msg);
+    }
+}
+
+// --- TẠO GIAO DIỆN CÁC DÒNG KÊNH LƯỚT NGANG TRÊN TRANG CHỦ ---
 function getHomeSections() {
     return JSON.stringify([
-        { slug: 'truyen-hinh', title: 'Danh Mục Đài Truyền Hình', type: 'Grid', path: '' }
+        { "slug": "vtv", "title": "Kênh VTV", "type": "Horizontal" },
+        { "slug": "vtvcab", "title": "Kênh VTVcab", "type": "Horizontal" },
+        { "slug": "sctv", "title": "Kênh SCTV", "type": "Horizontal" },
+        { "slug": "htv", "title": "Kênh HTV", "type": "Horizontal" },
+        { "slug": "htvc", "title": "Kênh HTVC", "type": "Horizontal" },
+        { "slug": "diaphuong", "title": "Đài Địa Phương", "type": "Horizontal" },
+        { "slug": "thietyeu", "title": "Kênh Thiết Yếu", "type": "Horizontal" }
     ]);
 }
 
 function getPrimaryCategories() {
     return JSON.stringify([
-        { name: 'Tất Cả', slug: 'truyen-hinh' }
+        { "slug": "vtv", "name": "VTV" },
+        { "slug": "vtvcab", "name": "VTVcab" },
+        { "slug": "sctv", "name": "SCTV" },
+        { "slug": "htv", "name": "HTV" },
+        { "slug": "htvc", "name": "HTVC" },
+        { "slug": "diaphuong", "name": "Địa Phương" },
+        { "slug": "thietyeu", "name": "Thiết Yếu" }
     ]);
 }
 
@@ -39,16 +60,16 @@ function getFilterConfig() { return JSON.stringify({}); }
 // =============================================================================
 
 function getUrlList(slug, filtersJson) {
-    return BASEURL;
+    // Truyền slug (vtv, sctv...) vào URL để hàm parseListResponse biết đường cắt đúng HTML
+    return BASEURL + "?slug=" + slug;
 }
 
-function getUrlSearch(keyword, filtersJson) {
-    return BASEURL; 
-}
+function getUrlSearch(keyword, filtersJson) { return BASEURL; }
 
-function getUrlDetail(slug) {
-    // Nếu App yêu cầu mở Folder (slug là vtv, htv...) -> Mở trang chủ để lọc kênh
-    return BASEURL + "|data:slug=" + slug;
+function getUrlDetail(id) {
+    // Vì ta đã gói toàn bộ dữ liệu (Link + Tên + Ảnh) vào tham số ID ở bước dưới
+    // Ở đây chỉ cần trả thẳng ID đó về để parseMovieDetail sử dụng
+    return id;
 }
 
 function getUrlCategories() { return ""; }
@@ -59,134 +80,108 @@ function getUrlYears() { return ""; }
 // PARSERS
 // =============================================================================
 
-var PluginUtils = {
-    cleanText: function (text) {
-        if (!text) return "";
-        return text.replace(/<[^>]*>/g, "")
-            .replace(/&amp;/g, "&")
-            .replace(/&quot;/g, '"')
-            .replace(/&#039;/g, "'")
-            .replace(/\s+/g, " ")
-            .trim();
-    }
-};
-
-// --- HÀM 1: TẠO 7 FOLDER GỌN GÀNG TRÊN TRANG CHỦ ---
-function parseListResponse(html) {
-    var groups = [
-        { id: "vtv", name: "Kênh VTV", img: "https://raw.githubusercontent.com/vuminhthanh12/Logo/refs/heads/main/VTV6.png" },
-        { id: "vtvcab", name: "Kênh VTVcab", img: "https://raw.githubusercontent.com/vuminhthanh12/Logo/refs/heads/main/ONPHIMVIET.png" },
-        { id: "sctv", name: "Kênh SCTV", img: "https://raw.githubusercontent.com/vuminhthanh12/vuminhthanh12/refs/heads/main/sctv1.png" },
-        { id: "htv", name: "Kênh HTV", img: "https://s7771.cdn.mytvnet.vn/vimages/8c/ce/ee/e7/79/98/8cee7-phtv1hd-channel-unkn.png" },
-        { id: "htvc", name: "Kênh HTVC", img: "https://raw.githubusercontent.com/vuminhthanh12/Logo/refs/heads/main/htvcthuanviet.png" },
-        { id: "địa phương", name: "Đài Địa Phương", img: "https://upload.wikimedia.org/wikipedia/vi/9/90/THP-Logo.png" },
-        { id: "thiết yếu", name: "Kênh Thiết Yếu", img: "https://i.ytimg.com/vi/sFLUmdwp0Z8/maxresdefault.jpg" }
-    ];
-
-    var items = [];
-    for (var i = 0; i < groups.length; i++) {
-        items.push({
-            id: groups[i].id, // Gửi id này vào getUrlDetail
-            title: groups[i].name,
-            posterUrl: groups[i].img,
-            backdropUrl: groups[i].img,
-            quality: "HD",
-            episode_current: "Live",
-            lang: "Viet",
-            year: 0
-        });
-    }
-
-    return JSON.stringify({
-        items: items,
-        pagination: { currentPage: 1, totalPages: 1, totalItems: items.length, itemsPerPage: 10 }
-    });
-}
-
-function parseSearchResponse(html) {
-    return parseListResponse(html);
-}
-
-// --- HÀM 2: LỌC KÊNH CHÍNH XÁC VÀ BÓC THẲNG LINK M3U8 ---
-function parseMovieDetail(html, apiUrl) {
+// --- HÀM 1: LỌC HTML VÀ ĐƯA CÁC KÊNH VÀO TỪNG DÒNG (FOLDER) ---
+function parseListResponse(html, url) {
     try {
         var slug = "";
-        if (apiUrl && apiUrl.indexOf("data:slug=") > -1) {
-            slug = apiUrl.split("data:slug=")[1].toLowerCase().trim();
+        if (url && url.indexOf("slug=") > -1) {
+            slug = url.split("slug=")[1].toLowerCase().trim();
         }
 
-        var servers = [];
-        var groupBlocks = html.split('<h2 class="group-title">');
-        var displayTitle = "Kênh TV";
-        
-        for (var i = 1; i < groupBlocks.length; i++) {
-            var block = groupBlocks[i];
-            var titleEnd = block.indexOf('</h2>');
-            if (titleEnd === -1) continue;
-            
-            var rawTitle = block.substring(0, titleEnd);
-            var groupName = PluginUtils.cleanText(rawTitle).split('(')[0].trim().toLowerCase(); 
-            
-            // LỌC CHÍNH XÁC FOLDER
+        var blocks = html.split('<h2 class="group-title">');
+        var targetHtml = "";
+
+        // Tìm đúng khối HTML của Đài truyền hình đó
+        for (var i = 1; i < blocks.length; i++) {
+            var block = blocks[i];
+            var titleMatch = block.match(/^([^<]+)<\/h2>/);
+            if (!titleMatch) continue;
+
+            var groupName = titleMatch[1].toLowerCase().trim();
             var isMatch = false;
-            if (slug === 'vtv' && groupName === 'vtv') { isMatch = true; displayTitle = "VTV"; }
-            else if (slug === 'vtvcab' && groupName === 'vtvcab') { isMatch = true; displayTitle = "VTVcab"; }
-            else if (slug === 'sctv' && groupName === 'sctv') { isMatch = true; displayTitle = "SCTV"; }
-            else if (slug === 'htv' && groupName === 'htv') { isMatch = true; displayTitle = "HTV"; }
-            else if (slug === 'htvc' && groupName === 'htvc') { isMatch = true; displayTitle = "HTVC"; }
-            else if (slug === 'địa phương' && groupName === 'địa phương') { isMatch = true; displayTitle = "Địa Phương"; }
-            else if (slug === 'thiết yếu' && groupName.indexOf('thiết yếu') > -1) { isMatch = true; displayTitle = "Thiết Yếu"; }
 
-            if (!isMatch) continue;
+            // Xử lý điều kiện bắt đúng tên khối
+            if (slug === 'vtv' && groupName.indexOf('vtv (') > -1) isMatch = true;
+            else if (slug === 'vtvcab' && groupName.indexOf('vtvcab') > -1) isMatch = true;
+            else if (slug === 'sctv' && groupName.indexOf('sctv') > -1) isMatch = true;
+            else if (slug === 'htv' && groupName.indexOf('htv (') > -1) isMatch = true;
+            else if (slug === 'htvc' && groupName.indexOf('htvc') > -1) isMatch = true;
+            else if (slug === 'diaphuong' && groupName.indexOf('địa phương') > -1) isMatch = true;
+            else if (slug === 'thietyeu' && groupName.indexOf('thiết yếu') > -1) isMatch = true;
 
-            var episodes = [];
-            var channelParts = block.split('class="channel-card');
+            if (isMatch) {
+                targetHtml = block;
+                break;
+            }
+        }
+
+        var items = [];
+        if (targetHtml) {
+            var channelParts = targetHtml.split('class="channel-card');
             
             for (var k = 1; k < channelParts.length; k++) {
                 var cp = channelParts[k];
-                // LẤY TRỰC TIẾP LINK TỪ TRANG CHỦ THEO CÁCH CỦA BẠN
                 var urlM = cp.match(/href=["']\?url=([^&"']+)/i);
                 var nameM = cp.match(/&name=([^"']+)/i);
+                var imgM = cp.match(/<img[^>]+src=["']([^"']+)["']/i);
                 
                 if (urlM && nameM) {
-                    var streamLink = decodeURIComponent(urlM[1]); // XẢ MÃ RA LINK GỐC M3U8
-                    var channelName = decodeURIComponent(nameM[1]).replace(/\+/g, " ").trim(); 
+                    var streamLink = decodeURIComponent(urlM[1]); 
+                    // Bỏ đi thẻ rác #player-area để lấy tên kênh sạch
+                    var rawName = nameM[1].split('#')[0];
+                    var channelName = decodeURIComponent(rawName).replace(/\+/g, " ").trim(); 
+                    var logo = imgM ? imgM[1] : "https://tinhlagi.pro/tinhlagi.ico";
                     
-                    episodes.push({
-                        id: streamLink, // NHÉT THẲNG M3U8 VÀO ID CỦA TẬP
-                        name: channelName,
-                        slug: "live-channel-" + k
+                    // TUYỆT CHIÊU: Gói toàn bộ dữ liệu thành 1 chuỗi nhét vào ID
+                    var combinedId = streamLink + "|||" + channelName + "|||" + logo;
+                    
+                    items.push({
+                        id: combinedId, 
+                        title: channelName,
+                        posterUrl: logo,
+                        backdropUrl: logo,
+                        quality: "HD",
+                        episode_current: "Live"
                     });
                 }
             }
-
-            if (episodes.length > 0) {
-                servers.push({
-                    name: "Danh sách kênh",
-                    episodes: episodes
-                });
-            }
-            break; 
         }
 
-        var groupImages = {
-            "vtv": "https://raw.githubusercontent.com/vuminhthanh12/Logo/refs/heads/main/VTV6.png",
-            "vtvcab": "https://raw.githubusercontent.com/vuminhthanh12/Logo/refs/heads/main/ONPHIMVIET.png",
-            "sctv": "https://raw.githubusercontent.com/vuminhthanh12/vuminhthanh12/refs/heads/main/sctv1.png",
-            "htv": "https://s7771.cdn.mytvnet.vn/vimages/8c/ce/ee/e7/79/98/8cee7-phtv1hd-channel-unkn.png",
-            "htvc": "https://raw.githubusercontent.com/vuminhthanh12/Logo/refs/heads/main/htvcthuanviet.png",
-            "địa phương": "https://upload.wikimedia.org/wikipedia/vi/9/90/THP-Logo.png",
-            "thiết yếu": "https://i.ytimg.com/vi/sFLUmdwp0Z8/maxresdefault.jpg"
-        };
-        var poster = groupImages[slug] || "https://tinhlagi.pro/tinhlagi.ico";
+        return JSON.stringify({
+            items: items,
+            pagination: { currentPage: 1, totalPages: 1 }
+        });
+    } catch (e) {
+        return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
+    }
+}
+
+function parseSearchResponse(html, url) { return parseListResponse(html, url); }
+
+// --- HÀM 2: TRANG CHI TIẾT CỦA KÊNH ĐÓ ---
+function parseMovieDetail(html, url) {
+    try {
+        // url ở đây chính là cái combinedId (chuỗi gói gọn) mà ta đã nhét ở parseListResponse
+        var parts = url.split("|||");
+        var streamLink = parts[0];
+        var channelName = parts[1] || "Kênh TV";
+        var logo = parts[2] || "https://tinhlagi.pro/tinhlagi.ico";
 
         return JSON.stringify({
-            id: apiUrl,
-            title: "Kênh " + displayTitle,
-            posterUrl: poster,
-            backdropUrl: poster,
-            description: "Đang hiển thị các kênh thuộc nhóm " + displayTitle + ".",
-            servers: servers,
+            id: url,
+            title: channelName,
+            posterUrl: logo,
+            backdropUrl: logo,
+            description: "Đang phát trực tiếp " + channelName + " tốc độ cao.",
+            servers: [{
+                name: "Tivi Trực Tuyến",
+                episodes: [{
+                    // GÁN THẲNG M3U8 VÀO ID CỦA TẬP THEO ĐÚNG CÁCH CỦA BẠN
+                    id: streamLink, 
+                    name: "Phát Ngay",
+                    slug: "live"
+                }]
+            }],
             quality: "LIVE",
             lang: "Viet",
             year: 2026,
@@ -195,14 +190,13 @@ function parseMovieDetail(html, apiUrl) {
             status: "Đang phát sóng"
         });
     } catch (e) {
-        return JSON.stringify({});
+        return JSON.stringify({ id: "error", title: "Lỗi tải kênh", servers: [] });
     }
 }
 
-// --- HÀM 3: AUTO FALLBACK SIÊU TỐC ---
+// --- HÀM 3: XỬ LÝ PHÁT LINK (AUTO FALLBACK SIÊU TỐC) ---
 function parseDetailResponse(html) {
-    // Để trống theo đúng cơ chế của code cũ.
-    // App sẽ lấy trực tiếp link m3u8 từ id ở bước 2 để phát.
+    // Trả về rỗng. Trình phát Vax App sẽ tự dùng cái streamLink (m3u8) truyền ở bước trên để phát ngay lập tức.
     return JSON.stringify({}); 
 }
 
