@@ -6,7 +6,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "tinhlagitv",
         "name": "Tinhlagi TV",
-        "version": "1.1.5",
+        "version": "1.1.6",
         "baseUrl": "https://tinhlagi.pro/tivi",
         "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
         "isEnabled": true,
@@ -96,7 +96,7 @@ function parseMovieDetail(html) {
             
             var matchedGroup = "";
             
-            // Phân loại nhóm chính xác bằng từ khóa không phân biệt chữ hoa/thường hay ký hiệu rác
+            // Phân loại nhóm chính xác, tránh bị bỏ sót VTV1 hoặc ANTV ở thiết yếu
             if (groupLower.indexOf("vtvcab") !== -1) {
                 matchedGroup = "VTVcab";
             } else if (groupLower.indexOf("vtv") !== -1) {
@@ -109,7 +109,7 @@ function parseMovieDetail(html) {
                 matchedGroup = "HTV";
             } else if (groupLower.indexOf("địa phương") !== -1 || groupLower.indexOf("dia phuong") !== -1) {
                 matchedGroup = "Địa phương";
-            } else if (groupLower.indexOf("thiết yếu") !== -1 || groupLower.indexOf("thiet yeu") !== -1) {
+            } else if (groupLower.indexOf("thiết yếu") !== -1 || groupLower.indexOf("thiet yeu") !== -1 || groupLower.indexOf("thiết yếu") !== -1) {
                 matchedGroup = "Thiết yếu";
             }
 
@@ -124,11 +124,16 @@ function parseMovieDetail(html) {
                 
                 if (urlM && nameM) {
                     var streamLink = decodeURIComponent(urlM[1]); 
-                    // Làm sạch tên kênh: Loại bỏ hoàn toàn hậu tố #player-area
                     var cleanName = decodeURIComponent(nameM[1]).replace(/\+/g, " ").split('#')[0].trim();
                     
+                    // BÍ QUYẾT MỞ KHÓA FPT PLAY (VTV, ANTV, HTV...): Nối User-Agent trực tiếp vào URL để Player nhận diện
+                    var finalPlayUrl = streamLink;
+                    if (streamLink.indexOf("fptplay") !== -1 || streamLink.indexOf(".m3u8") !== -1) {
+                        finalPlayUrl = streamLink + "|User-Agent=cvmedia/1.1.0|Referer=https://tinhlagi.pro/|Origin=https://tinhlagi.pro";
+                    }
+
                     episodes.push({
-                        id: streamLink, 
+                        id: finalPlayUrl, 
                         name: cleanName,
                         slug: "live-channel"
                     });
