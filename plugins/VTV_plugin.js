@@ -4,9 +4,9 @@
 
 function getManifest() {
     return JSON.stringify({
-        "id": "tinhlagitv",
-        "name": "Tinhlagi TV",
-        "version": "1.1.6",
+        "id": "OnlineTV",
+        "name": "OnlineTV",
+        "version": "1.1.8",
         "baseUrl": "https://tinhlagi.pro/tivi",
         "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
         "isEnabled": true,
@@ -96,7 +96,6 @@ function parseMovieDetail(html) {
             
             var matchedGroup = "";
             
-            // Phân loại nhóm chính xác, tránh bị bỏ sót VTV1 hoặc ANTV ở thiết yếu
             if (groupLower.indexOf("vtvcab") !== -1) {
                 matchedGroup = "VTVcab";
             } else if (groupLower.indexOf("vtv") !== -1) {
@@ -109,7 +108,7 @@ function parseMovieDetail(html) {
                 matchedGroup = "HTV";
             } else if (groupLower.indexOf("địa phương") !== -1 || groupLower.indexOf("dia phuong") !== -1) {
                 matchedGroup = "Địa phương";
-            } else if (groupLower.indexOf("thiết yếu") !== -1 || groupLower.indexOf("thiet yeu") !== -1 || groupLower.indexOf("thiết yếu") !== -1) {
+            } else if (groupLower.indexOf("thiết yếu") !== -1 || groupLower.indexOf("thiet yeu") !== -1) {
                 matchedGroup = "Thiết yếu";
             }
 
@@ -126,7 +125,6 @@ function parseMovieDetail(html) {
                     var streamLink = decodeURIComponent(urlM[1]); 
                     var cleanName = decodeURIComponent(nameM[1]).replace(/\+/g, " ").split('#')[0].trim();
                     
-                    // BÍ QUYẾT MỞ KHÓA FPT PLAY (VTV, ANTV, HTV...): Nối User-Agent trực tiếp vào URL để Player nhận diện
                     var finalPlayUrl = streamLink;
                     if (streamLink.indexOf("fptplay") !== -1 || streamLink.indexOf(".m3u8") !== -1) {
                         finalPlayUrl = streamLink + "|User-Agent=cvmedia/1.1.0|Referer=https://tinhlagi.pro/|Origin=https://tinhlagi.pro";
@@ -139,6 +137,42 @@ function parseMovieDetail(html) {
                     });
                 }
             }
+
+            // Bổ sung quét toàn bộ trang để bắt VTV1 nhỡ nằm ở block khác đưa về nhóm VTV
+            if (matchedGroup === "VTV") {
+                var allCards = html.split('class="channel-card');
+                for (var c = 1; c < allCards.length; c++) {
+                    var cPart = allCards[c];
+                    var uM = cPart.match(/href=["']\?url=([^&"']+)/i);
+                    var nM = cPart.match(/&name=([^"']+)/i);
+                    if (uM && nM) {
+                        var nClean = decodeURIComponent(nM[1]).replace(/\+/g, " ").split('#')[0].trim();
+                        if (nClean.toUpperCase() === "VTV1") {
+                            var sLink = decodeURIComponent(uM[1]);
+                            var fUrl = sLink;
+                            if (sLink.indexOf("fptplay") !== -1 || sLink.indexOf(".m3u8") !== -1) {
+                                fUrl = sLink + "|User-Agent=cvmedia/1.1.0|Referer=https://tinhlagi.pro/|Origin=https://tinhlagi.pro";
+                            }
+                            // Tránh bị trùng lặp nếu đã có sẵn trong mảng
+                            var exists = false;
+                            for (var eIdx = 0; eIdx < episodes.length; eIdx++) {
+                                if (episodes[eIdx].name.toUpperCase() === "VTV1") {
+                                    exists = true;
+                                    break;
+                                }
+                            }
+                            if (!exists) {
+                                episodes.unshift({
+                                    id: fUrl,
+                                    name: "VTV1",
+                                    slug: "live-channel-vtv1"
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
             if (episodes.length > 0) {
                 servers.push({ name: "Kênh " + matchedGroup, episodes: episodes });
             }
