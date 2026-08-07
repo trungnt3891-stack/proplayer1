@@ -5,16 +5,16 @@ var MAIN_DOMAIN = "dramawave.dramafren.org";
 var BASEURL = "https://" + MAIN_DOMAIN; 
 
 // =============================================================================
-// PLUGIN VAX APP: DRAMAWAVE (RECENTLY WATCHED -> WEBVIEW PLAYER)
-// CHIẾN THUẬT: HIỂN THỊ NATIVE -> VÀO PHIM DÙNG WEBVIEW GỐC CỦA TRANG
+// PLUGIN VAX APP: DRAMAWAVE (NATIVE TO WEBVIEW)
+// BẢN CẬP NHẬT: THUẬT TOÁN "BĂM HTML" BẮT BÌA VÀ LINK SIÊU CHUẨN
 // =============================================================================
 
 function getManifest() {
     return JSON.stringify({
         "id": "dramawave_webview",
         "name": "DramaWave",
-        "description": "Lấy phim từ Recently Watched. Xem bằng Webview chặn quảng cáo.",
-        "version": "1.0.0", 
+        "description": "Thuật toán băm HTML bắt bìa siêu chuẩn. Xem phim bằng Webview Player.",
+        "version": "1.5.0", 
         "baseUrl": BASEURL,
         "iconUrl": "https://via.placeholder.com/100x100/ec4899/ffffff?text=DW",
         "isEnabled": true,
@@ -53,8 +53,8 @@ function getFilterConfig() { return JSON.stringify({}); }
 function getUrlList(slug, filtersJson) {
     var page = 1;
     try { page = JSON.parse(filtersJson || "{}").page || 1; } catch(e){}
-    // Trang chủ lấy danh sách phim bằng tham số hp (phân trang)
-    return BASEURL + "/index.php?hp=" + page + "#recent-watched"; 
+    // Lấy danh sách phim bằng tham số hp (phân trang)
+    return BASEURL + "/index.php?hp=" + page; 
 }
 
 function getUrlSearch(keyword, filtersJson) {
@@ -73,7 +73,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSERS: LẤY DANH SÁCH TỪ PHẦN RECENTLY WATCHED
+// PARSERS: THUẬT TOÁN "BĂM HTML" ĐỂ LẤY DANH SÁCH PHIM
 // =============================================================================
 
 function parseListResponse(html, url) {
@@ -81,29 +81,46 @@ function parseListResponse(html, url) {
         var items = [];
         var added = {};
         
-        // Quét tìm tất cả các thẻ <a> chứa link chi tiết phim (index.php?page=detail...)
-        var aRegex = /<a[^>]+href=["'](index\.php\?page=detail&id=[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-        var match;
+        // CẢNH BÁO NẾU BỊ CLOUDFLARE CHẶN LẠI MÀ KHÔNG TRẢ VỀ HTML PHIM
+        if (html.indexOf('cf-turnstile') > -1 || html.indexOf('Just a moment...') > -1) {
+            items.push({
+                id: BASEURL,
+                title: "⚠️ Mạng bị Cloudflare chặn. Hãy bấm vào đây để mở Webview giải Captcha.",
+                posterUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/y/y5/Cloudflare_Icon.svg/1024px-Cloudflare_Icon.svg.png",
+                backdropUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/y/y5/Cloudflare_Icon.svg/1024px-Cloudflare_Icon.svg.png",
+                episode_current: "Lỗi Mạng",
+                quality: "HD"
+            });
+            return JSON.stringify({ items: items, pagination: { currentPage: 1, totalPages: 1 } });
+        }
+
+        // BĂM HTML: Cắt nhỏ HTML theo từng thẻ <a 
+        var blocks = html.split('<a ');
         
-        while ((match = aRegex.exec(html)) !== null) {
-            var link = match[1];
-            var innerHtml = match[2];
+        for (var i = 1; i < blocks.length; i++) {
+            var block = "<a " + blocks[i];
             
-            // Tìm tiêu đề phim
-            var titleMatch = innerHtml.match(/<h[34][^>]*>([\s\S]*?)<\/h[34]>/i);
-            var title = titleMatch ? titleMatch[1].replace(/<[^>]*>/g, "").trim() : "DramaWave Film";
+            // 1. TÌM LINK
+            var hrefMatch = block.match(/href=["']([^"']+)["']/i);
+            if (!hrefMatch) continue;
+            var link = hrefMatch[1].replace(/&amp;/g, "&"); // Fix lỗi HTML encode
             
-            // Bỏ qua các thẻ <a> là nút bấm "Watch" hoặc không có tiêu đề
-            if (title.length < 2 || title.toLowerCase() === "watch") continue;
+            // Chỉ lấy các thẻ a trỏ vào trang chi tiết phim
+            if (link.indexOf('page=detail&id=') === -1) continue;
             
-            // Tìm ảnh bìa
-            var imgMatch = innerHtml.match(/src=["']([^"']+)["']/i);
-            var imgStr = imgMatch ? imgMatch[1] : "https://via.placeholder.com/300x400/1e293b/ec4899?text=No+Image";
+            // 2. TÌM TIÊU ĐỀ
+            var titleMatch = block.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i) || block.match(/title=["']([^"']+)["']/i);
+            var title = titleMatch ? titleMatch[1].replace(/<[^>]*>/g, "").trim() : "";
+            if (!title || title.toLowerCase() === "watch") continue; // Lọc rác
             
-            // Chuẩn hóa link & tạo slug chống trùng
-            var finalUrl = BASEURL + "/" + link.replace(/&amp;/g, "&");
-            var idMatch = link.match(/id=([^&]+)/);
-            var slug = idMatch ? idMatch[1] : finalUrl;
+            // 3. TÌM ẢNH BÌA
+            var imgMatch = block.match(/<img[^>]+src=["']([^"'\s]+)["']/i);
+            var imgStr = imgMatch ? imgMatch[1] : "https://via.placeholder.com/600x800/1e293b/ec4899?text=DramaWave";
+            
+            // 4. CHUẨN HÓA VÀ GOM DỮ LIỆU
+            var finalUrl = BASEURL + "/" + link.replace(/^\//, "");
+            var slugMatch = link.match(/id=([^&]+)/);
+            var slug = slugMatch ? slugMatch[1] : finalUrl;
             
             if (!added[slug]) {
                 items.push({
@@ -118,7 +135,7 @@ function parseListResponse(html, url) {
             }
         }
 
-        // Cập nhật cơ chế phân trang dựa trên tham số url
+        // TÍNH TOÁN PHÂN TRANG
         var currentPage = 1;
         var hpMatch = url.match(/hp=(\d+)/);
         if (hpMatch) currentPage = parseInt(hpMatch[1]);
@@ -138,7 +155,7 @@ function parseSearchResponse(html, url) {
 }
 
 // =============================================================================
-// TRANG CHI TIẾT: HIỂN THỊ INFO VÀ NÚT CHỌN WEBVIEW PLAYER
+// TRANG CHI TIẾT: TẠO NÚT BẤM MỞ TRÌNH DUYỆT CỦA WEB
 // =============================================================================
 
 function parseMovieDetail(html, url) {
@@ -158,15 +175,8 @@ function parseMovieDetail(html, url) {
         var metaImg = html.match(/<meta property="og:image" content="([^"]+)"/i);
         if (metaImg && metaImg[1].indexOf('placeholder') === -1) img = metaImg[1];
 
-        // Nếu có nút "Watch" trong trang chi tiết để đi tới trang phát cụ thể
-        var playUrl = url;
-        var watchMatch = html.match(/href=["']([^"']+)["'][^>]*>\s*Watch/i);
-        if (watchMatch) {
-            playUrl = watchMatch[1].indexOf('http') === 0 ? watchMatch[1] : BASEURL + "/" + watchMatch[1].replace(/^\//, '');
-        }
-
-        // TẠO NÚT "WEBVIEW PLAYER" ĐỂ PHÁT PHIM
-        var episodes = [{ id: playUrl, name: "Phát Bằng Trình Duyệt Web", slug: "webview-player" }];
+        // TẠO NÚT "WEBVIEW PLAYER" CHỨA LINK TRANG CHI TIẾT
+        var episodes = [{ id: url, name: "Phát Bằng Trình Duyệt Web", slug: "webview-player" }];
         
         return JSON.stringify({
             id: url,
@@ -179,7 +189,7 @@ function parseMovieDetail(html, url) {
             quality: "HD",
             category: "Short Drama",
             status: "Hoàn Thành",
-            servers: [{ name: "Webview Player", episodes: episodes }]
+            servers: [{ name: "Trình Phát Webview", episodes: episodes }]
         });
     } catch (e) {
         return JSON.stringify({ id: "error", title: "Lỗi tải dữ liệu chi tiết", servers: [] });
@@ -234,6 +244,14 @@ function parseDetailResponse(html, url) {
                     var chromeBanner = document.querySelectorAll('div[style*="z-index: 999999"]');
                     for (var i = 0; i < chromeBanner.length; i++) {
                         chromeBanner[i].style.display = 'none';
+                    }
+                    
+                    // Bấm tắt các nút close (x) xuất hiện
+                    var closeBtns = document.querySelectorAll('.close, .btn-close, [aria-label="Close"], span[style*="cursor: pointer"]');
+                    for (var j = 0; j < closeBtns.length; j++) {
+                        if(closeBtns[j].innerText.indexOf('×') > -1 || closeBtns[j].innerHTML.indexOf('&times;') > -1) {
+                            try { closeBtns[j].click(); } catch(e){}
+                        }
                     }
                 }, 500);
             })();
