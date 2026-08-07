@@ -1,13 +1,16 @@
 // =============================================================================
-// CONFIGURATION & METADATA
+// PLUGIN VAX APP: TIVI TRỰC TUYẾN (TINHLAGI.PRO)
+// PHIÊN BẢN CHUẨN XÁC: FIX LỌC VTV/HTV + LÀM SẠCH TÊN KÊNH KHÔNG CÒN PLAYER-AREA
 // =============================================================================
+
+var BASEURL = "https://tinhlagi.pro/tivi";
 
 function getManifest() {
     return JSON.stringify({
         "id": "tinhlagitv",
         "name": "Tinhlagi TV",
-        "version": "1.1.2",
-        "baseUrl": "https://tinhlagi.pro/tivi",
+        "version": "1.1.4",
+        "baseUrl": BASEURL,
         "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
         "isEnabled": true,
         "isAdult": false,
@@ -31,9 +34,9 @@ function getPrimaryCategories() {
 
 function getFilterConfig() { return JSON.stringify({}); }
 
-function getUrlList(slug, filtersJson) { return "https://tinhlagi.pro/tivi"; }
-function getUrlSearch(keyword, filtersJson) { return "https://tinhlagi.pro/tivi"; }
-function getUrlDetail(slug) { return "https://tinhlagi.pro/tivi"; }
+function getUrlList(slug, filtersJson) { return BASEURL; }
+function getUrlSearch(keyword, filtersJson) { return BASEURL; }
+function getUrlDetail(slug) { return BASEURL; }
 
 function getUrlCategories() { return ""; }
 function getUrlCountries() { return ""; }
@@ -92,15 +95,24 @@ function parseMovieDetail(html) {
             var rawTitle = block.substring(0, titleEnd);
             var groupName = PluginUtils.cleanText(rawTitle).split('(')[0].trim();
             
-            var isRequired = false;
+            // Xử lý bắt đúng tên nhóm chuẩn xác (tránh bị nhầm lẫn giữa VTV và VTVcab, HTV và HTVC)
+            var matchedGroup = "";
             for (var j = 0; j < requiredGroups.length; j++) {
-                if (groupName.indexOf(requiredGroups[j]) !== -1) { 
-                    isRequired = true;
-                    groupName = requiredGroups[j];
+                var req = requiredGroups[j];
+                if (groupName.toLowerCase() === req.toLowerCase() || 
+                    (req === "VTV" && groupName.toLowerCase() === "vtv") ||
+                    (req === "HTV" && groupName.toLowerCase() === "htv") ||
+                    (groupName.indexOf(req) !== -1)) {
+                    
+                    // Tránh trường hợp VTV nhận nhầm sang VTVcab hoặc HTV nhận nhầm sang HTVC
+                    if (req === "VTV" && groupName.toLowerCase().indexOf("vtvcab") !== -1) continue;
+                    if (req === "HTV" && groupName.toLowerCase().indexOf("htvc") !== -1) continue;
+                    
+                    matchedGroup = req;
                     break;
                 }
             }
-            if (!isRequired) continue;
+            if (!matchedGroup) continue;
 
             var episodes = [];
             var channelParts = block.split('class="channel-card');
@@ -111,19 +123,18 @@ function parseMovieDetail(html) {
                 
                 if (urlM && nameM) {
                     var streamLink = decodeURIComponent(urlM[1]); 
-                    // Bỏ đoạn #player-area ở tên kênh bằng cách cắt chuỗi theo dấu #
-                    var rawChannelName = decodeURIComponent(nameM[1]).replace(/\+/g, " ");
-                    var channelName = rawChannelName.split('#')[0].trim();
+                    // Làm sạch tên kênh: Loại bỏ hoàn toàn hậu tố #player-area
+                    var cleanName = decodeURIComponent(nameM[1]).replace(/\+/g, " ").split('#')[0].trim();
                     
                     episodes.push({
                         id: streamLink, 
-                        name: channelName,
+                        name: cleanName,
                         slug: "live-channel"
                     });
                 }
             }
             if (episodes.length > 0) {
-                servers.push({ name: "Kênh " + groupName, episodes: episodes });
+                servers.push({ name: "Kênh " + matchedGroup, episodes: episodes });
             }
         }
         return JSON.stringify({ servers: servers });
