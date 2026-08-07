@@ -7,10 +7,10 @@ var BASEURL = "https://gamomephim.com";
 
 function getManifest() {
     return JSON.stringify({
-        "id": "gamomephim",
-        "name": "Gà Mờ Mê Phim",
+        "id": "Mê Phim Ngắn",
+        "name": "Mê Phim Ngắn",
         "description": "Vào Trang 1 siêu nhanh. Bấm Xem Ngay để Hook tóm link ở Trang 2.",
-        "version": "4.1.0", // Đã fix load phim và ảnh bìa trang chủ
+        "version": "1.1.0", // Đã fix load phim và ảnh bìa trang chủ
         "baseUrl": BASEURL,
         "iconUrl": "https://r2.gamomephim.com/site/logo-1784305321242.png",
         "isEnabled": true,
