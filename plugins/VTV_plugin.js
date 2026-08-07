@@ -1,6 +1,6 @@
 // =============================================================================
 // PLUGIN VAX APP: TIVI TRỰC TUYẾN (TINHLAGI.PRO)
-// PHIÊN BẢN HOÀN CHỈNH: GIAO DIỆN GRID VUÔNG + NỐI HEADER TRỰC TIẾP VÀO URL VTV
+// PHIÊN BẢN CHUẨN GIAO DIỆN: FOLDER RIÊNG BIỆT + TÊN TẬP SẠCH SẼ + FIX VTV
 // =============================================================================
 
 var BASEURL = "https://tinhlagi.pro/tivi";
@@ -9,7 +9,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "tinhlagitv",
         "name": "Tinhlagi TV",
-        "version": "12.0.0",
+        "version": "1.1.1",
         "baseUrl": BASEURL,
         "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
         "isEnabled": true,
@@ -28,16 +28,16 @@ function log(msg) {
     }
 }
 
-// --- HIỂN THỊ CÁC NHÓM KÊNH RA TRANG CHỦ ---
+// --- TẠO CÁC FOLDER RIÊNG BIỆT TRÊN TRANG CHỦ ---
 function getHomeSections() {
     return JSON.stringify([
-        { "slug": "vtv", "title": "Danh Mục Kênh VTV", "type": "Grid", "path": "" },
-        { "slug": "vtvcab", "title": "Danh Mục Kênh VTVcab", "type": "Grid", "path": "" },
-        { "slug": "sctv", "title": "Danh Mục Kênh SCTV", "type": "Grid", "path": "" },
-        { "slug": "htv", "title": "Danh Mục Kênh HTV", "type": "Grid", "path": "" },
-        { "slug": "htvc", "title": "Danh Mục Kênh HTVC", "type": "Grid", "path": "" },
-        { "slug": "diaphuong", "title": "Danh Mục Kênh Địa Phương", "type": "Grid", "path": "" },
-        { "slug": "thietyeu", "title": "Danh Mục Kênh Thiết Yếu", "type": "Grid", "path": "" }
+        { "slug": "vtv", "title": "Kênh VTV", "type": "Grid", "path": "" },
+        { "slug": "vtvcab", "title": "Kênh VTVcab", "type": "Grid", "path": "" },
+        { "slug": "sctv", "title": "Kênh SCTV", "type": "Grid", "path": "" },
+        { "slug": "htv", "title": "Kênh HTV", "type": "Grid", "path": "" },
+        { "slug": "htvc", "title": "Kênh HTVC", "type": "Grid", "path": "" },
+        { "slug": "diaphuong", "title": "Kênh Địa Phương", "type": "Grid", "path": "" },
+        { "slug": "thietyeu", "title": "Kênh Thiết Yếu", "type": "Grid", "path": "" }
     ]);
 }
 
@@ -62,7 +62,8 @@ function getUrlSearch(keyword, filtersJson) {
 }
 
 function getUrlDetail(slug) {
-    return BASEURL;
+    // Truyền kèm slug để hàm parseMovieDetail biết chính xác người dùng đang bấm vào folder nào
+    return BASEURL + "|data:slug=" + slug;
 }
 
 function getUrlCategories() { return ""; }
@@ -85,21 +86,22 @@ var PluginUtils = {
     }
 };
 
+// --- HÀM 1: HIỂN THỊ ĐÚNG 7 FOLDER ĐẠI DIỆN TRÊN TRANG CHỦ ---
 function parseListResponse(html) {
     var groups = [
-        { id: "VTV", name: "Kênh VTV", img: "https://raw.githubusercontent.com/vuminhthanh12/Logo/refs/heads/main/VTV6.png" },
-        { id: "VTVcab", name: "Kênh VTVcab", img: "https://raw.githubusercontent.com/vuminhthanh12/Logo/refs/heads/main/ONPHIMVIET.png" },
-        { id: "SCTV", name: "Kênh SCTV", img: "https://raw.githubusercontent.com/vuminhthanh12/vuminhthanh12/refs/heads/main/sctv1.png" },
-        { id: "HTV", name: "Kênh HTV", img: "https://s7771.cdn.mytvnet.vn/vimages/8c/ce/ee/e7/79/98/8cee7-phtv1hd-channel-unkn.png" },
-        { id: "HTVC", name: "Kênh HTVC", img: "https://raw.githubusercontent.com/vuminhthanh12/Logo/refs/heads/main/htvcthuanviet.png" },
-        { id: "Địa phương", name: "Kênh Địa Phương", img: "https://upload.wikimedia.org/wikipedia/vi/9/90/THP-Logo.png" },
-        { id: "Thiết yếu", name: "Kênh Thiết Yếu", img: "https://i.ytimg.com/vi/sFLUmdwp0Z8/maxresdefault.jpg" }
+        { id: "vtv", name: "Kênh VTV", img: "https://raw.githubusercontent.com/vuminhthanh12/Logo/refs/heads/main/VTV6.png" },
+        { id: "vtvcab", name: "Kênh VTVcab", img: "https://raw.githubusercontent.com/vuminhthanh12/Logo/refs/heads/main/ONPHIMVIET.png" },
+        { id: "sctv", name: "Kênh SCTV", img: "https://raw.githubusercontent.com/vuminhthanh12/vuminhthanh12/refs/heads/main/sctv1.png" },
+        { id: "htv", name: "Kênh HTV", img: "https://s7771.cdn.mytvnet.vn/vimages/8c/ce/ee/e7/79/98/8cee7-phtv1hd-channel-unkn.png" },
+        { id: "htvc", name: "Kênh HTVC", img: "https://raw.githubusercontent.com/vuminhthanh12/Logo/refs/heads/main/htvcthuanviet.png" },
+        { id: "diaphuong", name: "Kênh Địa Phương", img: "https://upload.wikimedia.org/wikipedia/vi/9/90/THP-Logo.png" },
+        { id: "thietyeu", name: "Kênh Thiết Yếu", img: "https://i.ytimg.com/vi/sFLUmdwp0Z8/maxresdefault.jpg" }
     ];
 
     var items = [];
     for (var i = 0; i < groups.length; i++) {
         items.push({
-            id: groups[i].id, 
+            id: groups[i].id, // Gửi đúng slug (vtv, vtvcab...) sang getUrlDetail
             title: groups[i].name,
             posterUrl: groups[i].img,
             backdropUrl: groups[i].img,
@@ -120,97 +122,100 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// --- HÀM 2: LẤY DANH SÁCH KÊNH TỪ TỪNG NHÓM (FIX ẢNH LOGO) ---
-function parseMovieDetail(html) {
+// --- HÀM 2: CHỈ LẤY KÊNH CỦA ĐÚNG FOLDER ĐƯỢC BẤM (KHÔNG BỊ LẶP) ---
+function parseMovieDetail(html, url) {
     try {
-        var requiredGroups = ["VTV", "VTVcab", "SCTV", "HTV", "HTVC", "Địa phương", "Thiết yếu"];
-        var servers = [];
+        var slug = "vtv";
+        if (url && url.indexOf("data:slug=") > -1) {
+            slug = url.split("data:slug=")[1].toLowerCase().trim();
+        }
 
+        var episodes = [];
         var groupBlocks = html.split('<h2 class="group-title">');
-        
+        var groupTitleDisplay = "Kênh Trực Tuyến";
+        var groupLogo = "https://tinhlagi.pro/tinhlagi.ico";
+
         for (var i = 1; i < groupBlocks.length; i++) {
             var block = groupBlocks[i];
             
             var titleEnd = block.indexOf('</h2>');
-            var rawTitle = block.substring(0, titleEnd);
-            var groupName = PluginUtils.cleanText(rawTitle).split('(')[0].trim(); 
-            
-            var isRequired = false;
-            for (var j = 0; j < requiredGroups.length; j++) {
-                if (groupName.indexOf(requiredGroups[j]) !== -1) {
-                    isRequired = true;
-                    groupName = requiredGroups[j]; 
-                    break;
-                }
-            }
-            if (!isRequired) continue;
+            if (titleEnd === -1) continue;
 
-            var episodes = [];
+            var rawTitle = block.substring(0, titleEnd);
+            var groupName = PluginUtils.cleanText(rawTitle).split('(')[0].trim().toLowerCase(); 
+            
+            var isMatch = false;
+            if (slug === 'vtv' && groupName === 'vtv') { isMatch = true; groupTitleDisplay = "Kênh VTV"; groupLogo = "https://raw.githubusercontent.com/vuminhthanh12/Logo/refs/heads/main/VTV6.png"; }
+            else if (slug === 'vtvcab' && groupName === 'vtvcab') { isMatch = true; groupTitleDisplay = "Kênh VTVcab"; groupLogo = "https://raw.githubusercontent.com/vuminhthanh12/Logo/refs/heads/main/ONPHIMVIET.png"; }
+            else if (slug === 'sctv' && groupName === 'sctv') { isMatch = true; groupTitleDisplay = "Kênh SCTV"; groupLogo = "https://raw.githubusercontent.com/vuminhthanh12/vuminhthanh12/refs/heads/main/sctv1.png"; }
+            else if (slug === 'htv' && groupName === 'htv') { isMatch = true; groupTitleDisplay = "Kênh HTV"; groupLogo = "https://s7771.cdn.mytvnet.vn/vimages/8c/ce/ee/e7/79/98/8cee7-phtv1hd-channel-unkn.png"; }
+            else if (slug === 'htvc' && groupName === 'htvc') { isMatch = true; groupTitleDisplay = "Kênh HTVC"; groupLogo = "https://raw.githubusercontent.com/vuminhthanh12/Logo/refs/heads/main/htvcthuanviet.png"; }
+            else if (slug === 'diaphuong' && groupName === 'địa phương') { isMatch = true; groupTitleDisplay = "Kênh Địa Phương"; groupLogo = "https://upload.wikimedia.org/wikipedia/vi/9/90/THP-Logo.png"; }
+            else if (slug === 'thietyeu' && groupName.indexOf('thiết yếu') > -1) { isMatch = true; groupTitleDisplay = "Kênh Thiết Yếu"; groupLogo = "https://i.ytimg.com/vi/sFLUmdwp0Z8/maxresdefault.jpg"; }
+
+            if (!isMatch) continue;
+
+            // Moi danh sách kênh trong đúng nhóm đó
             var channelParts = block.split('class="channel-card');
             
             for (var k = 1; k < channelParts.length; k++) {
                 var cp = channelParts[k];
                 var urlM = cp.match(/href=["']\?url=([^&"']+)/i);
-                var nameM = cp.match(/&name=([^"']+)/i);
-                var imgM = cp.match(/src=["']([^"']+)["']/i); // Lấy chính xác logo kênh từ thẻ img
+                var nameM = cp.match(/&name=([^#"']+)/i); // FIX TRỨC TIẾP: Dừng lại trước dấu # để loại bỏ rác #player-area
+                var imgM = cp.match(/src=["']([^"']+)["']/i); 
                 
                 if (urlM && nameM) {
                     var streamLink = decodeURIComponent(urlM[1]); 
-                    var channelName = decodeURIComponent(nameM[1]).replace(/\+/g, " "); 
-                    var logoUrl = imgM ? imgM[1] : "https://tinhlagi.pro/tinhlagi.ico";
+                    var channelName = decodeURIComponent(nameM[1]).replace(/\+/g, " ").trim(); 
+                    var logoUrl = imgM ? imgM[1] : groupLogo;
                     
-                    // Đóng gói Link + Logo vào ID để hiển thị đúng ảnh nhỏ gọn, không bị lỗi khung xám
                     var packedData = streamLink + "|||" + logoUrl;
 
                     episodes.push({
                         id: packedData, 
-                        name: channelName,
-                        slug: "live-channel"
+                        name: channelName, // Tên tập phim hoàn toàn sạch sẽ, không còn #player-area
+                        slug: "live-channel-" + k
                     });
                 }
             }
-
-            if (episodes.length > 0) {
-                servers.push({
-                    name: "Kênh " + groupName,
-                    episodes: episodes
-                });
-            }
+            break; // Tìm thấy đúng folder thì dừng vòng lặp luôn, không bị lặp dữ liệu
         }
 
         return JSON.stringify({
-            id: "tivi_detail",
-            title: "Tivi Trực Tuyến",
-            posterUrl: "https://tinhlagi.pro/tinhlagi.ico",
-            backdropUrl: "https://tinhlagi.pro/tinhlagi.ico",
-            description: "Hệ thống Xem Tivi trực tuyến tốc độ cao.",
-            servers: servers,
+            id: url,
+            title: groupTitleDisplay,
+            posterUrl: groupLogo,
+            backdropUrl: groupLogo,
+            description: "Danh sách các kênh thuộc " + groupTitleDisplay + ".",
+            servers: [{
+                name: groupTitleDisplay,
+                episodes: episodes
+            }],
             quality: "LIVE",
             lang: "Viet",
-            year: 0,
-            rating: 0,
+            year: 2026,
+            rating: 10,
             category: "Truyền Hình",
             status: "Đang phát sóng"
         });
     } catch (e) {
-        return JSON.stringify({});
+        return JSON.stringify({ id: "error", title: "Lỗi tải kênh", servers: [] });
     }
 }
 
-// --- HÀM 3: NỐI HEADER TRỰC TIẾP VÀO URL ĐỂ MỞ KHÓA VTV (FPT PLAY) ---
+// --- HÀM 3: NỐI HEADER MỞ KHÓA FPT PLAY CHO VTV ---
 function parseDetailResponse(html, apiUrl) {
     try {
         var realUrl = apiUrl;
         var logo = "https://tinhlagi.pro/tinhlagi.ico";
 
-        // Tách lấy link m3u8 và logo đã đóng gói
         if (apiUrl && apiUrl.indexOf("|||") > -1) {
             var parts = apiUrl.split("|||");
             realUrl = parts[0];
             logo = parts[1];
         }
 
-        // BÍ QUYẾT SỐNG CÒN: Nối User-Agent thẳng vào đuôi URL để ExoPlayer/AVPlayer bắt buộc phải nhận diện
+        // BÍ QUYẾT SỐNG CÒN: Nối Header trực tiếp vào URL m3u8 để AVPlayer/ExoPlayer vượt rào FPT Play
         var finalPlayUrl = realUrl + "|User-Agent=cvmedia/1.1.0|Referer=https://tinhlagi.pro/|Origin=https://tinhlagi.pro";
 
         var mimeType = "application/x-mpegURL";
@@ -222,7 +227,7 @@ function parseDetailResponse(html, apiUrl) {
             "url": finalPlayUrl,
             "isEmbed": false, 
             "mimeType": mimeType,
-            "posterUrl": logo, // Hiển thị chuẩn logo kênh tại trình phát
+            "posterUrl": logo,
             "headers": {
                 "User-Agent": "cvmedia/1.1.0",
                 "Referer": "https://tinhlagi.pro/",
