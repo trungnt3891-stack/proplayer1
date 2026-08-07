@@ -9,8 +9,8 @@ function getManifest() {
     return JSON.stringify({
         "id": "tinhlagi_iptv",
         "name": "Tivi Trực Tuyến",
-        "description": "Hệ thống kênh truyền hình VTV, HTV, SCTV tốc độ cao.",
-        "version": "1.0.0",
+        "description": "Tổng hợp các kênh VTV, VTVcab, SCTV, HTV, Địa Phương tốc độ cao.",
+        "version": "1.0.1", // Cập nhật ép Header User-Agent
         "baseUrl": BASEURL,
         "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
         "isEnabled": true,
@@ -67,9 +67,29 @@ function getUrlList(slug, filtersJson) {
 
 function getUrlSearch(keyword, filtersJson) { return ""; }
 
+// BƯỚC QUAN TRỌNG: TRẢ VỀ JSON CẤU HÌNH PLAYER TRỰC TIẾP
 function getUrlDetail(id) {
-    // Với chế độ IPTV, "id" chính là link m3u8/mpd đã bóc được ở parseListResponse
-    return id; 
+    var url = id; 
+    
+    // Nhận diện kiểu luồng phát (M3U8 hay MPD) để báo cho Trình Phát
+    var mimeType = "application/x-mpegURL"; // Mặc định HLS
+    if (url.indexOf('.mpd') > -1) {
+        mimeType = "application/dash+xml"; // Chuẩn DASH
+    }
+
+    // Trả về JSON để ép App nhận cấu hình Header mà không cần tải HTML trung gian
+    return JSON.stringify({
+        "url": url,
+        "isEmbed": false, // Kích hoạt ExoPlayer Native
+        "mimeType": mimeType,
+        "headers": {
+            // Giả mạo User-Agent giống hệt trên Web để vượt tường FPT / MyTV
+            "User-Agent": "cvmedia/1.1.0", 
+            "Referer": "https://tinhlagi.pro/",
+            "Origin": "https://tinhlagi.pro"
+        },
+        "subtitles": []
+    });
 }
 
 function getUrlCategories() { return BASEURL; }
@@ -156,36 +176,12 @@ function parseSearchResponse(html, url) {
 }
 
 function parseMovieDetail(html, url) { 
-    // IPTV không dùng trang Chi Tiết, hàm này sẽ bị bỏ qua
     return "{}"; 
 }
 
-// BƯỚC 2: TIẾP NHẬN LINK TỪ BƯỚC 1 VÀ RA LỆNH CHO EXOPLAYER PHÁT
 function parseDetailResponse(html, apiUrl) {
-    try {
-        // App sẽ truyền ID (chính là luồng m3u8/mpd) vào apiUrl
-        var url = apiUrl.split("|")[0]; 
-        
-        // Nhận diện kiểu luồng phát (M3U8 hay MPD) để báo cho Trình Phát
-        var mimeType = "application/x-mpegURL"; // Mặc định HLS
-        if (url.indexOf('.mpd') > -1) {
-            mimeType = "application/dash+xml"; // Chuẩn DASH
-        }
-
-        return JSON.stringify({
-            "url": url,
-            "isEmbed": false, // Kích hoạt ExoPlayer Native
-            "mimeType": mimeType,
-            "headers": {
-                // Giả mạo User-Agent giống hệt trên Web để vượt tường
-                "User-Agent": "cvmedia/1.1.0", 
-                "Referer": "https://tinhlagi.pro/"
-            },
-            "subtitles": []
-        });
-    } catch (e) {
-        return JSON.stringify({ "url": "", "isEmbed": false, "headers": {} });
-    }
+    // Hàm này không còn hoạt động vì getUrlDetail đã xử lý trả về JSON thẳng cho Player
+    return JSON.stringify({});
 }
 
 function parseEmbedResponse(html, url) {
