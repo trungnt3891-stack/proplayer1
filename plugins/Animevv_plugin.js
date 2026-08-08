@@ -1,6 +1,6 @@
 // =============================================================================
 // PLUGIN VAX APP: ANIMEVV (animevv.com)
-// PHIÊN BẢN CHUẨN: KÍCH HOẠT PROXY VÀ SERVER ĐỂ VƯỢT TƯỜNG LỬA M3U8
+// PHIÊN BẢN BỀN BỈ: SỬ DỤNG WEBVIEW TRỰC TIẾP ĐỂ PHÁT VIDEO
 // =============================================================================
 
 var BASEURL = "https://animevv.com";
@@ -9,7 +9,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "animevv",
         "name": "AnimeVV",
-        "version": "1.0.7",
+        "version": "1.0.8",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/iconmeo.png",
         "isEnabled": true,
@@ -222,26 +222,13 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// --- HÀM 3: XỬ LÝ PHÁT VIDEO KÍCH HOẠT PROXY & SERVER ---
+// --- HÀM 3: MỞ TRỰC TIẾP QUA WEBVIEW ---
 function parseDetailResponse(html, apiUrl) {
-    try {
-        // apiUrl lúc này là link trang xem phim (VD: /xem-phim/thon-phe-tinh-khong...)
-        // Trả về cờ "proxy" và "server" để yêu cầu App định tuyến luồng video vượt tường lửa
-        return JSON.stringify({
-            url: apiUrl,
-            isEmbed: true,
-            hook: true,          // Bật bắt link ngầm
-            proxy: true,         // BÍ QUYẾT TỪ CHUYÊN GIA: Ép Native Player dùng Proxy của App
-            server: "AnimeVV",   // BÍ QUYẾT TỪ CHUYÊN GIA: Khai báo máy chủ để App nhận định dạng
-            headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                "Referer": BASEURL + "/",
-                "Origin": BASEURL
-            }
-        });
-    } catch (e) {
-        return JSON.stringify({ url: apiUrl, isEmbed: true, proxy: true, server: "AnimeVV" });
-    }
+    // Không dùng bất kỳ cờ bắt link ngầm nào nữa, yêu cầu App mở Webview trực tiếp để người dùng tương tác
+    return JSON.stringify({
+        url: apiUrl,
+        isEmbed: true
+    });
 }
 
 function parseEmbedResponse(html, sourceUrl) {
