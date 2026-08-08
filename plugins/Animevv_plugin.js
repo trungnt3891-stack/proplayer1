@@ -1,6 +1,6 @@
 // =============================================================================
 // PLUGIN VAX APP: ANIMEVV (animevv.com)
-// NGUỒN: Inertia.js JSON Data
+// PHIÊN BẢN: HOÀN THIỆN - BẮT LINK TỰ ĐỘNG BẰNG JSON INERTIA
 // =============================================================================
 
 var BASEURL = "https://animevv.com";
@@ -29,7 +29,7 @@ function log(msg) {
 }
 
 // =============================================================================
-// CHUYÊN MỤC TRANG CHỦ
+// CHUYÊN MỤC TRANG CHỦ & TÌM KIẾM
 // =============================================================================
 
 function getHomeSections() {
@@ -46,10 +46,12 @@ function getPrimaryCategories() {
     return JSON.stringify([
         { "name": "Hành Động", "slug": "hanh-dong" },
         { "name": "Phiêu Lưu", "slug": "phieu-luu" },
-        { "name": "Tình Cảm", "slug": "tinh-cam" },
-        { "name": "Hài Hước", "slug": "hai-huoc" },
         { "name": "Phép Thuật", "slug": "phep-thuat" },
-        { "name": "Xuyên Không (Isekai)", "slug": "isekai" }
+        { "name": "Hài Hước", "slug": "hai-huoc" },
+        { "name": "Tình Cảm", "slug": "tinh-cam" },
+        { "name": "Học Đường", "slug": "truong-hoc" },
+        { "name": "Khoa Học Viễn Tưởng", "slug": "sci-fi" },
+        { "name": "Đời Thường", "slug": "doi-thuong" }
     ]);
 }
 
@@ -62,10 +64,8 @@ function getFilterConfig() { return JSON.stringify({}); }
 function getUrlList(slug, filtersJson) {
     var isHome = ["featured", "latest", "chinaLatest", "series", "movies"].indexOf(slug) !== -1;
     if (isHome) {
-        // Nếu là mục ở trang chủ, tải trang chủ
         return BASEURL + "/?home_slug=" + slug; 
     }
-    // Nếu là thể loại, sử dụng trang tìm kiếm / lọc của web
     return BASEURL + "/tim-kiem?genre=" + slug;
 }
 
@@ -74,7 +74,6 @@ function getUrlSearch(keyword, filtersJson) {
 }
 
 function getUrlDetail(id) {
-    // Trỏ vào chi tiết phim
     return BASEURL + "/anime/" + id;
 }
 
@@ -83,7 +82,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// HÀM TIỆN ÍCH LẤY DỮ LIỆU INERTIA
+// HÀM TIỆN ÍCH: LẤY DỮ LIỆU TỪ INERTIA
 // =============================================================================
 
 function getInertiaData(html) {
@@ -93,13 +92,12 @@ function getInertiaData(html) {
             return JSON.parse(match[1]);
         }
     } catch (e) {
-        log("Lỗi Parse JSON Inertia: " + e.message);
+        log("Lỗi Parse JSON: " + e.message);
     }
     return null;
 }
 
 function mapItem(item) {
-    // Xử lý ảnh: Ưu tiên ảnh thumbnailOptimized hoặc thumbnail
     var thumb = item.thumbnailOptimized || item.thumbnail || "";
     if (thumb && !thumb.startsWith("http")) thumb = BASEURL + thumb;
 
@@ -133,12 +131,12 @@ function parseListResponse(html, url) {
         var rawItems = [];
 
         if (url.indexOf('tim-kiem') !== -1) {
-            // Đang ở trang Tìm kiếm hoặc Thể loại
+            // Trang tìm kiếm & thể loại
             if (props.results && props.results.data) {
                 rawItems = props.results.data;
             }
         } else {
-            // Đang ở Trang chủ
+            // Trang chủ
             var slugMatch = url.match(/home_slug=([^&]+)/);
             var slug = slugMatch ? slugMatch[1] : "";
 
@@ -161,20 +159,17 @@ function parseListResponse(html, url) {
             items.push(mapItem(rawItems[j]));
         }
 
-        // Thông tin phân trang (nếu có)
+        // Lấy thông tin phân trang
         var currentPage = 1;
         var totalPages = 1;
-        if (props.meta) {
-            currentPage = props.meta.currentPage || 1;
-            totalPages = props.meta.lastPage || 1;
+        if (props.results && props.results.meta) {
+            currentPage = props.results.meta.currentPage || 1;
+            totalPages = props.results.meta.lastPage || 1;
         }
 
         return JSON.stringify({
             items: items,
-            pagination: { 
-                currentPage: currentPage, 
-                totalPages: totalPages 
-            }
+            pagination: { currentPage: currentPage, totalPages: totalPages }
         });
     } catch (e) {
         return JSON.stringify({ items: [], pagination: { currentPage: 1, totalPages: 1 } });
@@ -185,7 +180,7 @@ function parseSearchResponse(html, url) {
     return parseListResponse(html, url);
 }
 
-// --- HÀM 2: LẤY CHI TIẾT VÀ TẬP PHIM ---
+// --- HÀM 2: LẤY CHI TIẾT & DANH SÁCH TẬP ---
 function parseMovieDetail(html, url) {
     try {
         var data = getInertiaData(html);
@@ -194,7 +189,6 @@ function parseMovieDetail(html, url) {
         var anime = data.props.anime;
         var episodesData = data.props.episodes || [];
 
-        // Lấy thông tin phim
         var detail = mapItem(anime);
         detail.description = anime.description || "";
         
@@ -206,20 +200,23 @@ function parseMovieDetail(html, url) {
         }
         detail.category = categoryNames.join(", ");
 
-        // Xử lý danh sách tập
+        // Xử lý danh sách tập phim
         var episodes = [];
         for (var k = 0; k < episodesData.length; k++) {
             var ep = episodesData[k];
             
-            // Gói dữ liệu tập phim (watchKey + slug phim) để hứng ở Cấp 3 lấy link xem
-            var packedId = anime.slug + "|||" + ep.watchKey;
+            // Xây dựng chính xác link xem phim dựa theo dữ liệu thực tế
+            var watchUrl = BASEURL + "/xem-phim/" + anime.slug + "/" + ep.watchKey;
 
             episodes.push({
-                id: packedId,
+                id: watchUrl,
                 name: ep.name,
                 slug: ep.slug
             });
         }
+
+        // Đảo ngược danh sách nếu tập mới nhất đang nằm dưới cùng
+        episodes.reverse();
 
         detail.servers = [{
             name: "AnimeVV Server",
@@ -232,34 +229,17 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// --- HÀM 3: BÓC LINK VIDEO ĐỂ PHÁT ---
+// --- HÀM 3: XỬ LÝ PHÁT VIDEO KHI BẤM VÀO TẬP ---
 function parseDetailResponse(html, apiUrl) {
-    try {
-        var animeSlug = "";
-        var watchKey = "";
-
-        if (apiUrl.indexOf("|||") !== -1) {
-            var parts = apiUrl.split("|||");
-            animeSlug = parts[0];
-            watchKey = parts[1];
+    // Bật chế độ "isEmbed: true" để giao lại URL tập phim (vd: /xem-phim/...) cho App.
+    // Trình duyệt ngầm (Auto-Sniffer) của VAX App sẽ tải trang này, gọi API lấy Token và tự bắt link video .m3u8 phát cho bạn.
+    return JSON.stringify({
+        url: apiUrl,
+        isEmbed: true,
+        headers: {
+            "Referer": BASEURL + "/"
         }
-
-        // URL dùng để lấy m3u8 có thể là trang xem phim /xem-phim/[slug]/[watchKey] 
-        // Hoặc một API nội bộ. Dưới đây là URL giả định thông dụng của hệ thống Inertia
-        // VAX App sẽ chuyển hướng Request tới hàm này, bạn cần kiểm tra chính xác URL khi ấn xem trên trình duyệt.
-        var watchUrl = BASEURL + "/xem-phim/" + animeSlug + "-" + watchKey;
-
-        // Trả về luồng để VAX xử lý extract
-        return JSON.stringify({
-            "url": watchUrl,
-            "isEmbed": false, 
-            "headers": {
-                "Referer": BASEURL
-            }
-        });
-    } catch (e) {
-        return JSON.stringify({});
-    }
+    });
 }
 
 function parseEmbedResponse(html, sourceUrl) {
