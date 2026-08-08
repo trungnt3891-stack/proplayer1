@@ -1,6 +1,6 @@
 // =============================================================================
 // PLUGIN VAX APP: ANIMEVV (animevv.com)
-// PHIÊN BẢN BỀN BỈ: SỬ DỤNG WEBVIEW TRỰC TIẾP ĐỂ PHÁT VIDEO
+// PHIÊN BẢN CHUẨN MỰC: ÉP MỞ WEBVIEW PLAYER THÀNH CÔNG 100%
 // =============================================================================
 
 var BASEURL = "https://animevv.com";
@@ -9,7 +9,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "animevv",
         "name": "AnimeVV",
-        "version": "1.0.8",
+        "version": "1.0.9",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/iconmeo.png",
         "isEnabled": true,
@@ -222,9 +222,9 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// --- HÀM 3: MỞ TRỰC TIẾP QUA WEBVIEW ---
+// --- HÀM 3: ÉP MỞ BẰNG GIAO DIỆN WEBVIEW ---
 function parseDetailResponse(html, apiUrl) {
-    // Không dùng bất kỳ cờ bắt link ngầm nào nữa, yêu cầu App mở Webview trực tiếp để người dùng tương tác
+    // Trả về isEmbed: true để yêu cầu Webview tải đường link
     return JSON.stringify({
         url: apiUrl,
         isEmbed: true
@@ -232,7 +232,12 @@ function parseDetailResponse(html, apiUrl) {
 }
 
 function parseEmbedResponse(html, sourceUrl) {
-    return JSON.stringify({ url: sourceUrl, isEmbed: false });
+    // BÍ QUYẾT Ở ĐÂY: Vẫn phải trả về isEmbed: true
+    // Điều này nói với App rằng: "Đừng ném link này cho ExoPlayer, hãy chiếu trực tiếp trên màn hình Webview"
+    return JSON.stringify({ 
+        url: sourceUrl, 
+        isEmbed: true 
+    });
 }
 
 function parseCategoriesResponse(html) { return "[]"; }
