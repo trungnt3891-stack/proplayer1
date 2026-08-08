@@ -1,6 +1,6 @@
 // =============================================================================
 // PLUGIN VAX APP: ANIMEVV (animevv.com)
-// PHIÊN BẢN: HOÀN THIỆN - BẮT LINK TỰ ĐỘNG BẰNG WEBVIEW (AUTO-SNIFFER)
+// PHIÊN BẢN: HOÀN THIỆN - BẮT LINK BẰNG HOOK & EMBEDTOPLAY
 // =============================================================================
 
 var BASEURL = "https://animevv.com";
@@ -9,7 +9,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "animevv",
         "name": "AnimeVV",
-        "version": "1.0.3",
+        "version": "1.0.4",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/iconmeo.png",
         "isEnabled": true,
@@ -205,7 +205,7 @@ function parseMovieDetail(html, url) {
         for (var k = 0; k < episodesData.length; k++) {
             var ep = episodesData[k];
             
-            // Xây dựng chính xác link xem phim nguyên bản (VD: /xem-phim/thon-phe-tinh-khong.../04-89338)
+            // Xây dựng chính xác link xem phim nguyên bản
             var watchUrl = BASEURL + "/xem-phim/" + anime.slug + "/" + ep.watchKey;
 
             episodes.push({
@@ -228,18 +228,23 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// --- HÀM 3: XỬ LÝ PHÁT VIDEO ---
+// --- HÀM 3: XỬ LÝ PHÁT VIDEO KHI BẤM VÀO TẬP (HOOK & EMBEDTOPLAY) ---
 function parseDetailResponse(html, apiUrl) {
-    // apiUrl ở đây chính là link xem phim (watchUrl) ta truyền từ Hàm 2.
-    // Xóa bỏ code "đoán" iframe cũ gây lỗi 404.
-    // Trả thẳng link về hệ thống Auto-Sniffer của VAX App thông qua isEmbed: true
-    return JSON.stringify({
-        url: apiUrl,
-        isEmbed: true,
-        headers: {
-            "Referer": BASEURL + "/"
-        }
-    });
+    try {
+        // apiUrl ở đây chính là link xem phim (VD: /xem-phim/thon-phe-tinh-khong-phan-2-p4421/04-89338)
+        // Bật 3 thuộc tính cực kỳ mạnh mẽ để Webview tự động cắn link m3u8 thay vì extract bằng code:
+        return JSON.stringify({
+            url: apiUrl,
+            isEmbed: true,
+            hook: true,          // Yêu cầu App cài sẵn Hook vào network để quét API ẩn
+            embedtoplay: true,   // Bỏ qua Webview, đẩy thẳng luồng bắt được sang Native Player (ExoPlayer/AVPlayer)
+            headers: {
+                "Referer": BASEURL + "/"
+            }
+        });
+    } catch (e) {
+        return JSON.stringify({ url: apiUrl, isEmbed: true, hook: true, embedtoplay: true });
+    }
 }
 
 function parseEmbedResponse(html, sourceUrl) {
