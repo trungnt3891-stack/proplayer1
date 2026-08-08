@@ -30,13 +30,6 @@
             "iconUrl": "https://vicdn.cc/vicdn.png",
     },
     {
-            "id": "Ổ Phim",
-            "name": "Ổ Phim",
-            "version": "1.0.4",
-            "scriptUrl": "https://github.com/trungnt3891-stack/repo-update/blob/main/plugins/ophim_plugin.js",
-            "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/ophim.ico"
-    },
-    {
             "id": "shortflix",
             "name": "PhimNgắnHay",
             "version": "1.2.2",
