@@ -1,18 +1,26 @@
 // =============================================================================
 // PLUGIN VAX APP: ANIMEVV (animevv.com)
-// PHIÊN BẢN CHUẨN MỰC: NATIVE EPISODE SELECTOR + WEBVIEW PLAYER FULLSCREEN
+// PHIÊN BẢN: 1 NÚT CHUYỂN THẲNG VÀO WEBVIEW ĐỂ TỰ CHỌN TẬP
 // =============================================================================
 
 function getManifest() {
     return JSON.stringify({
         "id": "animevv",
         "name": "AnimeVV",
-        "version": "1.1.3",
+        "version": "1.1.4",
         "baseUrl": "https://animevv.com",
         "iconUrl": "https://animevv.com/iconmeo.png",
         "isEnabled": true,
         "type": "MOVIE"
     });
+}
+
+function log(msg) {
+    if (typeof nativeLog !== 'undefined') {
+        nativeLog("[AnimeVV] " + msg);
+    } else if (typeof console !== 'undefined' && console.log) {
+        console.log("[AnimeVV] " + msg);
+    }
 }
 
 // =============================================================================
@@ -33,7 +41,7 @@ function getPrimaryCategories() {
     return JSON.stringify([
         { name: 'Hành Động', slug: 'hanh-dong' },
         { name: 'Phiêu Lưu', slug: 'phieu-luu' },
-        { name: 'Phép Thuật', slug: 'phep-thuat" ' },
+        { name: 'Phép Thuật', slug: 'phep-thuat' },
         { name: 'Hài Hước', slug: 'hai-huoc' },
         { name: 'Tình Cảm', slug: 'tinh-cam' },
         { name: 'Học Đường', slug: 'truong-hoc' },
@@ -161,7 +169,7 @@ function parseSearchResponse(html, url) {
     return parseListResponse(html, url);
 }
 
-// KÉO TẬP PHIM RA GIAO DIỆN NATIVE ĐỂ CHỌN
+// HÀM 2: KHÔNG CHIA TẬP, TRẢ VỀ DUY NHẤT 1 NÚT ĐỂ MỞ WEBVIEW
 function parseMovieDetail(html, url) {
     try {
         var data = getInertiaData(html);
@@ -171,28 +179,28 @@ function parseMovieDetail(html, url) {
         var episodesData = data.props.episodes || [];
         var detail = mapItem(anime);
 
-        var episodes = [];
-        for (var k = 0; k < episodesData.length; k++) {
-            var ep = episodesData[k];
-            // Lắp URL thực tế của tập phim để truyền xuống hàm Webview bên dưới
-            var watchUrl = "https://animevv.com/xem-phim/" + anime.slug + "/" + ep.watchKey;
-
-            episodes.push({
-                id: watchUrl, // Đưa thẳng link trang xem phim Webview vào biến ID
-                name: ep.name,
-                slug: ep.slug
-            });
+        var categoryNames = [];
+        if (anime.genres) {
+            for (var i = 0; i < anime.genres.length; i++) {
+                categoryNames.push(anime.genres[i].name);
+            }
         }
 
-        episodes.reverse(); // Lật mảng để tập 1 lên đầu
-
-        var servers = [];
-        if (episodes.length > 0) {
-            servers.push({
-                name: "AnimeVV",
-                episodes: episodes
-            });
+        // Tạo đường link trỏ thẳng vào Tập Đầu Tiên (nếu có) để khi Webview mở ra là có phim xem ngay
+        var watchUrl = url;
+        if (episodesData.length > 0) {
+            watchUrl = "https://animevv.com/xem-phim/" + anime.slug + "/" + episodesData[0].watchKey;
         }
+
+        // Duy nhất 1 server và 1 nút
+        var servers = [{
+            name: "AnimeVV Server",
+            episodes: [{
+                id: watchUrl, // Trỏ ID trực tiếp về trang xem phim
+                name: "Bấm vào để Chọn Tập & Xem",
+                slug: "webview-play"
+            }]
+        }];
 
         return JSON.stringify({
             id: url,
@@ -200,23 +208,24 @@ function parseMovieDetail(html, url) {
             posterUrl: detail.posterUrl,
             backdropUrl: detail.backdropUrl,
             description: anime.description || "",
-            servers: servers // Trả về danh sách tập cho App vẽ giao diện
+            category: categoryNames.join(", "),
+            servers: servers
         });
     } catch (e) {
         return JSON.stringify({});
     }
 }
 
-// BẬT WEBVIEW XEM PHIM NGAY KHI NGƯỜI DÙNG BẤM CHỌN TẬP
+// HÀM 3: MỞ WEBVIEW CHO PHÉP NGƯỜI DÙNG CUỘN XUỐNG ĐỂ TỰ CHỌN TẬP
 function parseDetailResponse(html, url) {
-    // Ép Video giãn 100% màn hình, xoá mọi dấu vết giao diện web rác, ẩn bình luận
-    var customJs = "document.querySelectorAll('header, footer, nav, aside, .ads, .sidebar, .mt-8, iframe[sandbox]').forEach(function(e){e.style.display='none'});";
-    customJs += "document.body.style.backgroundColor='#000'; document.body.style.overflow='hidden';";
-    customJs += "var v = document.querySelector('video, iframe, #player, .jwplayer'); if(v){ v.style.width='100vw'; v.style.height='100vh'; v.style.position='fixed'; v.style.top='0'; v.style.left='0'; v.style.zIndex='999999'; }";
+    // Ẩn Header, Footer, Quảng cáo, Bình luận.
+    // TUYỆT ĐỐI KHÔNG fix cứng Video để người dùng có thể lướt xuống dưới chọn tập phim
+    var customJs = "document.querySelectorAll('header, footer, nav, aside, .ads, .sidebar, .comments, [id^=\"comment\"], #disqus_thread').forEach(function(e){if(e) e.style.display='none'});";
+    customJs += "document.body.style.backgroundColor='#09090b';";
     
     return JSON.stringify({
-        url: url, // Đây chính là Link Webview nhận từ parseMovieDetail ở trên
-        isEmbed: true, // Kích hoạt trình duyệt Webview tích hợp
+        url: url, // Mở trang webview
+        isEmbed: true, 
         headers: { 
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
             "Referer": "https://animevv.com/",
