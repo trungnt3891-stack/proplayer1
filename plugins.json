@@ -33,7 +33,7 @@
             "id": "Ổ Phim",
             "name": "Ổ Phim",
             "version": "1.0.4",
-            "scriptUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/ophim_plugin.js",
+            "scriptUrl": "https://github.com/trungnt3891-stack/repo-update/blob/main/plugins/ophim_plugin.js",
             "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/ophim.ico"
     },
     {
