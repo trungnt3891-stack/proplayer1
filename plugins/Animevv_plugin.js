@@ -1,6 +1,6 @@
 // =============================================================================
 // PLUGIN VAX APP: ANIMEVV (animevv.com)
-// PHIÊN BẢN: HOÀN THIỆN - BẮT LINK BẰNG HOOK & EMBEDTOPLAY
+// PHIÊN BẢN: HOÀN THIỆN - BẮT LINK BẰNG HOOK (HIỂN THỊ WEBVIEW ĐỂ VƯỢT AUTOPLAY)
 // =============================================================================
 
 var BASEURL = "https://animevv.com";
@@ -9,7 +9,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "animevv",
         "name": "AnimeVV",
-        "version": "1.0.4",
+        "version": "1.0.5",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/iconmeo.png",
         "isEnabled": true,
@@ -131,12 +131,10 @@ function parseListResponse(html, url) {
         var rawItems = [];
 
         if (url.indexOf('tim-kiem') !== -1) {
-            // Trang tìm kiếm & thể loại
             if (props.results && props.results.data) {
                 rawItems = props.results.data;
             }
         } else {
-            // Trang chủ
             var slugMatch = url.match(/home_slug=([^&]+)/);
             var slug = slugMatch ? slugMatch[1] : "";
 
@@ -159,7 +157,6 @@ function parseListResponse(html, url) {
             items.push(mapItem(rawItems[j]));
         }
 
-        // Lấy thông tin phân trang
         var currentPage = 1;
         var totalPages = 1;
         if (props.results && props.results.meta) {
@@ -200,12 +197,9 @@ function parseMovieDetail(html, url) {
         }
         detail.category = categoryNames.join(", ");
 
-        // Xử lý danh sách tập phim
         var episodes = [];
         for (var k = 0; k < episodesData.length; k++) {
             var ep = episodesData[k];
-            
-            // Xây dựng chính xác link xem phim nguyên bản
             var watchUrl = BASEURL + "/xem-phim/" + anime.slug + "/" + ep.watchKey;
 
             episodes.push({
@@ -228,22 +222,21 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// --- HÀM 3: XỬ LÝ PHÁT VIDEO KHI BẤM VÀO TẬP (HOOK & EMBEDTOPLAY) ---
+// --- HÀM 3: XỬ LÝ PHÁT VIDEO ---
 function parseDetailResponse(html, apiUrl) {
     try {
-        // apiUrl ở đây chính là link xem phim (VD: /xem-phim/thon-phe-tinh-khong-phan-2-p4421/04-89338)
-        // Bật 3 thuộc tính cực kỳ mạnh mẽ để Webview tự động cắn link m3u8 thay vì extract bằng code:
         return JSON.stringify({
             url: apiUrl,
             isEmbed: true,
-            hook: true,          // Yêu cầu App cài sẵn Hook vào network để quét API ẩn
-            embedtoplay: true,   // Bỏ qua Webview, đẩy thẳng luồng bắt được sang Native Player (ExoPlayer/AVPlayer)
+            hook: true, // Kích hoạt bắt link ngầm
+            // KHÔNG DÙNG embedtoplay: true để hiển thị Webview cho phép người dùng click "Play" kích hoạt luồng m3u8
             headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                 "Referer": BASEURL + "/"
             }
         });
     } catch (e) {
-        return JSON.stringify({ url: apiUrl, isEmbed: true, hook: true, embedtoplay: true });
+        return JSON.stringify({ url: apiUrl, isEmbed: true, hook: true });
     }
 }
 
