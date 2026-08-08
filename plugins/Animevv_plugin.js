@@ -1,6 +1,6 @@
 // =============================================================================
 // PLUGIN VAX APP: ANIMEVV (animevv.com)
-// PHIÊN BẢN CHUẨN XÁC: BYPASS ACCESS TOKEN & AUTO HOOK M3U8
+// PHIÊN BẢN CHUẨN: KÍCH HOẠT PROXY VÀ SERVER ĐỂ VƯỢT TƯỜNG LỬA M3U8
 // =============================================================================
 
 var BASEURL = "https://animevv.com";
@@ -9,7 +9,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "animevv",
         "name": "AnimeVV",
-        "version": "1.0.6",
+        "version": "1.0.7",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/iconmeo.png",
         "isEnabled": true,
@@ -200,7 +200,6 @@ function parseMovieDetail(html, url) {
         var episodes = [];
         for (var k = 0; k < episodesData.length; k++) {
             var ep = episodesData[k];
-            // Xây dựng URL xem phim nguyên bản
             var watchUrl = BASEURL + "/xem-phim/" + anime.slug + "/" + ep.watchKey;
 
             episodes.push({
@@ -223,28 +222,25 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// --- HÀM 3: XỬ LÝ PHÁT VIDEO & BYPASS ACCESS TOKEN ---
+// --- HÀM 3: XỬ LÝ PHÁT VIDEO KÍCH HOẠT PROXY & SERVER ---
 function parseDetailResponse(html, apiUrl) {
     try {
-        // ĐOẠN SCRIPT ĐỈNH CAO: Tiêm vào Webview ẩn để xử lý Token
-        // 1. Dùng window.axios có sẵn của web để gọi API /grant lấy token
-        // 2. Dùng token gọi API /bootstrap để lấy link .m3u8
-        // 3. Ép webview load thẳng link .m3u8 để VAX App "tóm cổ" ngay lập tức
-        var bypassScript = "setTimeout(function(){try{if(window.axios){var d=document.querySelector('[data-page]');if(d){var p=JSON.parse(d.textContent).props;if(p.sources&&p.sources.length>0){var sid=p.sources[0].id;window.axios.post('/player/playback/grant',{source_id:sid,id:sid}).then(function(r){var t=r.data.token||r.data.access_token;return window.axios.get('/player/playback/bootstrap?token='+t)}).then(function(r){var u=r.data.url||r.data.playlist||r.data.file;if(u)window.location.href=u;})}}}if(typeof jwplayer==='function')jwplayer().play();var b=document.querySelector('.jw-icon-display,.vjs-big-play-button,.plyr__control--overlaid');if(b)b.click();}catch(e){}},1000);";
-
+        // apiUrl lúc này là link trang xem phim (VD: /xem-phim/thon-phe-tinh-khong...)
+        // Trả về cờ "proxy" và "server" để yêu cầu App định tuyến luồng video vượt tường lửa
         return JSON.stringify({
             url: apiUrl,
             isEmbed: true,
-            hook: true,          // Bật cờ bắt link tự động
-            embedtoplay: true,   // Ẩn Webview và phát ngay lập tức trên Native Player
-            script: bypassScript, // Tiêm mã Bypass Token trực tiếp vào nền web
+            hook: true,          // Bật bắt link ngầm
+            proxy: true,         // BÍ QUYẾT TỪ CHUYÊN GIA: Ép Native Player dùng Proxy của App
+            server: "AnimeVV",   // BÍ QUYẾT TỪ CHUYÊN GIA: Khai báo máy chủ để App nhận định dạng
             headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                "Referer": "https://animevv.com/"
+                "Referer": BASEURL + "/",
+                "Origin": BASEURL
             }
         });
     } catch (e) {
-        return JSON.stringify({ url: apiUrl, isEmbed: true, hook: true, embedtoplay: true });
+        return JSON.stringify({ url: apiUrl, isEmbed: true, proxy: true, server: "AnimeVV" });
     }
 }
 
