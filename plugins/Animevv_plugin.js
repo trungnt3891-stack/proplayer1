@@ -1,6 +1,6 @@
 // =============================================================================
 // PLUGIN VAX APP: ANIMEVV (animevv.com)
-// BẢN HOÀN THIỆN: GIỮ NGUYÊN GIAO DIỆN + TỐI ƯU CƠ CHẾ BẮT LINK QUA WEBVIEW
+// PHIÊN BẢN: HOÀN THIỆN - BẮT LINK TỰ ĐỘNG BẰNG WEBVIEW (AUTO-SNIFFER)
 // =============================================================================
 
 var BASEURL = "https://animevv.com";
@@ -9,7 +9,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "animevv",
         "name": "AnimeVV",
-        "version": "1.0.2",
+        "version": "1.0.3",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/iconmeo.png",
         "isEnabled": true,
@@ -131,10 +131,12 @@ function parseListResponse(html, url) {
         var rawItems = [];
 
         if (url.indexOf('tim-kiem') !== -1) {
+            // Trang tìm kiếm & thể loại
             if (props.results && props.results.data) {
                 rawItems = props.results.data;
             }
         } else {
+            // Trang chủ
             var slugMatch = url.match(/home_slug=([^&]+)/);
             var slug = slugMatch ? slugMatch[1] : "";
 
@@ -157,6 +159,7 @@ function parseListResponse(html, url) {
             items.push(mapItem(rawItems[j]));
         }
 
+        // Lấy thông tin phân trang
         var currentPage = 1;
         var totalPages = 1;
         if (props.results && props.results.meta) {
@@ -197,11 +200,12 @@ function parseMovieDetail(html, url) {
         }
         detail.category = categoryNames.join(", ");
 
+        // Xử lý danh sách tập phim
         var episodes = [];
         for (var k = 0; k < episodesData.length; k++) {
             var ep = episodesData[k];
             
-            // Lắp ráp chuẩn xác link xem phim dựa theo dữ liệu thực tế
+            // Xây dựng chính xác link xem phim nguyên bản (VD: /xem-phim/thon-phe-tinh-khong.../04-89338)
             var watchUrl = BASEURL + "/xem-phim/" + anime.slug + "/" + ep.watchKey;
 
             episodes.push({
@@ -224,33 +228,18 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// --- HÀM 3: XỬ LÝ PHÁT VIDEO KHI BẤM VÀO TẬP ---
+// --- HÀM 3: XỬ LÝ PHÁT VIDEO ---
 function parseDetailResponse(html, apiUrl) {
-    try {
-        var playUrl = apiUrl;
-        
-        // Cố gắng tìm ID nguồn phát ẩn (nếu web hỗ trợ Embed URL độc lập) để lách qua giao diện nặng
-        var data = getInertiaData(html);
-        if (data && data.props && data.props.sources) {
-            var sources = data.props.sources;
-            for (var i = 0; i < sources.length; i++) {
-                if (sources[i].mode === 'embed' || sources[i].type === 'embed') {
-                    // Cấu trúc dự phòng nếu web có hệ thống iframe
-                    playUrl = BASEURL + "/embed/" + sources[i].id;
-                    break;
-                }
-            }
+    // apiUrl ở đây chính là link xem phim (watchUrl) ta truyền từ Hàm 2.
+    // Xóa bỏ code "đoán" iframe cũ gây lỗi 404.
+    // Trả thẳng link về hệ thống Auto-Sniffer của VAX App thông qua isEmbed: true
+    return JSON.stringify({
+        url: apiUrl,
+        isEmbed: true,
+        headers: {
+            "Referer": BASEURL + "/"
         }
-
-        // BẮT BUỘC TRẢ VỀ isEmbed: true
-        // Vì link phim giấu kín sau API và bị chặn bởi Cloudflare, App phải dùng Webview ngầm (Trình tự động bắt link)
-        return JSON.stringify({
-            url: playUrl,
-            isEmbed: true
-        });
-    } catch (e) {
-        return JSON.stringify({ url: apiUrl, isEmbed: true });
-    }
+    });
 }
 
 function parseEmbedResponse(html, sourceUrl) {
