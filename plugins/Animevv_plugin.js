@@ -1,6 +1,6 @@
 // =============================================================================
 // PLUGIN VAX APP: ANIMEVV (animevv.com)
-// PHIÊN BẢN CHUẨN MỰC: ÉP MỞ WEBVIEW PLAYER THÀNH CÔNG 100%
+// PHIÊN BẢN: NATIVE EPISODE SELECTOR + WEBVIEW PLAYER FULLSCREEN
 // =============================================================================
 
 var BASEURL = "https://animevv.com";
@@ -9,7 +9,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "animevv",
         "name": "AnimeVV",
-        "version": "1.0.9",
+        "version": "1.1.0",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/iconmeo.png",
         "isEnabled": true,
@@ -177,7 +177,7 @@ function parseSearchResponse(html, url) {
     return parseListResponse(html, url);
 }
 
-// --- HÀM 2: LẤY CHI TIẾT & DANH SÁCH TẬP ---
+// --- HÀM 2: LẤY CHI TIẾT & ĐƯA TẬP PHIM RA GIAO DIỆN NATIVE ---
 function parseMovieDetail(html, url) {
     try {
         var data = getInertiaData(html);
@@ -200,6 +200,7 @@ function parseMovieDetail(html, url) {
         var episodes = [];
         for (var k = 0; k < episodesData.length; k++) {
             var ep = episodesData[k];
+            // Link truyền xuống hàm dưới chính là trang xem phim chứa Webview
             var watchUrl = BASEURL + "/xem-phim/" + anime.slug + "/" + ep.watchKey;
 
             episodes.push({
@@ -222,20 +223,27 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// --- HÀM 3: ÉP MỞ BẰNG GIAO DIỆN WEBVIEW ---
-function parseDetailResponse(html, apiUrl) {
-    // Trả về isEmbed: true để yêu cầu Webview tải đường link
+// --- HÀM 3: BẬT WEBVIEW XEM PHIM NGAY KHI NGƯỜI DÙNG BẤM CHỌN TẬP ---
+function parseDetailResponse(html, url) {
+    // Custom JS ép Video giãn 100% màn hình, xoá mọi dấu vết giao diện web rác (giống bản vsmov)
+    var customJs = "document.querySelectorAll('header, footer, nav, aside, .sidebar, .comments, [id^=\"comment\"], .ads').forEach(function(e){if(e) e.style.display='none'});";
+    customJs += "var v = document.querySelector('#player, .jwplayer, video, iframe'); if(v){ v.style.width='100vw'; v.style.height='100vh'; v.style.position='fixed'; v.style.top='0'; v.style.left='0'; v.style.zIndex='999999'; v.style.backgroundColor='#000'; }";
+    
     return JSON.stringify({
-        url: apiUrl,
-        isEmbed: true
+        url: url, // Trả lại đúng link /xem-phim/ nhận từ trên
+        isEmbed: true, // Kích hoạt Webview
+        headers: { 
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Referer": "https://animevv.com/",
+            "Custom-Js": customJs 
+        }
     });
 }
 
-function parseEmbedResponse(html, sourceUrl) {
-    // BÍ QUYẾT Ở ĐÂY: Vẫn phải trả về isEmbed: true
-    // Điều này nói với App rằng: "Đừng ném link này cho ExoPlayer, hãy chiếu trực tiếp trên màn hình Webview"
+function parseEmbedResponse(html, url) {
+    // Bắt buộc trả về isEmbed: true để chặn luồng đẩy về ExoPlayer, khóa chết trên WebView
     return JSON.stringify({ 
-        url: sourceUrl, 
+        url: url, 
         isEmbed: true 
     });
 }
