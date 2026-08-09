@@ -6,8 +6,8 @@ var BASEURL = "https://tinhlagi.pro/sport";
 
 function getManifest() {
     return JSON.stringify({
-        "id": "tinhlagi_tv",
-        "name": "Tinhlagi TV - Thể Thao",
+        "id": "BóngĐá TV",
+        "name": "Bóng Đá TV",
         "description": "Trực tiếp bóng đá (Hiển thị Giải đấu, Ngày/Giờ thi đấu, lọc Live & Sắp diễn ra 6h).",
         "version": "1.6.0",
         "baseUrl": BASEURL,
