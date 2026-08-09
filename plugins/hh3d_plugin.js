@@ -1,5 +1,5 @@
 // https://bilutv.asia
-BASEURL = "https://yanhh3d.ee";
+BASEURL = "https://yanhh3d.fan";
 
 function getManifest() {
     return JSON.stringify({
