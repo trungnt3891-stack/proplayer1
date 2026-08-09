@@ -1,5 +1,6 @@
 // =============================================================================
 // PLUGIN MOVIE SCRAPER: VSMOV.COM (NATIVE PLAYER - BẮT LINK TRỰC TIẾP)
+// TỐI ƯU TỐC ĐỘ: KHAI BÁO MIMETYPE ĐỂ TRIỆT TIÊU LỖI NHÁY LOAD
 // =============================================================================
 
 var DOMAIN = "https://vsmov.com";
@@ -9,12 +10,11 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.6.5",
+        "version": "1.6.6",
         "baseUrl": DOMAIN,
         "iconUrl": DOMAIN + "/favicon-vsm.png",
         "isEnabled": true,
         "type": "MOVIE"
-        // Đã gỡ bỏ "playerType": "embed" để cho phép phát qua Native Player
     });
 }
 
@@ -205,7 +205,6 @@ function parseMovieDetail(html, url) {
 
         var servers = [];
         
-        // Quét tìm mảng dữ liệu chứa link video trong thẻ script
         var episodesJson = html.match(/var\s+episodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
         if (!episodesJson) {
             episodesJson = html.match(/var\s+embedEpisodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
@@ -221,11 +220,10 @@ function parseMovieDetail(html, url) {
 
                 for (var j = 0; j < sList.length; j++) {
                     var ep = sList[j];
-                    // QUAN TRỌNG: Lấy trực tiếp link m3u8 hoặc mp4 thay vì link embed
                     var mediaLink = ep.m3u8 || ep.link || ep.embed || ep.link_embed || "";
                     if (mediaLink) {
                         serverEps.push({
-                            id: mediaLink, // Đưa thẳng link stream gốc vào ID
+                            id: mediaLink, 
                             name: ep.name || "Tập " + (j + 1),
                             slug: ep.slug || ""
                         });
@@ -263,10 +261,18 @@ function parseDetailResponse(html, url) {
     try {
         var targetUrl = url;
 
-        // Trả về cờ isEmbed: false để ép hệ thống dùng Trình phát Native thay vì WebView
+        // XỬ LÝ TỐC ĐỘ CAO: Khai báo sẵn MimeType để Native Player không cần mò mẫm format
+        var mimeType = "";
+        if (targetUrl.indexOf(".m3u8") !== -1) {
+            mimeType = "application/x-mpegURL"; // Ép lõi HLS khởi động ngay lập tức
+        } else if (targetUrl.indexOf(".mp4") !== -1) {
+            mimeType = "video/mp4";
+        }
+
         return JSON.stringify({
             url: targetUrl,
-            isEmbed: false, 
+            isEmbed: false,
+            mimeType: mimeType, // Bí quyết chấm dứt lỗi nháy nhanh 1 nhịp ở Player
             headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                 "Referer": "https://vsmov.com/",
