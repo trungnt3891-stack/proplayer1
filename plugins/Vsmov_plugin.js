@@ -1,7 +1,7 @@
 // =============================================================================
 // PLUGIN MOVIE SCRAPER: VSMOV.COM 
 // CHIẾN THUẬT: API LẤY TẬP + SLUG TĨNH (LƯU LỊCH SỬ) + BÓC VỎ EMBED PHÁT NATIVE
-// CẬP NHẬT: TÍCH HỢP TÌM KIẾM BẰNG API CHUẨN (GIỮ NGUYÊN CODE LÕI CỦA BẠN)
+// CẬP NHẬT: SỬA LỖI TÌM KIẾM ĐÚNG ENDPOINT API (/api/tim-kiem)
 // =============================================================================
 
 var DOMAIN = "https://vsmov.com";
@@ -10,12 +10,11 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.9.3",
+        "version": "1.9.4",
         "baseUrl": DOMAIN,
         "iconUrl": DOMAIN + "/favicon-vsm.png",
         "isEnabled": true,
         "type": "MOVIE"
-        // Đã xóa "playerType": "embed" để trả lại quyền phát bằng Native Player
     });
 }
 
@@ -87,7 +86,7 @@ function getUrlList(slug, filtersJson) {
     return DOMAIN + "/" + basePath + "/" + slug + "?page=" + page;
 }
 
-// CHỈ SỬA: SỬ DỤNG LINK API ĐỂ TÌM KIẾM NHANH NHẤT (THEO GỢI Ý CỦA BẠN)
+// CẬP NHẬT ĐÚNG URL TÌM KIẾM DỰA VÀO TÀI LIỆU API
 function getUrlSearch(keyword, filtersJson) {
     var page = 1;
     try {
@@ -100,7 +99,8 @@ function getUrlSearch(keyword, filtersJson) {
     } catch (e) {}
     
     var safeKeyword = encodeURIComponent(decodeURIComponent(keyword));
-    return DOMAIN + "/api/films/search?keyword=" + safeKeyword + "&page=" + page;
+    // Sửa thành endpoint chuẩn: /api/tim-kiem
+    return DOMAIN + "/api/tim-kiem?keyword=" + safeKeyword + "&limit=20&page=" + page;
 }
 
 function getUrlDetail(slug) {
@@ -109,7 +109,6 @@ function getUrlDetail(slug) {
     if (slug.indexOf('/phim/') !== -1) id = slug.split('/phim/')[1].split('?')[0];
     else if (slug.indexOf('http') === 0) id = slug.split('/').pop().split('?')[0];
     
-    // Gọi thẳng vào API mượt mà của VSMOV
     return DOMAIN + "/api/phim/" + id;
 }
 
@@ -164,26 +163,27 @@ function parseListResponse(html) {
     }
 }
 
-// CHỈ SỬA: ĐỌC DỮ LIỆU JSON TỪ API TÌM KIẾM CỦA VSMOV
+// BÓC TÁCH KẾT QUẢ TỪ API "/api/tim-kiem"
 function parseSearchResponse(jsonString) {
     try {
         if (jsonString.trim().indexOf('{') === 0) {
             var data = JSON.parse(jsonString);
-            if (data.status && data.items) {
+            // Hỗ trợ cả trường hợp API trả về data.items hoặc data.data.items
+            var itemsArray = data.items || (data.data && data.data.items) || [];
+            
+            if (data.status && itemsArray.length > 0) {
                 var items = [];
-                // Nối tên miền ảnh nếu server trả về đường dẫn tương đối
-                var imgDomain = data.APP_IMAGE_URL || data.pathImage || (DOMAIN + "/storage/images");
+                var imgDomain = data.APP_IMAGE_URL || data.pathImage || (data.data && data.data.APP_DOMAIN_CDN_IMAGE) || (DOMAIN + "/storage/images");
                 
-                for (var i = 0; i < data.items.length; i++) {
-                    var item = data.items[i];
+                for (var i = 0; i < itemsArray.length; i++) {
+                    var item = itemsArray[i];
                     var thumb = item.thumb_url || item.poster_url || "";
                     if (thumb && thumb.indexOf("http") !== 0) {
                         thumb = imgDomain + "/" + thumb;
                     }
 
                     items.push({
-                        // Truyền thẳng slug vào API chi tiết để click vào là mở phim ngay
-                        id: DOMAIN + "/api/phim/" + item.slug,
+                        id: DOMAIN + "/api/phim/" + item.slug, 
                         title: item.name,
                         originalTitle: item.origin_name || "",
                         posterUrl: thumb,
@@ -194,8 +194,9 @@ function parseSearchResponse(jsonString) {
                     });
                 }
                 
-                var currentPage = data.paginate ? data.paginate.current_page : 1;
-                var totalPages = data.paginate ? data.paginate.total_page : 1;
+                var paginateData = data.paginate || (data.data && data.data.params && data.data.params.pagination) || {};
+                var currentPage = paginateData.current_page || 1;
+                var totalPages = paginateData.total_page || 1;
                 
                 return JSON.stringify({
                     items: items,
@@ -205,7 +206,6 @@ function parseSearchResponse(jsonString) {
         }
     } catch (e) {}
 
-    // Dự phòng an toàn: Rơi về cạo bằng HTML nếu API bị trục trặc
     return parseListResponse(jsonString);
 }
 
@@ -234,12 +234,10 @@ function parseMovieDetail(jsonString, url) {
                 var ep = sData[j];
                 var mediaLink = ep.link_embed || ep.embed || ep.link || "";
                 
-                // Gán Slug Tĩnh để ứng dụng ghi nhớ lịch sử chuẩn xác
                 var staticSlug = ep.slug || ("tap-" + (j + 1)); 
 
                 if (mediaLink) {
                     serverEps.push({
-                        // ID lúc này là đường link API cộng thêm tham số tập (?ep=tap-1)
                         id: url + "?ep=" + staticSlug, 
                         name: "Tập " + (ep.name || (j + 1)),
                         slug: staticSlug
