@@ -1,6 +1,6 @@
 // =============================================================================
 // PLUGIN VAX: TINHLAGI TV (TINHLAGI.PRO/SPORT)
-// TÍNH NĂNG: TRỰC TIẾP BÓNG ĐÁ & THỂ THAO TỐC ĐỘ CAO
+// TÍNH NĂNG: TRỰC TIẾP BÓNG ĐÁ & THỂ THAO TỐC ĐỘ CAO (TÂM ĐIỂM LIVE)
 // =============================================================================
 
 var BASEURL = "https://tinhlagi.pro/sport";
@@ -9,8 +9,8 @@ function getManifest() {
     return JSON.stringify({
         "id": "tinhlagi_tv",
         "name": "Tinhlagi TV - Thể Thao",
-        "description": "Xem trực tiếp bóng đá, lịch thi đấu, kết quả và m3u8 streaming tốc độ cao.",
-        "version": "1.0.0",
+        "description": "Xem trực tiếp bóng đá tâm điểm đang live, lịch thi đấu và m3u8 streaming tốc độ cao.",
+        "version": "1.1.0",
         "baseUrl": BASEURL,
         "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
         "isEnabled": true,
@@ -28,7 +28,7 @@ function log(msg) {
     }
 }
 
-// Giải mã HTML Entities (&amp; -> &, &quot; -> ")
+// Giải mã HTML Entities (&amp; -> &, &quot; -> ", &#039; -> ')
 function decodeEntities(encodedString) {
     if (!encodedString) return "";
     return encodedString
@@ -45,13 +45,13 @@ function decodeEntities(encodedString) {
 
 function getHomeSections() {
     return JSON.stringify([
-        { slug: 'live', title: '⚽ Trận Đấu Đang Trực Tiếp', type: 'Grid' }
+        { slug: 'live', title: '🔥 Trận Đấu Tâm Điểm Đang Live', type: 'Grid' }
     ]);
 }
 
 function getPrimaryCategories() {
     return JSON.stringify([
-        { name: '⚽ Trực Tiếp Bóng Đá', slug: 'live' }
+        { name: '🔥 Tâm Điểm Đang Live', slug: 'live' }
     ]);
 }
 
@@ -69,7 +69,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// BÓC TÁCH DỮ LIỆU DỰA TRÊN DATA ATTRIBUTES
+// BÓC TÁCH DỮ LIỆU (CHỈ LẤY TRẬN ĐANG LIVE)
 // =============================================================================
 
 function parseListResponse(html, url) {
@@ -81,6 +81,12 @@ function parseListResponse(html, url) {
 
         while ((match = btnRegex.exec(html)) !== null) {
             var attrBlock = match[1];
+            var innerContent = match[2];
+
+            // LỌC: Chỉ giữ lại các trận đang trực tiếp (có badge status-live hoặc 🟢 Live)
+            if (innerContent.indexOf('status-live') === -1 && innerContent.indexOf('🟢 Live') === -1) {
+                continue;
+            }
 
             // Trích xuất các attribute data-*
             var titleMatch = attrBlock.match(/data-title="([^"]*)"/i);
@@ -90,6 +96,7 @@ function parseListResponse(html, url) {
             var timeMatch = attrBlock.match(/data-time="([^"]*)"/i);
             var sourceMatch = attrBlock.match(/data-source="([^"]*)"/i);
             var leagueMatch = attrBlock.match(/data-league="([^"]*)"/i);
+            var sourcesMatch = attrBlock.match(/data-sources="([^"]*)"/i);
 
             var title = titleMatch ? decodeEntities(titleMatch[1]).trim() : "Trực tiếp Bóng Đá";
             var streamUrl = urlMatch ? decodeEntities(urlMatch[1]).trim() : "";
@@ -99,9 +106,19 @@ function parseListResponse(html, url) {
             var source = sourceMatch ? decodeEntities(sourceMatch[1]).trim() : "";
             var league = leagueMatch ? decodeEntities(leagueMatch[1]).trim() : "";
 
+            // Trích xuất danh sách đa luồng / bình luận viên từ data-sources
+            var parsedSources = [];
+            if (sourcesMatch) {
+                try {
+                    var decodedSourcesStr = decodeEntities(sourcesMatch[1]);
+                    parsedSources = JSON.parse(decodedSourcesStr);
+                } catch (err) {
+                    log("Lỗi parse data-sources: " + err);
+                }
+            }
+
             // Xử lý thông tin hiển thị phụ
             var infoParts = [];
-            
             if (minute) {
                 infoParts.push("⏱️ " + minute + "'");
             } else if (time) {
@@ -109,22 +126,30 @@ function parseListResponse(html, url) {
             }
 
             if (score) {
-                infoParts.push("Tỷ số: " + score);
+                infoParts.push("⚽ " + score);
             }
 
             if (source) {
                 infoParts.push(source);
             }
 
-            var episodeCurrent = infoParts.length > 0 ? infoParts.join(" • ") : "🟢 Live";
+            var episodeCurrent = infoParts.length > 0 ? infoParts.join(" • ") : "🟢 LIVE";
 
-            if (streamUrl) {
+            if (streamUrl || parsedSources.length > 0) {
+                // Đóng gói thông tin trận đấu để truyền trực tiếp cho parseMovieDetail
+                var detailPayload = {
+                    title: title,
+                    mainUrl: streamUrl,
+                    sources: parsedSources,
+                    league: league
+                };
+
                 items.push({
-                    "id": streamUrl,
+                    "id": "payload:" + encodeURIComponent(JSON.stringify(detailPayload)),
                     "title": title,
                     "posterUrl": "https://tinhlagi.pro/sport/sanbong.jpg",
                     "backdropUrl": "https://tinhlagi.pro/sport/sanbong.jpg",
-                    "quality": score ? ("FHD [" + score + "]") : "FHD",
+                    "quality": score ? ("LIVE [" + score + "]") : "LIVE FHD",
                     "episode_current": episodeCurrent
                 });
             }
@@ -143,33 +168,64 @@ function parseListResponse(html, url) {
 
 function parseSearchResponse(html) { return parseListResponse(html, ""); }
 
-// Bóc tách chi tiết luồng phát m3u8
+// Bóc tách chi tiết luồng phát m3u8 và hỗ trợ đa server / bình luận viên
 function parseMovieDetail(html, url) {
     try {
-        var streamUrl = url;
+        var title = "Trực Tiếp Bóng Đá";
+        var episodes = [];
 
-        // Nếu URL là link proxy m3u8 từ tinhlagi.pro
+        if (url.indexOf("payload:") === 0) {
+            var jsonStr = decodeURIComponent(url.replace("payload:", ""));
+            var payload = JSON.parse(jsonStr);
+            title = payload.title || title;
+
+            if (payload.sources && payload.sources.length > 0) {
+                for (var i = 0; i < payload.sources.length; i++) {
+                    var s = payload.sources[i];
+                    episodes.push({
+                        id: s.link,
+                        name: s.name || ("Nguồn " + (i + 1)),
+                        slug: "stream-" + i
+                    });
+                }
+            } else if (payload.mainUrl) {
+                episodes.push({
+                    id: payload.mainUrl,
+                    name: "Luồng Chính FHD",
+                    slug: "main-stream"
+                });
+            }
+        } else {
+            episodes.push({
+                id: url,
+                name: "Link Server Chính",
+                slug: "main-stream"
+            });
+        }
+
         return JSON.stringify({
-            id: streamUrl,
-            title: "Trực Tiếp TinhlagiTV",
+            id: url,
+            title: title,
             posterUrl: "https://tinhlagi.pro/sport/sanbong.jpg",
             backdropUrl: "https://tinhlagi.pro/sport/sanbong.jpg",
             description: "Xem bóng đá trực tiếp tốc độ cao không giật lag.",
             servers: [
                 {
-                    name: "Luồng Trực Tiếp FHD",
-                    episodes: [
-                        {
-                            id: streamUrl,
-                            name: "Link Server Chính",
-                            slug: "main-stream"
-                        }
-                    ]
+                    name: "Danh Sách Luồng Phát / BLV",
+                    episodes: episodes
                 }
             ]
         });
     } catch (e) {
-        return JSON.stringify({ id: url, title: "Trực Tiếp Bóng Đá", servers: [] });
+        log("Lỗi parseMovieDetail: " + e);
+        return JSON.stringify({
+            id: url,
+            title: "Trực Tiếp Bóng Đá",
+            servers: [{
+                name: "Luồng Mặc Định",
+                episodes: [{ id: url, name: "Link Trực Tiếp", slug: "main" }]
+            }]
+        });
     }
 }
 
