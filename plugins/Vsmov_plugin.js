@@ -1,6 +1,5 @@
 // =============================================================================
-// PLUGIN MOVIE SCRAPER: VSMOV.COM (NATIVE PLAYER - BẮT LINK TRỰC TIẾP)
-// TỐI ƯU TỐC ĐỘ: KHAI BÁO MIMETYPE ĐỂ TRIỆT TIÊU LỖI NHÁY LOAD
+// PLUGIN MOVIE SCRAPER: VSMOV.COM (NATIVE PLAYER - BẮT TẬP & CHIẾU TRỰC TIẾP)
 // =============================================================================
 
 var DOMAIN = "https://vsmov.com";
@@ -10,7 +9,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.6.6",
+        "version": "1.6.7",
         "baseUrl": DOMAIN,
         "iconUrl": DOMAIN + "/favicon-vsm.png",
         "isEnabled": true,
@@ -190,7 +189,7 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// BÓC TÁCH CHI TIẾT VÀ TÌM KIẾM LINK STREAM ĐỂ HIỂN THỊ CÁC TẬP PHIM
+// BÓC TÁCH CHI TIẾT VÀ TÌM KIẾM LINK STREAM TỪ BIẾN JSON ĐỂ HIỂN THỊ CÁC TẬP PHIM
 function parseMovieDetail(html, url) {
     try {
         var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
@@ -205,6 +204,7 @@ function parseMovieDetail(html, url) {
 
         var servers = [];
         
+        // Quét tìm mảng dữ liệu chứa link video trong thẻ script (Ưu tiên episodes hoặc embedEpisodes)
         var episodesJson = html.match(/var\s+episodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
         if (!episodesJson) {
             episodesJson = html.match(/var\s+embedEpisodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
@@ -220,10 +220,12 @@ function parseMovieDetail(html, url) {
 
                 for (var j = 0; j < sList.length; j++) {
                     var ep = sList[j];
-                    var mediaLink = ep.m3u8 || ep.link || ep.embed || ep.link_embed || "";
+                    // Lấy trực tiếp link m3u8 hoặc embed từ JSON
+                    var mediaLink = ep.m3u8 || ep.embed || ep.link || ep.link_embed || "";
+                    
                     if (mediaLink) {
                         serverEps.push({
-                            id: mediaLink, 
+                            id: mediaLink, // Đưa thẳng link stream gốc vào ID
                             name: ep.name || "Tập " + (j + 1),
                             slug: ep.slug || ""
                         });
@@ -231,8 +233,10 @@ function parseMovieDetail(html, url) {
                 }
 
                 if (serverEps.length > 0) {
+                    // Xóa các ký tự xuống dòng, khoảng trắng thừa trong tên server (Ví dụ: "Vietsub \n #1" -> "Vietsub #1")
+                    sName = sName.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
                     servers.push({
-                        name: sName.replace(/[\r\n\t]+/g, ' ').trim(),
+                        name: sName,
                         episodes: serverEps
                     });
                 }
@@ -250,38 +254,27 @@ function parseMovieDetail(html, url) {
     } catch (error) {
         return JSON.stringify({
             id: url,
-            title: "Phim Mới",
+            title: "Phim",
             servers: []
         });
     }
 }
 
-// BẮT LINK CHIẾU LUÔN TRÊN TRÌNH PHÁT GỐC (NATIVE PLAYER)
+// CHIẾU LUÔN TRÊN TRÌNH PHÁT GỐC (NATIVE PLAYER)
 function parseDetailResponse(html, url) {
     try {
-        var targetUrl = url;
-
-        // XỬ LÝ TỐC ĐỘ CAO: Khai báo sẵn MimeType để Native Player không cần mò mẫm format
-        var mimeType = "";
-        if (targetUrl.indexOf(".m3u8") !== -1) {
-            mimeType = "application/x-mpegURL"; // Ép lõi HLS khởi động ngay lập tức
-        } else if (targetUrl.indexOf(".mp4") !== -1) {
-            mimeType = "video/mp4";
-        }
-
+        // Trả về cờ isEmbed: false để ép hệ thống phát trực tiếp
+        // App sẽ tự động tóm link url được truyền từ mảng episodes ở trên
         return JSON.stringify({
-            url: targetUrl,
-            isEmbed: false,
-            mimeType: mimeType, // Bí quyết chấm dứt lỗi nháy nhanh 1 nhịp ở Player
+            url: url,
+            isEmbed: false, 
             headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                 "Referer": "https://vsmov.com/",
                 "Origin": "https://vsmov.com"
-            },
-            subtitles: []
+            }
         });
     } catch (e) {
-        log("Lỗi parseDetailResponse: " + e);
         return JSON.stringify({ url: url, isEmbed: false, headers: {} });
     }
 }
