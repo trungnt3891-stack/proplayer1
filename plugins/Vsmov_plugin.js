@@ -1,5 +1,6 @@
 // =============================================================================
-// PLUGIN MOVIE SCRAPER: VSMOV.COM (NATIVE PLAYER - BẮT LINK TỰ ĐỘNG)
+// PLUGIN MOVIE SCRAPER: VSMOV.COM
+// CHIẾN THUẬT: BẮT LINK ẨN BẰNG HOOK + EMBEDTOPLAY -> CHIẾU NATIVE PLAYER
 // =============================================================================
 
 var DOMAIN = "https://vsmov.com";
@@ -9,7 +10,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.6.8",
+        "version": "1.7.1",
         "baseUrl": DOMAIN,
         "iconUrl": DOMAIN + "/favicon-vsm.png",
         "isEnabled": true,
@@ -189,7 +190,7 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// BÓC TÁCH CHI TIẾT VÀ QUÉT JSON ĐỂ LẤY TOÀN BỘ TẬP PHIM RA GIAO DIỆN
+// BÓC TÁCH TẬP PHIM TỪ JSON VÀ ĐẨY RA NGOÀI GIAO DIỆN NATIVE
 function parseMovieDetail(html, url) {
     try {
         var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
@@ -203,8 +204,6 @@ function parseMovieDetail(html, url) {
         var desc = descMatch ? descMatch[1].trim() : "";
 
         var servers = [];
-        
-        // Quét tìm mảng dữ liệu chứa link video trong thẻ script
         var episodesJson = html.match(/var\s+episodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
         if (!episodesJson) {
             episodesJson = html.match(/var\s+embedEpisodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
@@ -220,11 +219,11 @@ function parseMovieDetail(html, url) {
 
                 for (var j = 0; j < sList.length; j++) {
                     var ep = sList[j];
-                    // Lấy đường link Iframe (vd: https://v1.streamvsmov.com/video/eb0041...)
+                    // Thu thập link Embed iframe (ví dụ: https://v1.streamvsmov.com/video/...)
                     var mediaLink = ep.embed || ep.link_embed || ep.m3u8 || ep.link || "";
                     if (mediaLink) {
                         serverEps.push({
-                            id: mediaLink, // Đưa link Embed làm ID để gửi xuống parseDetailResponse
+                            id: mediaLink, 
                             name: ep.name || "Tập " + (j + 1),
                             slug: ep.slug || ""
                         });
@@ -233,7 +232,7 @@ function parseMovieDetail(html, url) {
 
                 if (serverEps.length > 0) {
                     servers.push({
-                        name: sName.replace(/[\r\n\t]+/g, ' ').trim(),
+                        name: sName.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim(),
                         episodes: serverEps
                     });
                 }
@@ -249,38 +248,35 @@ function parseMovieDetail(html, url) {
             servers: servers 
         });
     } catch (error) {
-        return JSON.stringify({
-            id: url,
-            title: "Phim",
-            servers: []
-        });
+        return JSON.stringify({ id: url, title: "Phim", servers: [] });
     }
 }
 
-// BẬT TRÌNH BẮT LINK TỰ ĐỘNG CỦA VAX APP (isEmbed: true)
+// BẬT CƠ CHẾ HOOK + EMBEDTOPLAY ĐỂ BẮT LINK TỰ ĐỘNG VÀ PHÁT NATIVE
 function parseDetailResponse(html, url) {
     try {
-        var targetUrl = url;
+        // Đoạn JS mồi: Giả lập thao tác click vào nút Play của web để ép video tải luồng mạng
+        var scriptTrigger = "setTimeout(function(){ document.body.click(); var btn=document.querySelector('.jw-icon-display, .vjs-big-play-button, .plyr__control--overlaid, #player'); if(btn) btn.click(); var vid=document.querySelector('video'); if(vid){ vid.muted=true; vid.play(); } }, 1500);";
 
-        // Trả về cờ isEmbed: true để nói với App: 
-        // "Đây là link Iframe, hãy dùng trình duyệt ngầm mở nó ra để tóm lấy file .m3u8 bên trong, sau đó phát lên Native Player nhé"
         return JSON.stringify({
-            url: targetUrl,
-            isEmbed: true,
-            hook: true, // Ép App bắt link ngay lập tức
+            url: url, // Đây là URL Iframe lấy từ hàm trên
+            isEmbed: true,       // Khởi tạo Webview ẩn
+            hook: true,          // Bật công tắc Hook bắt link
+            embedtoplay: true,   // Bắt được link phát ngay bằng Native Player, xóa Webview
+            script: scriptTrigger, // Chạy mã JS mồi để kích hoạt Video
             headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                "Referer": "https://vsmov.com/",
-                "Origin": "https://vsmov.com"
+                "Referer": "https://vsmov.com/"
             }
         });
     } catch (e) {
-        return JSON.stringify({ url: url, isEmbed: true, hook: true });
+        return JSON.stringify({ url: url, isEmbed: true, hook: true, embedtoplay: true });
     }
 }
 
+// KHÔNG CẦN PARSE EMBED VÌ HOOK SẼ TỰ ĐỘNG CHẶN REQUEST TRƯỚC KHI TRANG TẢI XONG
 function parseEmbedResponse(html, url) {
-    return JSON.stringify({ url: url, isEmbed: false });
+    return JSON.stringify({ url: url, isEmbed: true, hook: true, embedtoplay: true });
 }
 
 function parseCategoriesResponse(apiResponseJson) { return "[]"; }
