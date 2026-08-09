@@ -1,6 +1,6 @@
 // =============================================================================
 // PLUGIN MOVIE SCRAPER: VSMOV.COM 
-// CHIẾN THUẬT: API JSON GỐC LẤY TẬP + ÉP MỞ TRÌNH PHÁT WEBVIEW (CÓ VIETSUB)
+// CHIẾN THUẬT: SỬ DỤNG SLUG ĐỂ ĐỒNG BỘ LỊCH SỬ XEM PHIM VĨNH VIỄN + WEBVIEW
 // =============================================================================
 
 var DOMAIN = "https://vsmov.com";
@@ -9,12 +9,12 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.8.3",
+        "version": "1.8.4",
         "baseUrl": DOMAIN,
         "iconUrl": DOMAIN + "/favicon-vsm.png",
         "isEnabled": true,
         "type": "MOVIE",
-        "playerType": "embed" // BẮT BUỘC PHẢI CÓ ĐỂ APP HIỂN THỊ WEBVIEW PLAYER
+        "playerType": "embed" // Bắt buộc để ép giao diện mở Webview Player
     });
 }
 
@@ -70,9 +70,7 @@ function getFilterConfig() {
 function getUrlList(slug, filtersJson) {
     var page = 1;
     try {
-        if (slug && slug.indexOf("http") === 0) {
-            return slug;
-        }
+        if (slug && slug.indexOf("http") === 0) return slug;
         if (typeof filtersJson === 'string' && filtersJson !== "") {
             var fixedJson = filtersJson.replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/:,/g, ':');
             page = JSON.parse(fixedJson).page || 1;
@@ -106,11 +104,10 @@ function getUrlSearch(keyword, filtersJson) {
 function getUrlDetail(slug) {
     if (!slug) return "";
     var id = slug;
-    // Tách lấy slug phim chuẩn từ URL để gọi API
     if (slug.indexOf('/phim/') !== -1) id = slug.split('/phim/')[1].split('?')[0];
     else if (slug.indexOf('http') === 0) id = slug.split('/').pop().split('?')[0];
     
-    // Gọi API để lấy thẳng JSON chi tiết phim siêu nhanh
+    // Gọi thẳng vào API siêu mượt của VSMOV
     return DOMAIN + "/api/phim/" + id;
 }
 
@@ -167,7 +164,7 @@ function parseListResponse(html) {
 
 function parseSearchResponse(html) { return parseListResponse(html); }
 
-// SỬ DỤNG JSON API TỪ VSMOV ĐỂ LOAD TẬP PHIM RA NGOÀI GIAO DIỆN
+// SỬ DỤNG JSON API VÀ ĐẶT MỎ NEO (SLUG) CHO LỊCH SỬ XEM PHIM
 function parseMovieDetail(jsonString, url) {
     try {
         var data = JSON.parse(jsonString);
@@ -187,13 +184,16 @@ function parseMovieDetail(jsonString, url) {
 
             for (var j = 0; j < sData.length; j++) {
                 var ep = sData[j];
-                // Lấy link Iframe
                 var mediaLink = ep.link_embed || ep.embed || ep.link || "";
+                
+                // BÍ QUYẾT: Ép ID thành slug tĩnh (vd: "tap-1") để App lưu lịch sử bất tử
+                var staticSlug = ep.slug || ("tap-" + (j + 1)); 
+
                 if (mediaLink) {
                     serverEps.push({
-                        id: mediaLink, 
+                        id: staticSlug, // Không dùng link dài nữa
                         name: "Tập " + (ep.name || (j + 1)),
-                        slug: ep.slug || ""
+                        slug: staticSlug
                     });
                 }
             }
@@ -219,31 +219,56 @@ function parseMovieDetail(jsonString, url) {
     }
 }
 
-// BẬT WEBVIEW: HIỂN THỊ LINK EMBED RA TOÀN MÀN HÌNH NGUYÊN BẢN CỦA VSMOV
+// LỤC LẠI JSON ĐỂ TÌM LINK IFRAME MỚI NHẤT MỖI KHI BẤM XEM
 function parseDetailResponse(html, url) {
     try {
-        var targetUrl = url;
+        var targetUrl = url; // Mặc định url đang mang giá trị slug (vd: tap-1)
+
+        // Tra cứu ngược lại bảng JSON để lấy cái link Embed
+        if (targetUrl.indexOf('http') === -1) {
+            var data = JSON.parse(html);
+            var epsList = data.episodes || [];
+            
+            for (var i = 0; i < epsList.length; i++) {
+                var sData = epsList[i].server_data || epsList[i].list || [];
+                for (var j = 0; j < sData.length; j++) {
+                    var ep = sData[j];
+                    var epSlug = ep.slug || ("tap-" + (j + 1));
+                    
+                    // Nếu slug khớp với tập người dùng vừa bấm
+                    if (epSlug === url) {
+                        targetUrl = ep.link_embed || ep.embed || ep.link || "";
+                        break;
+                    }
+                }
+                if (targetUrl.indexOf('http') === 0) break;
+            }
+        }
+
+        // Chuẩn hóa link
         if (targetUrl && targetUrl.indexOf("http") !== 0) {
             targetUrl = "https://vsmov.com" + (targetUrl.startsWith('/') ? targetUrl : '/' + targetUrl);
         }
 
+        // CSS ép giãn Full màn hình Webview, xóa sạch dấu vết quảng cáo, header
+        var customJs = "document.body.style.margin='0'; document.body.style.padding='0'; document.body.style.overflow='hidden'; document.body.style.backgroundColor='#000';";
+        customJs += "var v=document.querySelector('video, iframe, #player, .jwplayer'); if(v){ v.style.width='100vw'; v.style.height='100vh'; v.style.position='fixed'; v.style.top='0'; v.style.left='0'; v.style.zIndex='999999'; }";
+
         return JSON.stringify({
-            url: targetUrl,
+            url: targetUrl, // Link Iframe tươi mới nhất vừa móc từ API
             isEmbed: true, 
             headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                "Referer": "https://vsmov.com/"
-            },
-            subtitles: [] // Bỏ trống vì Webview đã tự lo việc render phụ đề cứng
+                "Referer": DOMAIN + "/",
+                "Custom-Js": customJs
+            }
         });
     } catch (e) {
-        log("Lỗi parseDetailResponse: " + e);
-        return JSON.stringify({ url: url, isEmbed: true, headers: {} });
+        return JSON.stringify({ url: url, isEmbed: true });
     }
 }
 
 function parseEmbedResponse(html, url) {
-    // Khóa chặt luồng, ép App bắt buộc mở giao diện Webview
     return JSON.stringify({ url: url, isEmbed: true });
 }
 
