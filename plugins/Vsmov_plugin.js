@@ -1,7 +1,6 @@
 // =============================================================================
 // PLUGIN MOVIE SCRAPER: VSMOV.COM 
-// CHIẾN THUẬT: API LẤY TẬP + SLUG TĨNH (LƯU LỊCH SỬ) + BÓC VỎ EMBED PHÁT NATIVE
-// CẬP NHẬT: SỬA LỖI TÌM KIẾM ĐÚNG ENDPOINT API (/api/tim-kiem)
+// CHIẾN THUẬT: API TÌM KIẾM + SLUG TĨNH (KÈM ID SERVER) + BÓC VỎ NATIVE PLAYER
 // =============================================================================
 
 var DOMAIN = "https://vsmov.com";
@@ -10,7 +9,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.9.4",
+        "version": "1.9.5",
         "baseUrl": DOMAIN,
         "iconUrl": DOMAIN + "/favicon-vsm.png",
         "isEnabled": true,
@@ -86,7 +85,6 @@ function getUrlList(slug, filtersJson) {
     return DOMAIN + "/" + basePath + "/" + slug + "?page=" + page;
 }
 
-// CẬP NHẬT ĐÚNG URL TÌM KIẾM DỰA VÀO TÀI LIỆU API
 function getUrlSearch(keyword, filtersJson) {
     var page = 1;
     try {
@@ -99,7 +97,6 @@ function getUrlSearch(keyword, filtersJson) {
     } catch (e) {}
     
     var safeKeyword = encodeURIComponent(decodeURIComponent(keyword));
-    // Sửa thành endpoint chuẩn: /api/tim-kiem
     return DOMAIN + "/api/tim-kiem?keyword=" + safeKeyword + "&limit=20&page=" + page;
 }
 
@@ -163,12 +160,10 @@ function parseListResponse(html) {
     }
 }
 
-// BÓC TÁCH KẾT QUẢ TỪ API "/api/tim-kiem"
 function parseSearchResponse(jsonString) {
     try {
         if (jsonString.trim().indexOf('{') === 0) {
             var data = JSON.parse(jsonString);
-            // Hỗ trợ cả trường hợp API trả về data.items hoặc data.data.items
             var itemsArray = data.items || (data.data && data.data.items) || [];
             
             if (data.status && itemsArray.length > 0) {
@@ -209,10 +204,7 @@ function parseSearchResponse(jsonString) {
     return parseListResponse(jsonString);
 }
 
-// =============================================================================
-// PHẦN CODE LÕI ĐANG CHẠY ỔN ĐỊNH CỦA BẠN (GIỮ NGUYÊN 100%)
-// =============================================================================
-
+// BỔ SUNG SERVER INDEX VÀO MỎ NEO ĐỂ TRÁNH LẪN LỘN VIETSUB / THUYẾT MINH
 function parseMovieDetail(jsonString, url) {
     try {
         var data = JSON.parse(jsonString);
@@ -238,7 +230,8 @@ function parseMovieDetail(jsonString, url) {
 
                 if (mediaLink) {
                     serverEps.push({
-                        id: url + "?ep=" + staticSlug, 
+                        // ID: kẹp thêm tham số sv=i để tách biệt Vietsub / Thuyết minh
+                        id: url + "?sv=" + i + "&ep=" + staticSlug, 
                         name: "Tập " + (ep.name || (j + 1)),
                         slug: staticSlug
                     });
@@ -266,19 +259,25 @@ function parseMovieDetail(jsonString, url) {
     }
 }
 
+// CHỈ DÒ TÌM TRONG ĐÚNG SERVER INDEX MÀ NGƯỜI DÙNG CHỌN
 function parseDetailResponse(html, url) {
     try {
         var targetUrl = "";
         
-        var epSlugMatch = url.match(/\?ep=([^&]+)/);
+        // Tách Server Index và Episode Slug
+        var svMatch = url.match(/\?sv=([^&]+)/);
+        var svIndex = svMatch ? parseInt(svMatch[1]) : -1;
+        
+        var epSlugMatch = url.match(/&ep=([^&]+)/);
         var epSlug = epSlugMatch ? epSlugMatch[1] : "";
 
         if (epSlug && html.trim().indexOf('{') === 0) {
             var data = JSON.parse(html);
             var epsList = data.episodes || [];
             
-            for (var i = 0; i < epsList.length; i++) {
-                var sData = epsList[i].server_data || epsList[i].list || [];
+            // Nếu có Server Index, chỉ dò vào đúng Server đó
+            if (svIndex >= 0 && svIndex < epsList.length) {
+                var sData = epsList[svIndex].server_data || epsList[svIndex].list || [];
                 for (var j = 0; j < sData.length; j++) {
                     var ep = sData[j];
                     var currentSlug = ep.slug || ("tap-" + (j + 1));
@@ -288,7 +287,22 @@ function parseDetailResponse(html, url) {
                         break;
                     }
                 }
-                if (targetUrl) break;
+            } 
+            // Dự phòng nếu không có Server Index (bản cũ lưu lịch sử), dò bừa như trước
+            else {
+                for (var i = 0; i < epsList.length; i++) {
+                    var sDataBackup = epsList[i].server_data || epsList[i].list || [];
+                    for (var k = 0; k < sDataBackup.length; k++) {
+                        var epBackup = sDataBackup[k];
+                        var currentSlugBackup = epBackup.slug || ("tap-" + (k + 1));
+                        
+                        if (currentSlugBackup === epSlug) {
+                            targetUrl = epBackup.link_embed || epBackup.embed || epBackup.link || "";
+                            break;
+                        }
+                    }
+                    if (targetUrl) break;
+                }
             }
         } else {
             targetUrl = url; 
