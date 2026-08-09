@@ -1,17 +1,16 @@
 // =============================================================================
-// PLUGIN VAX: TINHLAGI TV (LIST LAYOUT & 6-HOUR FILTER)
+// PLUGIN VAX: BongdaTV 
 // =============================================================================
 
 var BASEURL = "https://tinhlagi.pro/sport";
 
 function getManifest() {
     return JSON.stringify({
-        "id": "tinhlagi_tv",
-        "name": "Tinhlagi TV - Thể Thao",
+        "id": "Bongdatv",
+        "name": "Bóng Đá TV",
         "description": "Trực tiếp bóng đá (Chỉ lấy trận LIVE & Sắp diễn ra trong 6h - Dạng Danh Sách).",
         "version": "1.5.0",
         "baseUrl": BASEURL,
-        "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
         "isEnabled": true,
         "layoutType": "LIST", // Chuyển sang dạng Danh sách (LIST) thay vì GRID
         "type": "MOVIE",
