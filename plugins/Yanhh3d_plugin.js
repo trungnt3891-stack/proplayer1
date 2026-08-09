@@ -1,5 +1,5 @@
 // https://bilutv.asia
-BASEURL = "https://yanhh3d.ac";
+BASEURL = "https://yanhh3d.ee";
 
 function getManifest() {
     return JSON.stringify({
@@ -7,7 +7,7 @@ function getManifest() {
         "name": "Yanhh3d",
         "description": "Trang xem phim Hoạt Hình siêu hay.",
         "version": "1.1.8",
-        "BASEURL": "https://yanhh3d.ac",
+        "BASEURL": "https://yanhh3d.ee",
         "iconUrl": "https://bilutv.asia/img/bilutvlogo-ngang.jpg",
         "isEnabled": true,
         "type": "MOVIE",
