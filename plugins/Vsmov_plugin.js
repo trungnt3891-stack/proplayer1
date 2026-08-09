@@ -1,5 +1,5 @@
 // =============================================================================
-// PLUGIN MOVIE SCRAPER: VSMOV.COM (NATIVE PLAYER - BẮT TẬP & CHIẾU TRỰC TIẾP)
+// PLUGIN MOVIE SCRAPER: VSMOV.COM (NATIVE PLAYER - BẮT LINK TỰ ĐỘNG)
 // =============================================================================
 
 var DOMAIN = "https://vsmov.com";
@@ -9,7 +9,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.6.7",
+        "version": "1.6.8",
         "baseUrl": DOMAIN,
         "iconUrl": DOMAIN + "/favicon-vsm.png",
         "isEnabled": true,
@@ -189,7 +189,7 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// BÓC TÁCH CHI TIẾT VÀ TÌM KIẾM LINK STREAM TỪ BIẾN JSON ĐỂ HIỂN THỊ CÁC TẬP PHIM
+// BÓC TÁCH CHI TIẾT VÀ QUÉT JSON ĐỂ LẤY TOÀN BỘ TẬP PHIM RA GIAO DIỆN
 function parseMovieDetail(html, url) {
     try {
         var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
@@ -204,7 +204,7 @@ function parseMovieDetail(html, url) {
 
         var servers = [];
         
-        // Quét tìm mảng dữ liệu chứa link video trong thẻ script (Ưu tiên episodes hoặc embedEpisodes)
+        // Quét tìm mảng dữ liệu chứa link video trong thẻ script
         var episodesJson = html.match(/var\s+episodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
         if (!episodesJson) {
             episodesJson = html.match(/var\s+embedEpisodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
@@ -220,12 +220,11 @@ function parseMovieDetail(html, url) {
 
                 for (var j = 0; j < sList.length; j++) {
                     var ep = sList[j];
-                    // Lấy trực tiếp link m3u8 hoặc embed từ JSON
-                    var mediaLink = ep.m3u8 || ep.embed || ep.link || ep.link_embed || "";
-                    
+                    // Lấy đường link Iframe (vd: https://v1.streamvsmov.com/video/eb0041...)
+                    var mediaLink = ep.embed || ep.link_embed || ep.m3u8 || ep.link || "";
                     if (mediaLink) {
                         serverEps.push({
-                            id: mediaLink, // Đưa thẳng link stream gốc vào ID
+                            id: mediaLink, // Đưa link Embed làm ID để gửi xuống parseDetailResponse
                             name: ep.name || "Tập " + (j + 1),
                             slug: ep.slug || ""
                         });
@@ -233,10 +232,8 @@ function parseMovieDetail(html, url) {
                 }
 
                 if (serverEps.length > 0) {
-                    // Xóa các ký tự xuống dòng, khoảng trắng thừa trong tên server (Ví dụ: "Vietsub \n #1" -> "Vietsub #1")
-                    sName = sName.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
                     servers.push({
-                        name: sName,
+                        name: sName.replace(/[\r\n\t]+/g, ' ').trim(),
                         episodes: serverEps
                     });
                 }
@@ -260,14 +257,17 @@ function parseMovieDetail(html, url) {
     }
 }
 
-// CHIẾU LUÔN TRÊN TRÌNH PHÁT GỐC (NATIVE PLAYER)
+// BẬT TRÌNH BẮT LINK TỰ ĐỘNG CỦA VAX APP (isEmbed: true)
 function parseDetailResponse(html, url) {
     try {
-        // Trả về cờ isEmbed: false để ép hệ thống phát trực tiếp
-        // App sẽ tự động tóm link url được truyền từ mảng episodes ở trên
+        var targetUrl = url;
+
+        // Trả về cờ isEmbed: true để nói với App: 
+        // "Đây là link Iframe, hãy dùng trình duyệt ngầm mở nó ra để tóm lấy file .m3u8 bên trong, sau đó phát lên Native Player nhé"
         return JSON.stringify({
-            url: url,
-            isEmbed: false, 
+            url: targetUrl,
+            isEmbed: true,
+            hook: true, // Ép App bắt link ngay lập tức
             headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                 "Referer": "https://vsmov.com/",
@@ -275,7 +275,7 @@ function parseDetailResponse(html, url) {
             }
         });
     } catch (e) {
-        return JSON.stringify({ url: url, isEmbed: false, headers: {} });
+        return JSON.stringify({ url: url, isEmbed: true, hook: true });
     }
 }
 
@@ -283,10 +283,5 @@ function parseEmbedResponse(html, url) {
     return JSON.stringify({ url: url, isEmbed: false });
 }
 
-function parseCategoriesResponse(apiResponseJson) {
-    return "[]"; 
-}
-
-function parseCountriesResponse(apiResponseJson) {
-    return "[]"; 
-}
+function parseCategoriesResponse(apiResponseJson) { return "[]"; }
+function parseCountriesResponse(apiResponseJson) { return "[]"; }
