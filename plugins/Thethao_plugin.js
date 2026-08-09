@@ -1,13 +1,13 @@
 // =============================================================================
-// PLUGIN VAX: TINHLAGI TV (CHỈ LẤY KHỐI TÂM ĐIỂM LIVE & TÂM ĐIỂM SẮP DIỄN RA)
+// PLUGIN VAX: BONGDATV 
 // =============================================================================
 
 var BASEURL = "https://tinhlagi.pro/sport";
 
 function getManifest() {
     return JSON.stringify({
-        "id": "tinhlagi_tv",
-        "name": "Tinhlagi TV - Thể Thao",
+        "id": "bongdatv",
+        "name": "BongdaTV - Thể Thao",
         "description": "Chỉ lấy trận đấu thuộc khối Tâm Điểm Live & Tâm Điểm Sắp Diễn Ra (Lọc 6h).",
         "version": "1.8.0",
         "baseUrl": BASEURL,
