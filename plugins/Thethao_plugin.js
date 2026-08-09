@@ -1,5 +1,5 @@
 // =============================================================================
-// PLUGIN VAX: TINHLAGI TV (LỌC TRẬN "ĐÃ XONG" & SẮP XẾP LIVE/SẮP LIVE)
+// PLUGIN VAX: TINHLAGI TV (LIST LAYOUT & 6-HOUR FILTER)
 // =============================================================================
 
 var BASEURL = "https://tinhlagi.pro/sport";
@@ -8,12 +8,12 @@ function getManifest() {
     return JSON.stringify({
         "id": "tinhlagi_tv",
         "name": "Tinhlagi TV - Thể Thao",
-        "description": "Chỉ lọc các trận đang LIVE và Tâm điểm sắp diễn ra (WebView Mode).",
-        "version": "1.4.0",
+        "description": "Trực tiếp bóng đá (Chỉ lấy trận LIVE & Sắp diễn ra trong 6h - Dạng Danh Sách).",
+        "version": "1.5.0",
         "baseUrl": BASEURL,
         "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
         "isEnabled": true,
-        "layoutType": "GRID",
+        "layoutType": "LIST", // Chuyển sang dạng Danh sách (LIST) thay vì GRID
         "type": "MOVIE",
         "playerType": "embed"
     });
@@ -39,26 +39,29 @@ function parseDataFromHash(url) {
     return null;
 }
 
-// Chuyển chuỗi "HH:mm DD/MM" thành Timestamp để sắp xếp thứ tự
+// Chuyển chuỗi "HH:mm DD/MM" hoặc "HH:mm" thành timestamp ms
 function parseDateTimeToTimestamp(dateStr) {
-    if (!dateStr) return 9999999999;
+    if (!dateStr) return 0;
     try {
-        var parts = dateStr.trim().split(' ');
+        var parts = dateStr.trim().split(/\s+/);
         var timeParts = parts[0].split(':');
+        var hours = parseInt(timeParts[0], 10);
+        var minutes = parseInt(timeParts[1], 10);
+
         var now = new Date();
         var day = now.getDate();
-        var month = now.getMonth() + 1;
+        var month = now.getMonth(); // 0 - 11
 
         if (parts.length > 1 && parts[1].indexOf('/') !== -1) {
-            var dateParts = parts[1].split('/');
-            day = parseInt(dateParts[0], 10);
-            month = parseInt(dateParts[1], 10);
+            var dParts = parts[1].split('/');
+            day = parseInt(dParts[0], 10);
+            month = parseInt(dParts[1], 10) - 1;
         }
 
-        var matchDate = new Date(now.getFullYear(), month - 1, day, parseInt(timeParts[0], 10), parseInt(timeParts[1], 10));
+        var matchDate = new Date(now.getFullYear(), month, day, hours, minutes, 0);
         return matchDate.getTime();
     } catch (e) {
-        return 9999999999;
+        return 0;
     }
 }
 
@@ -67,10 +70,10 @@ function parseDateTimeToTimestamp(dateStr) {
 // =============================================================================
 
 function getHomeSections() {
-    return JSON.stringify([{ slug: 'live', title: '🔥 Đang Live & Tâm Điểm Sắp Diễn Ra', type: 'Grid' }]);
+    return JSON.stringify([{ slug: 'live', title: '⚽ Trận Đấu Đang Live & Sắp Diễn Ra (Trong 6H)', type: 'List' }]);
 }
 function getPrimaryCategories() {
-    return JSON.stringify([{ name: '🔥 Trực Tiếp & Sắp Diễn Ra', slug: 'live' }]);
+    return JSON.stringify([{ name: '⚽ Live & Sắp Diễn Ra (6H)', slug: 'live' }]);
 }
 function getFilterConfig() { return JSON.stringify({}); }
 function getUrlList(slug, filtersJson) { return BASEURL + "/"; }
@@ -81,29 +84,32 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// BÓC TÁCH VÀ LỌC TRẬN ĐẤU (LOẠI BỎ "ĐÃ XONG")
+// LỌC & SẮP XẾP TRẬN ĐẤU (TỐI ĐA 6 TIẾNG TỚI)
 // =============================================================================
 
 function parseListResponse(html, url) {
     try {
         var rawItems = [];
-        // Match cả button trận đấu và các thẻ card trong mục "Tâm điểm sắp diễn ra"
         var itemRegex = /<(button|div)[^>]*class="[^"]*(js-match-btn|match-item|card)[^"]*"([\s\S]*?)>([\s\S]*?)<\/\1>/gi;
         var match;
+
+        // Thời gian hiện tại và mốc giới hạn 6 tiếng (tính bằng ms)
+        var nowMs = new Date().getTime();
+        var SIX_HOURS_MS = 6 * 60 * 60 * 1000;
 
         while ((match = itemRegex.exec(html)) !== null) {
             var attrBlock = match[3];
             var innerContent = match[4];
 
-            // 1. LỌC TUYỆT ĐỐI CÁC TRẬN "ĐÃ XONG" / FT / ENDED
+            // 1. Loại bỏ các trận đã kết thúc
             var isFinished = innerContent.indexOf('Đã xong') !== -1 || 
                              innerContent.indexOf('status-ended') !== -1 || 
                              innerContent.indexOf('Kết thúc') !== -1 || 
                              innerContent.indexOf('FT') !== -1;
 
-            if (isFinished) continue; // Bỏ qua ngay lập tức
+            if (isFinished) continue;
 
-            // 2. Nhận diện trạng thái LIVE hoặc SẮP LIVE
+            // 2. Phân loại LIVE / SẮP LIVE
             var isLive = innerContent.indexOf('status-live') !== -1 || 
                          innerContent.indexOf('🟢 Live') !== -1 || 
                          innerContent.indexOf('ON') !== -1;
@@ -112,7 +118,6 @@ function parseListResponse(html, url) {
                              innerContent.indexOf('status-upcoming') !== -1 || 
                              innerContent.indexOf('⏳') !== -1;
 
-            // Nếu không thuộc 2 trạng thái này thì bỏ qua
             if (!isLive && !isUpcoming) continue;
 
             var titleMatch = attrBlock.match(/data-title="([^"]*)"/i);
@@ -124,7 +129,6 @@ function parseListResponse(html, url) {
 
             var title = titleMatch ? decodeEntities(titleMatch[1]).trim() : "";
             if (!title) {
-                // Fallback lấy title từ text HTML nếu không có data-title
                 var cleanText = innerContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
                 if (cleanText.length > 5) title = cleanText.substring(0, 60);
                 else title = "Trực tiếp Bóng Đá";
@@ -140,20 +144,27 @@ function parseListResponse(html, url) {
                 try { parsedSources = JSON.parse(decodeEntities(sourcesMatch[1])); } catch (e) {}
             }
 
-            // 3. Tính điểm ưu tiên (Weight)
+            // 3. Kiểm tra điều kiện thời gian 6 tiếng
             var weight = 0;
             var episodeCurrent = "";
 
             if (isLive) {
-                // Ưu tiên 1: Các trận ĐANG LIVE xếp trên cùng
+                // Đang LIVE -> Giữ lại tất cả
                 weight = 2000000000000 + (parseInt(minute, 10) || 0);
                 episodeCurrent = "🟢 LIVE " + (minute ? minute + "'" : "");
                 if (score) episodeCurrent += " • ⚽ " + score;
             } else {
-                // Ưu tiên 2: Trận SẮP LIVE xếp tiếp theo (trận nào diễn ra sớm hơn xếp trước)
-                var matchTime = parseDateTimeToTimestamp(time);
-                weight = 1000000000000 - matchTime;
-                episodeCurrent = "⏳ Sắp Live " + (time ? "• " + time : "");
+                // Sắp Live -> Chỉ lấy trận diễn ra trong vòng 6 tiếng tới (diffMs <= 6 giờ)
+                var matchTimeMs = parseDateTimeToTimestamp(time);
+                var diffMs = matchTimeMs - nowMs;
+
+                // Nếu quá 6 tiếng hoặc trận đã trôi qua quá lâu -> Bỏ qua
+                if (diffMs < -15 * 60 * 1000 || diffMs > SIX_HOURS_MS) {
+                    continue;
+                }
+
+                weight = 1000000000000 - matchTimeMs;
+                episodeCurrent = "⏳ Sắp Live • " + (time || "Đang cập nhật");
             }
 
             var payload = { title: title, mainUrl: streamUrl, sources: parsedSources };
@@ -164,15 +175,15 @@ function parseListResponse(html, url) {
                 item: {
                     "id": itemUrl,
                     "title": title,
-                    "posterUrl": "https://tinhlagi.pro/sport/sanbong.jpg",
-                    "backdropUrl": "https://tinhlagi.pro/sport/sanbong.jpg",
+                    "posterUrl": "", // Để trống poster để giao diện danh sách hiển thị tối ưu nhất
+                    "backdropUrl": "",
                     "quality": isLive ? "LIVE" : "SẮP LIVE",
                     "episode_current": episodeCurrent
                 }
             });
         }
 
-        // Sắp xếp các trận giảm dần theo trọng số Weight
+        // Sắp xếp các trận giảm dần theo thứ tự ưu tiên
         rawItems.sort(function(a, b) { return b.weight - a.weight; });
         var finalItems = rawItems.map(function(w) { return w.item; });
 
@@ -190,7 +201,7 @@ function parseListResponse(html, url) {
 function parseSearchResponse(html) { return parseListResponse(html, ""); }
 
 // =============================================================================
-// CHI TIẾT VÀ NGUỒN PHÁT WEBVIEW
+// CHI TIẾT & PHÁT WEBVIEW
 // =============================================================================
 
 function parseMovieDetail(html, url) {
@@ -219,9 +230,9 @@ function parseMovieDetail(html, url) {
         return JSON.stringify({
             id: url,
             title: title,
-            posterUrl: "https://tinhlagi.pro/sport/sanbong.jpg",
-            backdropUrl: "https://tinhlagi.pro/sport/sanbong.jpg",
-            description: "Chế độ phát WebView tốc độ cao.",
+            posterUrl: "",
+            backdropUrl: "",
+            description: "Xem bóng đá WebView tốc độ cao.",
             servers: [{ name: "Danh Sách Bình Luận Viên / Kênh Live", episodes: episodes }]
         });
     } catch (e) {
