@@ -1,5 +1,5 @@
 // =============================================================================
-// PLUGIN MOVIE SCRAPER: VSMOV.COM (DIRECT EMBED BUTTON & WEBVIEW)
+// PLUGIN MOVIE SCRAPER: VSMOV.COM (NATIVE PLAYER - BẮT LINK TRỰC TIẾP)
 // =============================================================================
 
 var DOMAIN = "https://vsmov.com";
@@ -9,12 +9,12 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.6.4",
+        "version": "1.6.5",
         "baseUrl": DOMAIN,
         "iconUrl": DOMAIN + "/favicon-vsm.png",
         "isEnabled": true,
-        "type": "MOVIE",
-        "playerType": "embed"
+        "type": "MOVIE"
+        // Đã gỡ bỏ "playerType": "embed" để cho phép phát qua Native Player
     });
 }
 
@@ -190,7 +190,7 @@ function parseSearchResponse(html) {
     return parseListResponse(html);
 }
 
-// BÓC TÁCH CHI TIẾT TẠO NÚT XEM PHIM BẮT BUỘC HIỆN TRÊN GIAO DIỆN
+// BÓC TÁCH CHI TIẾT VÀ TÌM KIẾM LINK STREAM ĐỂ HIỂN THỊ CÁC TẬP PHIM
 function parseMovieDetail(html, url) {
     try {
         var titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
@@ -203,17 +203,43 @@ function parseMovieDetail(html, url) {
         var descMatch = html.match(/<meta property="og:description" content="([^"]+)"/i);
         var desc = descMatch ? descMatch[1].trim() : "";
 
-        var episodes = [];
-        episodes.push({
-            id: url,
-            name: "Bấm vào để xem phim",
-            slug: "xem-ngay"
-        });
+        var servers = [];
+        
+        // Quét tìm mảng dữ liệu chứa link video trong thẻ script
+        var episodesJson = html.match(/var\s+episodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
+        if (!episodesJson) {
+            episodesJson = html.match(/var\s+embedEpisodes\s*=\s*(\[\{[\s\S]*?\}\]);/i);
+        }
 
-        var servers = [{
-            name: "Vietsub",
-            episodes: episodes
-        }];
+        if (episodesJson && episodesJson[1]) {
+            var epData = JSON.parse(episodesJson[1]);
+            for (var i = 0; i < epData.length; i++) {
+                var serverObj = epData[i];
+                var sName = serverObj.server_name || "Vietsub";
+                var sList = serverObj.list || [];
+                var serverEps = [];
+
+                for (var j = 0; j < sList.length; j++) {
+                    var ep = sList[j];
+                    // QUAN TRỌNG: Lấy trực tiếp link m3u8 hoặc mp4 thay vì link embed
+                    var mediaLink = ep.m3u8 || ep.link || ep.embed || ep.link_embed || "";
+                    if (mediaLink) {
+                        serverEps.push({
+                            id: mediaLink, // Đưa thẳng link stream gốc vào ID
+                            name: ep.name || "Tập " + (j + 1),
+                            slug: ep.slug || ""
+                        });
+                    }
+                }
+
+                if (serverEps.length > 0) {
+                    servers.push({
+                        name: sName.replace(/[\r\n\t]+/g, ' ').trim(),
+                        episodes: serverEps
+                    });
+                }
+            }
+        }
 
         return JSON.stringify({
             id: url,
@@ -227,36 +253,35 @@ function parseMovieDetail(html, url) {
         return JSON.stringify({
             id: url,
             title: "Phim Mới",
-            servers: [{ name: "Vietsub", episodes: [{ id: url, name: "Bấm vào để xem phim", slug: "xem-ngay" }] }]
+            servers: []
         });
     }
 }
 
-// KÍCH HOẠT WEBVIEW HIỂN THỊ TOÀN BỘ GIAO DIỆN WEBSITE CHÍNH CHỦ
+// BẮT LINK CHIẾU LUÔN TRÊN TRÌNH PHÁT GỐC (NATIVE PLAYER)
 function parseDetailResponse(html, url) {
     try {
         var targetUrl = url;
-        if (targetUrl && targetUrl.indexOf("http") !== 0) {
-            targetUrl = "https://vsmov.com" + (targetUrl.startsWith('/') ? targetUrl : '/' + targetUrl);
-        }
 
+        // Trả về cờ isEmbed: false để ép hệ thống dùng Trình phát Native thay vì WebView
         return JSON.stringify({
             url: targetUrl,
-            isEmbed: true, 
+            isEmbed: false, 
             headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                "Referer": "https://vsmov.com/"
+                "Referer": "https://vsmov.com/",
+                "Origin": "https://vsmov.com"
             },
             subtitles: []
         });
     } catch (e) {
         log("Lỗi parseDetailResponse: " + e);
-        return JSON.stringify({ url: url, isEmbed: true, headers: {} });
+        return JSON.stringify({ url: url, isEmbed: false, headers: {} });
     }
 }
 
 function parseEmbedResponse(html, url) {
-    return JSON.stringify({ url: url, isEmbed: true });
+    return JSON.stringify({ url: url, isEmbed: false });
 }
 
 function parseCategoriesResponse(apiResponseJson) {
