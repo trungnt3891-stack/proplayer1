@@ -1,6 +1,6 @@
 // =============================================================================
 // PLUGIN MOVIE SCRAPER: VSMOV.COM 
-// CHIẾN THUẬT: KẸP THAM SỐ VÀO API ĐỂ LẤY TOKEN TƯƠI & BẢO TOÀN LỊCH SỬ
+// CHIẾN THUẬT: API LẤY TẬP + SLUG TĨNH (LƯU LỊCH SỬ) + BÓC VỎ EMBED PHÁT NATIVE
 // =============================================================================
 
 var DOMAIN = "https://vsmov.com";
@@ -9,12 +9,12 @@ function getManifest() {
     return JSON.stringify({
         "id": "vsmov",
         "name": "VsMov",
-        "version": "1.8.5",
+        "version": "1.9.0",
         "baseUrl": DOMAIN,
         "iconUrl": DOMAIN + "/favicon-vsm.png",
         "isEnabled": true,
-        "type": "MOVIE",
-        "playerType": "embed" // Ép buộc giao diện mở Webview Player
+        "type": "MOVIE"
+        // Đã xóa "playerType": "embed" để trả lại quyền phát bằng Native Player
     });
 }
 
@@ -107,7 +107,7 @@ function getUrlDetail(slug) {
     if (slug.indexOf('/phim/') !== -1) id = slug.split('/phim/')[1].split('?')[0];
     else if (slug.indexOf('http') === 0) id = slug.split('/').pop().split('?')[0];
     
-    // Gọi thẳng vào API siêu mượt của VSMOV
+    // Gọi thẳng vào API mượt mà của VSMOV
     return DOMAIN + "/api/phim/" + id;
 }
 
@@ -164,7 +164,7 @@ function parseListResponse(html) {
 
 function parseSearchResponse(html) { return parseListResponse(html); }
 
-// SỬ DỤNG JSON API VÀ ĐẶT MỎ NEO BẰNG URL API ĐỂ CHỐNG LỖI TOKEN
+// ĐẶT MỎ NEO (SLUG) CHO LỊCH SỬ XEM PHIM TỪ DỮ LIỆU API JSON
 function parseMovieDetail(jsonString, url) {
     try {
         var data = JSON.parse(jsonString);
@@ -185,12 +185,13 @@ function parseMovieDetail(jsonString, url) {
             for (var j = 0; j < sData.length; j++) {
                 var ep = sData[j];
                 var mediaLink = ep.link_embed || ep.embed || ep.link || "";
+                
+                // Gán Slug Tĩnh để ứng dụng ghi nhớ lịch sử chuẩn xác
                 var staticSlug = ep.slug || ("tap-" + (j + 1)); 
 
                 if (mediaLink) {
                     serverEps.push({
-                        // BÍ QUYẾT: ID là link API gốc kẹp thêm tham số ?ep=slug 
-                        // -> Lịch sử xem giữ nguyên dạng tĩnh, mà khi click App vẫn request API
+                        // ID lúc này là đường link API cộng thêm tham số tập (?ep=tap-1)
                         id: url + "?ep=" + staticSlug, 
                         name: "Tập " + (ep.name || (j + 1)),
                         slug: staticSlug
@@ -219,7 +220,7 @@ function parseMovieDetail(jsonString, url) {
     }
 }
 
-// BÓC TÁCH LINK TƯƠI MỚI TỪ JSON API ĐỂ MỞ WEBVIEW
+// BƯỚC 2: TRA CỨU JSON LẤY LINK IFRAME TƯƠI ĐỂ VƯỢT TOKEN HẾT HẠN
 function parseDetailResponse(html, url) {
     try {
         var targetUrl = "";
@@ -228,7 +229,7 @@ function parseDetailResponse(html, url) {
         var epSlugMatch = url.match(/\?ep=([^&]+)/);
         var epSlug = epSlugMatch ? epSlugMatch[1] : "";
 
-        // Mã HTML nhận được lúc này là nguyên một bộ JSON API cực kì đầy đủ
+        // Nếu mã nhận được là JSON (Do API trả về), tiến hành tra cứu link Iframe
         if (epSlug && html.trim().indexOf('{') === 0) {
             var data = JSON.parse(html);
             var epsList = data.episodes || [];
@@ -239,7 +240,6 @@ function parseDetailResponse(html, url) {
                     var ep = sData[j];
                     var currentSlug = ep.slug || ("tap-" + (j + 1));
                     
-                    // Nếu dò thấy đúng tập đang bấm, húp ngay link Embed mới tinh
                     if (currentSlug === epSlug) {
                         targetUrl = ep.link_embed || ep.embed || ep.link || "";
                         break;
@@ -248,25 +248,20 @@ function parseDetailResponse(html, url) {
                 if (targetUrl) break;
             }
         } else {
-            // Backup nếu không tìm thấy
             targetUrl = url; 
         }
 
-        // Đóng gói Webview siêu sạch
         if (targetUrl && targetUrl.indexOf("http") !== 0) {
             targetUrl = "https://vsmov.com" + (targetUrl.startsWith('/') ? targetUrl : '/' + targetUrl);
         }
 
-        var customJs = "document.body.style.margin='0'; document.body.style.padding='0'; document.body.style.overflow='hidden'; document.body.style.backgroundColor='#000';";
-        customJs += "var v=document.querySelector('video, iframe, #player, .jwplayer'); if(v){ v.style.width='100vw'; v.style.height='100vh'; v.style.position='fixed'; v.style.top='0'; v.style.left='0'; v.style.zIndex='999999'; }";
-
+        // Tải trang Webview ẩn để xử lý cạo HTML ở hàm kế tiếp
         return JSON.stringify({
             url: targetUrl, 
             isEmbed: true, 
             headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                "Referer": DOMAIN + "/",
-                "Custom-Js": customJs
+                "Referer": DOMAIN + "/"
             }
         });
     } catch (e) {
@@ -274,8 +269,88 @@ function parseDetailResponse(html, url) {
     }
 }
 
+// BƯỚC 3: CẠO CẢ PHỤ ĐỀ (VTT/SRT) VÀ VIDEO (.M3U8) RỒI ĐẨY RA NATIVE PLAYER
 function parseEmbedResponse(html, url) {
-    return JSON.stringify({ url: url, isEmbed: true });
+    var subtitles = [];
+    var videoUrl = "";
+
+    // Hàm hỗ trợ lọc Subtitle trùng lặp
+    function isSub(arr, u) {
+        for(var i=0; i<arr.length; i++){ if(arr[i].url===u) return true; }
+        return false;
+    }
+
+    try {
+        var domain = url.match(/^(https?:\/\/[^\/]+)/i) ? url.match(/^(https?:\/\/[^\/]+)/i)[1] : "";
+
+        // 1. Quét Cạo Phụ Đề Tuyệt Đối
+        var subRegex = /["'](https?:\/\/[^"'\s]+\.(?:vtt|srt)[^"'\s]*)["']/gi;
+        var subMatch;
+        while ((subMatch = subRegex.exec(html)) !== null) {
+            var sUrl = subMatch[1].replace(/\\/g, '');
+            if (sUrl.indexOf('.m3u8') !== -1 || sUrl.indexOf('.mp4') !== -1) continue;
+            if (!isSub(subtitles, sUrl)) subtitles.push({ url: sUrl, name: "Vietsub " + (subtitles.length + 1), lang: "vi" });
+        }
+
+        // 2. Quét Cạo Phụ Đề Tương Đối (Lấy mốc tên miền Iframe)
+        var relSubRegex = /["'](\/[^"'\s]+\.(?:vtt|srt)[^"'\s]*)["']/gi;
+        var rMatch;
+        while ((rMatch = relSubRegex.exec(html)) !== null) {
+            if (domain) {
+                var sUrl2 = domain + rMatch[1].replace(/\\/g, '');
+                if (sUrl2.indexOf('.m3u8') !== -1 || sUrl2.indexOf('.mp4') !== -1) continue;
+                if (!isSub(subtitles, sUrl2)) subtitles.push({ url: sUrl2, name: "Vietsub " + (subtitles.length + 1), lang: "vi" });
+            }
+        }
+
+        // 3. Quét Cấu Hình Tracks JWPlayer
+        var tracksRegex = /tracks\s*:\s*\[(.*?)\]/gi;
+        var trackMatch;
+        while((trackMatch = tracksRegex.exec(html)) !== null) {
+             var fileRegex = /"file"\s*:\s*"([^"]+)"/gi;
+             var fMatch;
+             while((fMatch = fileRegex.exec(trackMatch[1])) !== null) {
+                 var tUrl = fMatch[1].replace(/\\/g, '');
+                 if (tUrl.indexOf('.vtt') > -1 || tUrl.indexOf('.srt') > -1) {
+                     if (tUrl.indexOf('http') !== 0 && domain) tUrl = domain + tUrl;
+                     if (!isSub(subtitles, tUrl)) subtitles.push({ url: tUrl, name: "Vietsub " + (subtitles.length + 1), lang: "vi" });
+                 }
+             }
+        }
+
+        // 4. Lấy Luồng Video Streaming
+        var vidRegex = /(https?:\/\/[^"'\s]+\.m3u8[^"'\s]*)/i;
+        var matchVid = html.match(vidRegex);
+        if (matchVid && matchVid[1]) {
+            videoUrl = matchVid[1].replace(/\\/g, '');
+        }
+
+        // ĐÓNG GÓI THÀNH PHẨM XUẤT XƯỞNG
+        if (videoUrl) {
+            return JSON.stringify({
+                url: videoUrl,
+                isEmbed: false, // Ép tắt Webview, phát thẳng trên App
+                subtitles: subtitles, // Cung cấp mảng Vietsub cho App hiển thị
+                headers: {
+                    "Referer": url, 
+                    "Origin": domain
+                }
+            });
+        }
+
+        // Backup Hook nếu không cạo được: Vẫn cố bơm Phụ Đề vào
+        return JSON.stringify({
+            url: url,
+            isEmbed: true,
+            hook: true,
+            embedtoplay: true,
+            subtitles: subtitles, 
+            script: "setTimeout(function(){document.body.click();var b=document.querySelector('.jw-video,.vjs-big-play-button,.plyr__control--overlaid,#player');if(b)b.click();var v=document.querySelector('video');if(v){v.muted=true;v.play();}},1000);"
+        });
+
+    } catch (e) {
+        return JSON.stringify({ url: url, isEmbed: true, hook: true, embedtoplay: true });
+    }
 }
 
 function parseCategoriesResponse(apiResponseJson) { return "[]"; }
