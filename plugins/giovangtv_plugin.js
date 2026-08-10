@@ -9,15 +9,15 @@ var FALLBACK_M3U8 = "https://freem3u.xyz/static/no-signal/low.m3u8";
 function getManifest() {
     return JSON.stringify({
         "id": "giovangtv",
-        "name": "Giờ Vàng TV Pro",
-        "description": "Trực tiếp bóng đá đa bộ môn (Bắt link Native M3U8 siêu mượt, phân loại Tab thể thao chuẩn xác).",
+        "name": "Giờ Vàng TV",
+        "description": "Trực tiếp bóng đá đa bộ môn (Phát Native M3U8 siêu mượt, phân loại Tab thể thao chuẩn xác).",
         "version": "1.0.0",
         "baseUrl": BASEURL,
         "iconUrl": "https://giovang.city/wp-content/uploads/2024/10/GiovangTV_logo-01-1.png",
         "isEnabled": true,
         "layoutType": "LIST",
         "type": "MOVIE",
-        "playerType": "native" // Ép sử dụng Native Player để trải nghiệm mượt như Youtube, không quảng cáo
+        "playerType": "native" // Ép sử dụng Native Player để trải nghiệm mượt như Youtube, không bị lỗi webview
     });
 }
 
@@ -57,7 +57,7 @@ function parseDateTimeToTimestamp(dateStr) {
 }
 
 // =============================================================================
-// TẠO THANH TAB BỘ MÔN (GIỐNG HỆT ẢNH YÊU CẦU)
+// TẠO THANH TAB BỘ MÔN VÀ PHÂN VÙNG TRANG CHỦ
 // =============================================================================
 
 function getPrimaryCategories() {
@@ -72,10 +72,17 @@ function getPrimaryCategories() {
     ]);
 }
 
+function getHomeSections() {
+    return JSON.stringify([
+        { slug: 'live', title: '🔥 Tâm Điểm Đang Live', type: 'List' },
+        { slug: 'upcoming', title: '⏳ Danh Sách Sắp Diễn Ra', type: 'List' }
+    ]);
+}
+
 function getFilterConfig() { return JSON.stringify({}); }
 
-// Truyền Slug vào URL để hệ thống nhận diện đang ở Tab Thể thao nào
-function getUrlList(slug, filtersJson) { return BASEURL + "/?sport=" + slug; }
+// Truyền Slug vào URL để hệ thống nhận diện đang ở Tab nào
+function getUrlList(slug, filtersJson) { return BASEURL + "/?tab=" + slug; }
 function getUrlSearch(keyword, filtersJson) { return BASEURL + "/"; }
 function getUrlDetail(slug) { return slug; }
 function getUrlCategories() { return BASEURL + "/"; }
@@ -88,17 +95,18 @@ function getUrlYears() { return ""; }
 
 function parseListResponse(html, url) {
     try {
-        var targetSport = "all";
-        var sportMatch = url.match(/sport=([^&]+)/);
-        if (sportMatch) targetSport = sportMatch[1];
+        var currentTab = "all";
+        var tabMatch = url.match(/tab=([^&]+)/);
+        if (tabMatch) currentTab = tabMatch[1];
 
-        var itemsList = [];
+        var liveItems = [];
+        var upcomingItems = [];
         var addedUrls = {}; 
+        var nowMs = new Date().getTime();
         
-        // Bắt toàn bộ dữ liệu trận đấu được ẩn trong thanh Sidebar của Web
+        // Quét toàn bộ dữ liệu trận đấu ẩn trong thanh Sidebar của Web
         var itemRegex = /<button[^>]*class="[^"]*match-btn[^"]*"([\s\S]*?)>([\s\S]*?)<\/button>/gi;
         var match;
-        var nowMs = new Date().getTime();
 
         while ((match = itemRegex.exec(html)) !== null) {
             var attrBlock = match[1];
@@ -112,7 +120,7 @@ function parseListResponse(html, url) {
                 continue;
             }
 
-            var isFinished = innerContent.indexOf('Đã xong') !== -1 || innerContent.indexOf('status-ended') !== -1;
+            var isFinished = innerContent.indexOf('Đã xong') !== -1 || innerContent.indexOf('status-ended') !== -1 || innerContent.indexOf('Kết thúc') !== -1;
             if (isFinished) continue;
 
             var isLive = innerContent.indexOf('🟢 Live') !== -1 || innerContent.indexOf('status-live') !== -1;
@@ -122,8 +130,8 @@ function parseListResponse(html, url) {
             var urlMatch = attrBlock.match(/data-url="([^"]*)"/i);
             var streamUrl = urlMatch ? decodeEntities(urlMatch[1]).trim() : BASEURL;
             
-            if (!streamUrl || addedUrls[rawTitle + streamUrl]) continue;
-            addedUrls[rawTitle + streamUrl] = true;
+            if (!streamUrl || addedUrls[rawTitle]) continue;
+            addedUrls[rawTitle] = true;
 
             var scoreMatch = attrBlock.match(/data-score="([^"]*)"/i);
             var minuteMatch = attrBlock.match(/data-minute="([^"]*)"/i);
@@ -136,23 +144,19 @@ function parseListResponse(html, url) {
             // ======================================================
             var sportType = "football"; // Mặc định
             var srcStr = sourcesMatch ? sourcesMatch[1].toLowerCase() : "";
+            var lgStr = leagueMatch ? leagueMatch[1].toLowerCase() : "";
             
-            if (srcStr.indexOf("basketball") !== -1) sportType = "basketball";
-            else if (srcStr.indexOf("volleyball") !== -1 || srcStr.indexOf("bongchuyen") !== -1) sportType = "bongchuyen";
-            else if (srcStr.indexOf("baseball") !== -1 || srcStr.indexOf("bongchay") !== -1) sportType = "bongchay";
-            else if (srcStr.indexOf("esport") !== -1) sportType = "esport";
-            else if (srcStr.indexOf("vothuat") !== -1 || srcStr.indexOf("boxing") !== -1) sportType = "vothuat";
-            else if (srcStr.indexOf("football") === -1 && srcStr.indexOf("soccer") === -1) {
-                // Phân tích thêm từ Tên giải đấu nếu không tìm thấy trong URL ảnh
-                var lgStr = leagueMatch ? leagueMatch[1].toLowerCase() : "";
-                if (lgStr.indexOf("nba") !== -1 || lgStr.indexOf("vba") !== -1) sportType = "basketball";
-            }
+            if (srcStr.indexOf("/basketball/") !== -1 || lgStr.indexOf("nba") !== -1 || lgStr.indexOf("vba") !== -1) sportType = "basketball";
+            else if (srcStr.indexOf("/volleyball/") !== -1 || srcStr.indexOf("bongchuyen") !== -1) sportType = "bongchuyen";
+            else if (srcStr.indexOf("/baseball/") !== -1 || srcStr.indexOf("bongchay") !== -1) sportType = "bongchay";
+            else if (srcStr.indexOf("/esport/") !== -1 || lgStr.indexOf("kespa") !== -1 || lgStr.indexOf("lck") !== -1) sportType = "esport";
+            else if (srcStr.indexOf("vothuat") !== -1 || srcStr.indexOf("boxing") !== -1 || lgStr.indexOf("ufc") !== -1) sportType = "vothuat";
 
-            // Bộ lọc Tab (Ẩn các trận không thuộc môn đang chọn)
-            if (targetSport !== "all" && targetSport !== "other" && sportType !== targetSport) {
+            // BỘ LỌC TAB 
+            if (currentTab !== "all" && currentTab !== "live" && currentTab !== "upcoming" && currentTab !== "other" && sportType !== currentTab) {
                 continue; 
             }
-            if (targetSport === "other" && ["football", "basketball", "bongchuyen", "bongchay", "vothuat"].indexOf(sportType) !== -1) {
+            if (currentTab === "other" && ["football", "basketball", "bongchuyen", "bongchay", "vothuat", "esport"].indexOf(sportType) !== -1) {
                 continue;
             }
 
@@ -160,21 +164,11 @@ function parseListResponse(html, url) {
             var score = scoreMatch && scoreMatch[1] ? decodeEntities(scoreMatch[1]).trim() : "";
             var minute = minuteMatch ? decodeEntities(minuteMatch[1]).trim() : "";
             var time = timeMatch ? decodeEntities(timeMatch[1]).trim() : "";
-
             var matchTimeMs = parseDateTimeToTimestamp(time);
             
-            // ======================================================
-            // BẮT TRỰC TIẾP ẢNH BÌA ĐÃ ĐƯỢC MÁY CHỦ MERGE SẴN
-            // ======================================================
             var parsedSources = [];
-            var posterImage = DEFAULT_POSTER;
             if (sourcesMatch) {
-                try { 
-                    parsedSources = JSON.parse(decodeEntities(sourcesMatch[1])); 
-                    if (parsedSources.length > 0 && parsedSources[0].logo) {
-                        posterImage = parsedSources[0].logo.replace(/\\\//g, '/'); // Chuẩn hóa URL ảnh bìa
-                    }
-                } catch (e) {}
+                try { parsedSources = JSON.parse(decodeEntities(sourcesMatch[1])); } catch (e) {}
             }
 
             var episodeParts = [];
@@ -184,34 +178,48 @@ function parseListResponse(html, url) {
                 episodeParts.push(st);
                 if (score) episodeParts.push("Tỉ số: " + score);
             } else {
-                episodeParts.push("⏳ " + time);
+                episodeParts.push("⏳ Sắp Live: " + time);
             }
 
-            // Đóng gói data sang màn hình chi tiết để phân tích m3u8 cực nhanh mà không cần gọi Network
-            var payload = { title: rawTitle, league: league, poster: posterImage, sources: parsedSources, isLive: isLive };
+            // Đóng gói data sang màn hình chi tiết
+            var payload = { title: rawTitle, league: league, poster: DEFAULT_POSTER, sources: parsedSources, isLive: isLive };
             var itemUrl = BASEURL + "#data=" + encodeURIComponent(JSON.stringify(payload));
 
             // Tính toán sắp xếp
             var timeDiff = matchTimeMs > 0 ? Math.abs(matchTimeMs - nowMs) : 999999999;
             var weight = isLive ? (3000000000000 - timeDiff) : (1000000000000 - timeDiff);
 
-            itemsList.push({
+            var itemObj = {
+                matchTimeMs: matchTimeMs,
                 weight: weight,
                 item: {
                     "id": itemUrl,
                     "title": rawTitle,
-                    "posterUrl": posterImage,
-                    "backdropUrl": posterImage,
+                    "posterUrl": DEFAULT_POSTER,
+                    "backdropUrl": DEFAULT_POSTER,
                     "quality": isLive ? "ĐANG LIVE" : "SẮP LIVE",
                     "episode_current": episodeParts.join(" | ")
                 }
-            });
+            };
+
+            if (isLive) liveItems.push(itemObj);
+            else upcomingItems.push(itemObj);
         }
 
-        // Sắp xếp tự động trận gần giờ thực nhất lên trước
-        itemsList.sort(function(a, b) { return b.weight - a.weight; });
+        // Sắp xếp
+        liveItems.sort(function(a, b) { return b.matchTimeMs - a.matchTimeMs; }); // Mới đá xếp trên
+        upcomingItems.sort(function(a, b) { return a.matchTimeMs - b.matchTimeMs; }); // Sắp đá tới nơi xếp trên
 
-        var finalItems = itemsList.map(function(w) { return w.item; });
+        var finalItems = [];
+        if (currentTab === "live") {
+            finalItems = liveItems.map(function(w) { return w.item; });
+        } else if (currentTab === "upcoming") {
+            finalItems = upcomingItems.map(function(w) { return w.item; });
+        } else {
+            // Mục Tất Cả hoặc Thể Loại Môn: Ghép Live lên đầu, Sắp live phía dưới
+            var merged = liveItems.concat(upcomingItems);
+            finalItems = merged.map(function(w) { return w.item; });
+        }
 
         return JSON.stringify({
             "items": finalItems,
@@ -224,41 +232,48 @@ function parseListResponse(html, url) {
     }
 }
 
-function parseSearchResponse(html) { return parseListResponse(html, ""); }
+function parseSearchResponse(html) { return parseListResponse(html, BASEURL + "/?tab=all"); }
 
 // =============================================================================
-// CHI TIẾT: GIẢI MÃ LIÊN KẾT M3U8 NATIVE TỪ PROXY CỦA WEB
+// CHI TIẾT: GIẢI MÃ LIÊN KẾT M3U8 NATIVE TỪ DATA-SOURCES
 // =============================================================================
 
 function parseMovieDetail(html, url) {
     try {
         var data = parseDataFromHash(url);
         var title = data && data.title ? data.title : "Trực Tiếp Thể Thao";
-        var poster = data && data.poster ? data.poster : DEFAULT_POSTER;
-
+        if (data && data.league) title = "[" + data.league + "] " + title;
+        
         var episodes = [];
+        var hasSources = false;
         
         if (data && data.sources && data.sources.length > 0) {
+            hasSources = true;
             for (var i = 0; i < data.sources.length; i++) {
                 var s = data.sources[i];
-                var m3u8Link = s.link;
+                var m3u8Link = FALLBACK_M3U8;
                 
-                // Giải mã url m3u8 gốc giấu trong param &url=...
-                var urlParamMatch = s.link.match(/&url=([^&]+)/);
-                if (urlParamMatch && urlParamMatch[1]) {
-                    m3u8Link = decodeURIComponent(urlParamMatch[1]);
+                // Giải mã url m3u8 gốc giấu trong param &url=... của link proxy
+                if (s.link) {
+                    var urlParamMatch = s.link.match(/&url=([^&]+)/);
+                    if (urlParamMatch && urlParamMatch[1]) {
+                        m3u8Link = decodeURIComponent(urlParamMatch[1]);
+                    }
                 }
 
                 episodes.push({
-                    id: m3u8Link, // Gửi link m3u8 nguyên bản sang bộ phát Native
+                    id: m3u8Link, // Truyền thẳng link m3u8 vào Player
                     name: "🎙️ " + (s.name || ("Kênh " + (i + 1))),
                     slug: "channel-" + i
                 });
             }
-        } else {
+        } 
+        
+        // Nếu chưa phát hoặc không có link, đẩy thẳng link No Signal để phát
+        if (!hasSources) {
             episodes.push({
                 id: FALLBACK_M3U8,
-                name: "⚠️ Đang chờ tín hiệu / Chưa phát sóng",
+                name: "⚠️ Đang chờ tín hiệu / Trận đấu chưa mở",
                 slug: "no-signal"
             });
         }
@@ -266,22 +281,26 @@ function parseMovieDetail(html, url) {
         return JSON.stringify({
             id: url,
             title: title,
-            posterUrl: poster,
-            backdropUrl: poster,
-            description: "Hệ thống phát trực tiếp thể thao bằng Native Player (Trình phát Mặc Định). Bỏ qua 100% quảng cáo chìm, xem bóng đá siêu mượt không lo giật lag do WebView.",
+            posterUrl: DEFAULT_POSTER,
+            backdropUrl: DEFAULT_POSTER,
+            description: "Hệ thống phát trực tiếp thể thao bằng Trình Phát Gốc. Bỏ qua 100% quảng cáo web, xem siêu mượt, không giật lag. Nếu chưa đến giờ, hệ thống sẽ phát màn hình chờ.",
             servers: [{ name: "Chọn Kênh Phát Sóng", episodes: episodes }]
         });
     } catch (e) {
         return JSON.stringify({
             id: url,
             title: "Trực Tiếp Thể Thao",
-            servers: [{ name: "Server", episodes: [{ id: FALLBACK_M3U8, name: "⚠️ Lỗi dữ liệu", slug: "error" }] }]
+            servers: [{ name: "Server", episodes: [{ id: FALLBACK_M3U8, name: "⚠️ Đang chờ tín hiệu", slug: "error" }] }]
         });
     }
 }
 
-function parseDetailResponse(html, url) {
-    // Trả về isEmbed: false để ép hệ thống VAX chạy video trên App thay vì mở Website
+// =============================================================================
+// ÉP CHẠY NATIVE PLAYER 
+// =============================================================================
+function parseEmbedResponse(html, url) {
+    // Trả về isEmbed = false với URL là link m3u8.
+    // Việc này ép ứng dụng dùng Trình phát Native thay vì load trang Web.
     return JSON.stringify({
         url: url,
         isEmbed: false, 
@@ -294,7 +313,7 @@ function parseDetailResponse(html, url) {
     });
 }
 
-function parseEmbedResponse(html, url) { return parseDetailResponse(html, url); }
+function parseDetailResponse(html, url) { return parseEmbedResponse(html, url); }
 function parseCategoriesResponse(apiResponseJson) { return "[]"; }
 function parseCountriesResponse(html) { return "[]"; }
 function parseYearsResponse(html) { return "[]"; }
