@@ -1,15 +1,16 @@
 // =============================================================================
-// PLUGIN VAX: TINHLAGI TV (TIMEOUT 7S + TỰ ĐỘNG BÁO KẾT THÚC NẾU LỖI LINK)
+// PLUGIN VAX: TINHLAGI TV (BÌA SANBONG + TỰ ĐỘNG BẮT NO SIGNAL SAU 7S)
 // =============================================================================
 
 var BASEURL = "https://tinhlagi.pro/sport";
 var DEFAULT_POSTER = "https://tinhlagi.pro/sport/sanbong.jpg";
+var NO_SIGNAL_LINK = "https://freem3u.xyz/static/no-signal/low.m3u8";
 
 function getManifest() {
     return JSON.stringify({
         "id": "ThethaoTV",
         "name": "TV - Thể Thao Pro",
-        "description": "Trực tiếp bóng đá (Có bộ đếm 7 giây tự động đóng và báo kết thúc nếu link lỗi).",
+        "description": "Trực tiếp bóng đá (Sắp xếp thời gian chuẩn, tự động chuyển No Signal sau 7s nếu lỗi).",
         "version": "1.9.0",
         "baseUrl": BASEURL,
         "isEnabled": true,
@@ -93,7 +94,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSE DANH SÁCH & LOẠI BỎ MỤC RÁC
+// PARSE DANH SÁCH
 // =============================================================================
 
 function parseListResponse(html, url) {
@@ -215,7 +216,7 @@ function parseListResponse(html, url) {
 function parseSearchResponse(html) { return parseListResponse(html, ""); }
 
 // =============================================================================
-// CHI TIẾT & CƠ CHẾ ĐẾM NGƯỢC 7 GIÂY KIỂM TRA VIDEO LỖI
+// CHI TIẾT & BẮT FALLBACK NO SIGNAL SAU 7 GIÂY
 // =============================================================================
 
 function parseMovieDetail(html, url) {
@@ -250,7 +251,7 @@ function parseMovieDetail(html, url) {
             title: title,
             posterUrl: DEFAULT_POSTER,
             backdropUrl: DEFAULT_POSTER,
-            description: "Hệ thống trực tiếp thể thao tốc độ cao.",
+            description: "Hệ thống trực tiếp thể thao tốc độ cao. Nếu lỗi, tự động chuyển No Signal sau 7s.",
             servers: [{ name: "Danh Sách Kênh Phát Sóng", episodes: episodes }]
         });
     } catch (e) {
@@ -263,23 +264,19 @@ function parseMovieDetail(html, url) {
 }
 
 function parseDetailResponse(html, url) {
-    // Giao diện tĩnh dành cho trận đấu kết thúc (Được dùng làm mảng chèn)
-    var endedUI = "<div style='display:flex;flex-direction:column;justify-content:center;align-items:center;height:100vh;width:100vw;background:url(\"https://tinhlagi.pro/sport/sanbong.jpg\") center/cover no-repeat;color:#fff;font-family:sans-serif;text-align:center;position:fixed;top:0;left:0;z-index:999999;box-shadow:inset 0 0 0 2000px rgba(0,0,0,0.6);'><div style='font-size:50px;margin-bottom:10px;'>⚽</div><h1 style='font-size:26px;font-weight:900;text-transform:uppercase;margin:0;letter-spacing:1px;text-shadow:2px 2px 4px #000;'>TRẬN ĐẤU ĐÃ KẾT THÚC</h1><p style='font-size:16px;font-weight:bold;margin-top:10px;text-shadow:1px 1px 3px #000;'>CẢM ƠN QUÝ KHÁN GIẢ ĐÃ THEO DÕI.</p></div>";
-
     if (url.indexOf("#ended_match") !== -1) {
         return JSON.stringify({
             url: "about:blank",
             isEmbed: false,
-            script: "document.body.style.backgroundColor='#0f172a'; document.body.innerHTML=`" + endedUI + "`;"
+            script: "document.body.style.backgroundColor='#0f172a'; document.body.innerHTML='<div style=\"display:flex;justify-content:center;align-items:center;height:100vh;color:#fff;font-family:sans-serif;text-align:center;padding:20px;\"><div><h2 style=\"color:#38bdf8;font-size:24px;margin-bottom:10px;\">TRẬN ĐẤU ĐÃ KẾT THÚC</h2><p style=\"font-size:16px;color:#94a3b8;\">Cảm ơn quý khán giả đã theo dõi.</p></div></div>';"
         });
     }
 
     var cleanUrl = url.split('#')[0];
     if (!cleanUrl || cleanUrl.indexOf('http') !== 0) cleanUrl = BASEURL;
 
-    // Kịch bản tiêm vào WebView: Kiểm tra trạng thái thẻ <video> sau 7000ms.
-    // Nếu trống, hoặc có lỗi (networkState = 3), hoặc không tải được data (readyState = 0) thì chèn endedUI vào giao diện.
-    var injectScript = "var checkV=setTimeout(function(){var v=document.querySelector('video');if(!v||v.error||v.networkState===3||v.readyState===0){document.body.innerHTML=`" + endedUI + "`;if(v){v.pause();v.removeAttribute('src');v.load();}}},7000);document.addEventListener('loadeddata',function(){clearTimeout(checkV);},true);document.addEventListener('playing',function(){clearTimeout(checkV);},true);";
+    // Đoạn script theo dõi: Auto-click lúc 1s, Kiểm tra thẻ <video> lúc 7s.
+    var fallbackScript = "setTimeout(function(){var b=document.querySelector('button, .play, .vjs-big-play-button, .jw-display-icon-display');if(b)b.click();},1000);setTimeout(function(){var v=document.querySelector('video');var fail=false;if(!v)fail=true;else if(v.error)fail=true;else if(v.networkState===3)fail=true;else if(v.readyState===0)fail=true;if(fail){window.location.replace('" + NO_SIGNAL_LINK + "');}},7000);";
 
     return JSON.stringify({
         url: cleanUrl,
@@ -288,8 +285,8 @@ function parseDetailResponse(html, url) {
             "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/605.1.15",
             "Referer": "https://tinhlagi.pro/"
         },
-        subtitles: [],
-        script: injectScript
+        script: fallbackScript, // Tiêm kịch bản đếm ngược 7 giây
+        subtitles: []
     });
 }
 
