@@ -1,9 +1,10 @@
 // =============================================================================
-// PLUGIN VAX: GIỜ VÀNG TV (FIX LỖI 404 CDN SẮP LIVE + BẮT NATIVE GỐC)
+// PLUGIN VAX: GIỜ VÀNG TV (FIX ĐƯỜNG DẪN API STORAGE + NATIVE M3U8 GỐC)
 // =============================================================================
 
 var BASEURL = "https://giovang.city";
-var API_URL = "https://live-api.keonhacaitp.one/all.json";
+// Đã fix lại đường dẫn API chính xác dựa trên hàm JS gốc của website
+var API_URL = "https://live-api.keonhacaitp.one/storage/livestream/all.json"; 
 var DEFAULT_POSTER = "https://giovang.city/wp-content/uploads/2025/02/trang-chu-giovang.webp";
 var FALLBACK_M3U8 = "https://freem3u.xyz/static/no-signal/low.m3u8";
 
@@ -11,8 +12,8 @@ function getManifest() {
     return JSON.stringify({
         "id": "giovangtv",
         "name": "Giờ Vàng TV Pro",
-        "description": "Tải dữ liệu API siêu tốc, phát Native M3U8 siêu mượt không quảng cáo. Có Kênh Chờ cho trận Sắp Live.",
-        "version": "5.0.0",
+        "description": "API Storage gốc siêu tốc, phát Native M3U8 siêu mượt không quảng cáo. Có Kênh Chờ cho trận Sắp Live.",
+        "version": "6.0.0",
         "baseUrl": BASEURL,
         "iconUrl": "https://giovang.city/wp-content/uploads/2024/10/GiovangTV_logo-01-1.png",
         "isEnabled": true,
@@ -96,16 +97,22 @@ function getHomeSections() {
 
 function getFilterConfig() { return JSON.stringify({}); }
 
-// Dùng Hash để Bypass tường lửa CDN
-function getUrlList(slug, filtersJson) { return API_URL + "#" + slug; }
-function getUrlSearch(keyword, filtersJson) { return API_URL + "#search=" + encodeURIComponent(keyword); }
+// Tái tạo lại thuật toán của Giovang để vượt tường lửa CDN
+function getUrlList(slug, filtersJson) { 
+    var t = Math.floor(Date.now() / 10000);
+    return API_URL + "?t=" + t + "#" + slug; 
+}
+function getUrlSearch(keyword, filtersJson) { 
+    var t = Math.floor(Date.now() / 10000);
+    return API_URL + "?t=" + t + "#search=" + encodeURIComponent(keyword); 
+}
 function getUrlDetail(slug) { return slug; }
 function getUrlCategories() { return BASEURL + "/"; }
 function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSE API JSON AN TOÀN TUYỆT ĐỐI
+// PARSE API JSON
 // =============================================================================
 
 function parseListResponse(html, url) {
@@ -292,7 +299,7 @@ function parseMovieDetail(html, url) {
             title: matchTitle,
             posterUrl: DEFAULT_POSTER,
             backdropUrl: DEFAULT_POSTER,
-            description: "Hệ thống truyền tải dữ liệu trực tiếp từ CDN bằng Native Player. Chống giật lag, loại bỏ hoàn toàn quảng cáo.",
+            description: "Hệ thống truyền tải dữ liệu trực tiếp từ máy chủ. Sử dụng Native Player giúp chống giật lag, xem mượt như ứng dụng Youtube.",
             servers: [{ name: "Chọn Kênh Phát Sóng", episodes: episodes }]
         });
         
