@@ -1,5 +1,5 @@
 // =============================================================================
-// PLUGIN VAX: TINHLAGI TV (2 NHÓM RIÊNG BIỆT + POSTER ẢNH ĐỘI/BLV + XỬ LÝ KẾT THÚC)
+// PLUGIN VAX: TINHLAGI TV (SẮP XẾP ƯU TIÊN GẦN THỜI GIAN THỰC NHẤT)
 // =============================================================================
 
 var BASEURL = "https://tinhlagi.pro/sport";
@@ -8,8 +8,8 @@ function getManifest() {
     return JSON.stringify({
         "id": "bongdatv",
         "name": "TV - Thể Thao Pro",
-        "description": "Trực tiếp bóng đá (Chia 2 nhóm Live & Sắp diễn ra, Poster Logo đội bóng, Xử lý trận kết thúc).",
-        "version": "1.8.0",
+        "description": "Trực tiếp bóng đá (Sắp xếp ưu tiên các trận gần thời gian thực lên đầu).",
+        "version": "1.8.2",
         "baseUrl": BASEURL,
         "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
         "isEnabled": true,
@@ -39,7 +39,6 @@ function parseDataFromHash(url) {
     return null;
 }
 
-// Làm sạch tên trận đấu
 function cleanMatchTitle(rawTitle) {
     if (!rawTitle) return "Trực tiếp Bóng Đá";
     return rawTitle
@@ -50,7 +49,7 @@ function cleanMatchTitle(rawTitle) {
         .trim();
 }
 
-// Chuyển chuỗi "HH:mm DD/MM" thành timestamp ms
+// Chuyển chuỗi thời gian sang timestamp ms chính xác
 function parseDateTimeToTimestamp(dateStr) {
     if (!dateStr) return 0;
     try {
@@ -62,6 +61,7 @@ function parseDateTimeToTimestamp(dateStr) {
         var now = new Date();
         var day = now.getDate();
         var month = now.getMonth();
+        var year = now.getFullYear();
 
         if (parts.length > 1 && parts[1].indexOf('/') !== -1) {
             var dParts = parts[1].split('/');
@@ -69,16 +69,12 @@ function parseDateTimeToTimestamp(dateStr) {
             month = parseInt(dParts[1], 10) - 1;
         }
 
-        var matchDate = new Date(now.getFullYear(), month, day, hours, minutes, 0);
+        var matchDate = new Date(year, month, day, hours, minutes, 0);
         return matchDate.getTime();
     } catch (e) {
         return 0;
     }
 }
-
-// =============================================================================
-// DANH MỤC & CẤU HÌNH (CHIA 2 NHÓM CHO HOME)
-// =============================================================================
 
 function getHomeSections() {
     return JSON.stringify([
@@ -103,12 +99,11 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSE & BÓC TÁCH DỮ LIỆU TRẬN ĐẤU (CHIA NHÓM THEO SLUG)
+// PARSE DANH SÁCH & SẮP XẾP ƯU TIÊN GẦN THỜI GIAN THỰC NHẤT
 // =============================================================================
 
 function parseListResponse(html, url) {
     try {
-        // Xác định đang ở tab/section nào dựa vào URL hoặc mặc định lấy hết
         var currentSlug = "live_group";
         if (url && url.indexOf("upcoming_group") !== -1) {
             currentSlug = "upcoming_group";
@@ -129,15 +124,12 @@ function parseListResponse(html, url) {
             var attrBlock = match[3];
             var innerContent = match[4];
 
-            // 1. Kiểm tra trạng thái kết thúc
             var isFinished = innerContent.indexOf('Đã xong') !== -1 || 
                              innerContent.indexOf('status-ended') !== -1 || 
                              innerContent.indexOf('Kết thúc') !== -1 || 
-                             innerContent.indexOf('FT') !== -1;
+                             innerContent.indexOf('FT') !== -1 ||
+                             innerContent.indexOf('Đã kết thúc') !== -1;
 
-            if (isFinished) continue;
-
-            // 2. Trạng thái Live / Sắp diễn ra
             var isLive = innerContent.indexOf('status-live') !== -1 || 
                          innerContent.indexOf('🟢 Live') !== -1 || 
                          innerContent.indexOf('ON') !== -1;
@@ -146,13 +138,6 @@ function parseListResponse(html, url) {
                              innerContent.indexOf('status-upcoming') !== -1 || 
                              innerContent.indexOf('⏳') !== -1;
 
-            if (!isLive && !isUpcoming) continue;
-
-            var isHot = (tamDiemPos !== -1 && matchIndex > tamDiemPos && matchIndex < tamDiemPos + 3500) ||
-                        innerContent.indexOf('hot') !== -1 || 
-                        attrBlock.indexOf('hot') !== -1;
-
-            // 3. Bóc tách thông tin
             var titleMatch = attrBlock.match(/data-title="([^"]*)"/i);
             var urlMatch = attrBlock.match(/data-url="([^"]*)"/i);
             var scoreMatch = attrBlock.match(/data-score="([^"]*)"/i);
@@ -169,7 +154,6 @@ function parseListResponse(html, url) {
             var minute = minuteMatch ? decodeEntities(minuteMatch[1]).trim() : "";
             var time = timeMatch ? decodeEntities(timeMatch[1]).trim() : "";
 
-            // Cố gắng bắt ảnh poster: Ưu tiên ảnh BLV/Logo nếu có sẵn trong HTML thẻ img bên trong
             var posterUrl = "";
             var imgMatch = innerContent.match(/<img[^>]+src="([^">]+)"/i);
             if (imgMatch && imgMatch[1]) {
@@ -184,63 +168,62 @@ function parseListResponse(html, url) {
             var episodeParts = [];
             if (time) episodeParts.push("🕒 " + time);
 
-            var itemObj = {
-                weight: 0,
-                item: {}
-            };
+            var matchTimeMs = parseDateTimeToTimestamp(time);
+            
+            // Tính khoảng cách tuyệt đối đến thời gian hiện tại (tính bằng ms)
+            // Trận nào có khoảng cách thời gian nhỏ nhất (gần giờ hiện tại nhất) sẽ nhận giá trị trọng số ưu tiên lớn nhất
+            var timeDiffFromNow = matchTimeMs > 0 ? Math.abs(matchTimeMs - nowMs) : 999999999;
 
+            var itemObj = { weight: 0, item: {} };
             var payload = { title: cleanTitle, league: league, mainUrl: streamUrl, sources: parsedSources, isLive: isLive };
             var itemUrl = BASEURL + "#data=" + encodeURIComponent(JSON.stringify(payload));
 
-            if (isLive) {
-                var liveStatus = "🟢 LIVE";
+            if (isLive || (!isUpcoming && !isFinished && timeDiffFromNow < 2 * 60 * 60 * 1000)) {
+                var liveStatus = isLive ? "🟢 LIVE" : "⚽ ĐANG DIỄN RA";
                 if (minute) liveStatus += " " + minute + "'";
                 episodeParts.push(liveStatus);
                 if (score) episodeParts.push("⚽ " + score);
 
-                itemObj.weight = isHot ? (3000000000000 + (parseInt(minute, 10) || 0)) : (2000000000000 + (parseInt(minute, 10) || 0));
+                // Trọng số ưu tiên cho nhóm Live, đồng thời đưa trận có thời gian gần hiện tại lên trên cùng
+                itemObj.weight = 3000000000000 - timeDiffFromNow + (isHot ? 500000000 : 0);
                 itemObj.item = {
                     "id": itemUrl,
                     "title": cleanTitle,
-                    "posterUrl": posterUrl, // Lấy ảnh thật của trận đấu/BLV nếu tìm thấy
+                    "posterUrl": posterUrl,
                     "backdropUrl": posterUrl,
                     "quality": isHot ? "🔥 TÂM ĐIỂM" : "LIVE",
                     "episode_current": episodeParts.join(" • ")
                 };
                 liveItems.push(itemObj);
             } else {
-                var matchTimeMs = parseDateTimeToTimestamp(time);
                 var diffMs = matchTimeMs - nowMs;
-
-                if (diffMs < -15 * 60 * 1000 || diffMs > SIX_HOURS_MS) {
-                    continue;
+                if (diffMs > SIX_HOURS_MS && !isHot) {
+                    continue; // Bỏ qua các trận quá xa (trừ trận hot)
                 }
 
-                episodeParts.push("⏳ Sắp Live");
-                itemObj.weight = isHot ? (1500000000000 - matchTimeMs) : (1000000000000 - matchTimeMs);
+                episodeParts.push(isFinished ? "⚠️ Đã xong" : "⏳ Sắp Live");
+                
+                // Trọng số ưu tiên nhóm Sắp diễn ra: trận nào đến giờ nhanh hơn sẽ được đẩy lên trên
+                itemObj.weight = 1000000000000 - timeDiffFromNow + (isHot ? 500000000 : 0);
                 itemObj.item = {
                     "id": itemUrl,
                     "title": cleanTitle,
                     "posterUrl": posterUrl,
                     "backdropUrl": posterUrl,
-                    "quality": "SẮP LIVE",
+                    "quality": isFinished ? "ĐÃ XONG" : "SẮP LIVE",
                     "episode_current": episodeParts.join(" • ")
                 };
                 upcomingItems.push(itemObj);
             }
         }
 
-        // Sắp xếp các mảng
+        // Sắp xếp giảm dần theo trọng số (trận nào gần thời gian thực nhất sẽ đứng đầu)
         liveItems.sort(function(a, b) { return b.weight - a.weight; });
         upcomingItems.sort(function(a, b) { return b.weight - a.weight; });
 
-        var finalFilteredItems = [];
-        if (currentSlug === "upcoming_group") {
-            finalFilteredItems = upcomingItems.map(function(w) { return w.item; });
-        } else {
-            // Mặc định trả về nhóm Live
-            finalFilteredItems = liveItems.map(function(w) { return w.item; });
-        }
+        var finalFilteredItems = (currentSlug === "upcoming_group") ? 
+            upcomingItems.map(function(w) { return w.item; }) : 
+            liveItems.map(function(w) { return w.item; });
 
         return JSON.stringify({
             "items": finalFilteredItems,
@@ -256,7 +239,7 @@ function parseListResponse(html, url) {
 function parseSearchResponse(html) { return parseListResponse(html, ""); }
 
 // =============================================================================
-// CHI TIẾT & XỬ LÝ TRẬN ĐẤU ĐÃ KẾT THÚC / KHÔNG CÓ LINK
+// CHI TIẾT & HIỂN THỊ GIAO DIỆN TRẬN ĐẤU
 // =============================================================================
 
 function parseMovieDetail(html, url) {
@@ -266,19 +249,16 @@ function parseMovieDetail(html, url) {
         if (data && data.league) title = "[" + data.league + "] " + title;
 
         var episodes = [];
-
-        // Kiểm tra nếu không có nguồn hoặc trận đấu đã kết thúc / không khả dụng
         var hasSources = data && data.sources && data.sources.length > 0;
         var mainUrl = data && data.mainUrl ? data.mainUrl : BASEURL;
 
-        if (!hasSources && data && data.isLive === false) {
-            // Trường hợp trận đấu đã kết thúc hoặc chưa mở luồng phát
+        if (!hasSources) {
             episodes.push({
                 id: BASEURL + "#ended_match",
-                name: "⚠️ Trận đấu đã kết thúc hoặc chưa phát sóng",
+                name: "⚠️ Trận đấu đã kết thúc. Cám ơn quý khán giả đã theo dõi",
                 slug: "ended"
             });
-        } else if (hasSources) {
+        } else {
             for (var i = 0; i < data.sources.length; i++) {
                 var s = data.sources[i];
                 episodes.push({
@@ -287,12 +267,6 @@ function parseMovieDetail(html, url) {
                     slug: "channel-" + i
                 });
             }
-        } else {
-            episodes.push({
-                id: mainUrl + "#embed_play",
-                name: "🌐 Xem Trực Tiếp (WebView)",
-                slug: "channel-main"
-            });
         }
 
         return JSON.stringify({
@@ -307,18 +281,17 @@ function parseMovieDetail(html, url) {
         return JSON.stringify({
             id: url,
             title: "Trực Tiếp Bóng Đá",
-            servers: [{ name: "Server", episodes: [{ id: BASEURL + "#embed_play", name: "Xem Ngay", slug: "main" }] }]
+            servers: [{ name: "Server", episodes: [{ id: BASEURL + "#ended_match", name: "⚠️ Trận đấu đã kết thúc. Cám ơn quý khán giả đã theo dõi", slug: "ended" }] }]
         });
     }
 }
 
 function parseDetailResponse(html, url) {
-    // Nếu người dùng bấm vào mục báo kết thúc, trả về nội dung trống hoặc popup thông báo
     if (url.indexOf("#ended_match") !== -1) {
         return JSON.stringify({
             url: "about:blank",
             isEmbed: false,
-            script: "alert('Trận đấu này đã kết thúc hoặc hiện không có link phát sóng!');"
+            script: "document.body.style.backgroundColor='#111'; document.body.innerHTML='<div style=\"display:flex;justify-content:center;align-items:center;height:100vh;color:#fff;font-family:sans-serif;text-align:center;padding:20px;\"><div><h2 style=\"color:#00FF88;font-size:24px;margin-bottom:10px;\">TRẬN ĐẤU ĐÃ KẾT THÚC</h2><p style=\"font-size:16px;color:#ccc;\">Cảm ơn quý khán giả đã theo dõi.</p></div></div>';"
         });
     }
 
