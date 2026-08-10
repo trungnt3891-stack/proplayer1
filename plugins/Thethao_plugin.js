@@ -7,13 +7,12 @@ var DEFAULT_POSTER = "https://tinhlagi.pro/sport/sanbong.jpg";
 
 function getManifest() {
     return JSON.stringify({
-        "id": "bongdatv",
+        "id": "ThethaoTV",
         "name": "TV - Thể Thao Pro",
         "description": "Trực tiếp bóng đá (Dùng ảnh sân bóng làm bìa, sắp xếp thời gian chuẩn, hiển thị Tỉ số/Phút).",
         "version": "1.8.9",
         "baseUrl": BASEURL,
-        "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
-        "isEnabled": true,
+         "isEnabled": true,
         "layoutType": "LIST",
         "type": "MOVIE",
         "playerType": "embed"
