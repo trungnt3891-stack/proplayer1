@@ -1,17 +1,19 @@
 // =============================================================================
-// PLUGIN VAX: TINHLAGI TV (BÌA SANBONG + TỰ ĐỘNG BẮT NO SIGNAL SAU 7S)
+// PLUGIN VAX: TINHLAGI TV (BÌA SANBONG + PLAY M3U8 NO SIGNAL NẾU LỖI/KẾT THÚC)
 // =============================================================================
 
 var BASEURL = "https://tinhlagi.pro/sport";
 var DEFAULT_POSTER = "https://tinhlagi.pro/sport/sanbong.jpg";
-var NO_SIGNAL_LINK = "https://freem3u.xyz/static/no-signal/low.m3u8";
+
+// Đường link No Signal chính xác từ website
+var NO_SIGNAL_LINK = "https://tinhlagi.pro/sport/proxy.php?hash=e84b78ac552063d85e51a15f251ff2c60ace92f9e978c2b716556cafe8c6ece2&referer=https%3A%2F%2Ffreem3u.xyz%2F&url=https%3A%2F%2Ffreem3u.xyz%2Fstatic%2Fno-signal%2Flow.m3u8";
 
 function getManifest() {
     return JSON.stringify({
         "id": "ThethaoTV",
         "name": "TV - Thể Thao Pro",
-        "description": "Trực tiếp bóng đá (Sắp xếp thời gian chuẩn, tự động chuyển No Signal sau 7s nếu lỗi).",
-        "version": "1.9.0",
+        "description": "Trực tiếp bóng đá (Tự động phát link No Signal nếu lỗi hoặc kết thúc).",
+        "version": "1.9.1",
         "baseUrl": BASEURL,
         "isEnabled": true,
         "layoutType": "LIST",
@@ -216,7 +218,7 @@ function parseListResponse(html, url) {
 function parseSearchResponse(html) { return parseListResponse(html, ""); }
 
 // =============================================================================
-// CHI TIẾT & BẮT FALLBACK NO SIGNAL SAU 7 GIÂY
+// CHI TIẾT & BẮT FALLBACK NO SIGNAL (TỰ CHUYỂN LINK)
 // =============================================================================
 
 function parseMovieDetail(html, url) {
@@ -229,11 +231,12 @@ function parseMovieDetail(html, url) {
         var hasSources = data && data.sources && data.sources.length > 0;
         var mainUrl = data && data.mainUrl ? data.mainUrl : BASEURL;
 
-        if (!hasSources && !data.isLive) {
+        // Nếu trận đấu đã kết thúc hoặc không có link, dùng thẳng link NO SIGNAL
+        if (!hasSources) {
             episodes.push({
-                id: BASEURL + "#ended_match",
-                name: "⚠️ Trận đấu đã kết thúc hoặc chưa khả dụng",
-                slug: "ended"
+                id: NO_SIGNAL_LINK + "#embed_play",
+                name: "⚠️ Đang chờ tín hiệu / Trận đấu kết thúc",
+                slug: "no-signal"
             });
         } else {
             for (var i = 0; i < data.sources.length; i++) {
@@ -251,32 +254,30 @@ function parseMovieDetail(html, url) {
             title: title,
             posterUrl: DEFAULT_POSTER,
             backdropUrl: DEFAULT_POSTER,
-            description: "Hệ thống trực tiếp thể thao tốc độ cao. Nếu lỗi, tự động chuyển No Signal sau 7s.",
+            description: "Hệ thống trực tiếp thể thao tốc độ cao. Tự động chuyển Màn hình chờ (No Signal) sau 7s nếu lỗi.",
             servers: [{ name: "Danh Sách Kênh Phát Sóng", episodes: episodes }]
         });
     } catch (e) {
         return JSON.stringify({
             id: url,
             title: "Trực Tiếp Bóng Đá",
-            servers: [{ name: "Server", episodes: [{ id: BASEURL + "#ended_match", name: "⚠️ Lỗi dữ liệu", slug: "error" }] }]
+            servers: [{ name: "Server", episodes: [{ id: NO_SIGNAL_LINK + "#embed_play", name: "⚠️ Lỗi dữ liệu", slug: "error" }] }]
         });
     }
 }
 
 function parseDetailResponse(html, url) {
-    if (url.indexOf("#ended_match") !== -1) {
-        return JSON.stringify({
-            url: "about:blank",
-            isEmbed: false,
-            script: "document.body.style.backgroundColor='#0f172a'; document.body.innerHTML='<div style=\"display:flex;justify-content:center;align-items:center;height:100vh;color:#fff;font-family:sans-serif;text-align:center;padding:20px;\"><div><h2 style=\"color:#38bdf8;font-size:24px;margin-bottom:10px;\">TRẬN ĐẤU ĐÃ KẾT THÚC</h2><p style=\"font-size:16px;color:#94a3b8;\">Cảm ơn quý khán giả đã theo dõi.</p></div></div>';"
-        });
-    }
-
     var cleanUrl = url.split('#')[0];
     if (!cleanUrl || cleanUrl.indexOf('http') !== 0) cleanUrl = BASEURL;
 
-    // Đoạn script theo dõi: Auto-click lúc 1s, Kiểm tra thẻ <video> lúc 7s.
+    // Kịch bản đếm ngược: Auto-click lúc 1s, Kiểm tra lúc 7s.
+    // Nếu thẻ <video> lỗi hoặc không tải được -> Nhảy sang link No Signal gốc của họ.
     var fallbackScript = "setTimeout(function(){var b=document.querySelector('button, .play, .vjs-big-play-button, .jw-display-icon-display');if(b)b.click();},1000);setTimeout(function(){var v=document.querySelector('video');var fail=false;if(!v)fail=true;else if(v.error)fail=true;else if(v.networkState===3)fail=true;else if(v.readyState===0)fail=true;if(fail){window.location.replace('" + NO_SIGNAL_LINK + "');}},7000);";
+
+    // Vô hiệu hóa script chuyển hướng nếu URL hiện tại ĐÃ LÀ url No Signal, tránh lặp vô tận
+    if (cleanUrl.indexOf("freem3u.xyz") !== -1 || cleanUrl.indexOf("no-signal") !== -1) {
+        fallbackScript = "";
+    }
 
     return JSON.stringify({
         url: cleanUrl,
@@ -285,7 +286,7 @@ function parseDetailResponse(html, url) {
             "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/605.1.15",
             "Referer": "https://tinhlagi.pro/"
         },
-        script: fallbackScript, // Tiêm kịch bản đếm ngược 7 giây
+        script: fallbackScript,
         subtitles: []
     });
 }
