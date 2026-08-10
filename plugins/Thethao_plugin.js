@@ -1,5 +1,5 @@
 // =============================================================================
-// PLUGIN VAX: TINHLAGI TV (SẮP XẾP ƯU TIÊN GẦN THỜI GIAN THỰC NHẤT)
+// PLUGIN VAX: TINHLAGI TV (ƯU TIÊN SẮP XẾP GẦN THỜI GIAN THỰC + LẤY LOGO CHUẨN)
 // =============================================================================
 
 var BASEURL = "https://tinhlagi.pro/sport";
@@ -8,8 +8,8 @@ function getManifest() {
     return JSON.stringify({
         "id": "bongdatv",
         "name": "TV - Thể Thao Pro",
-        "description": "Trực tiếp bóng đá (Sắp xếp ưu tiên các trận gần thời gian thực lên đầu).",
-        "version": "1.8.2",
+        "description": "Trực tiếp bóng đá (Ưu tiên trận gần thời gian thực lên đầu, lấy logo chuẩn từ data-sources).",
+        "version": "1.8.3",
         "baseUrl": BASEURL,
         "iconUrl": "https://tinhlagi.pro/tinhlagi.ico",
         "isEnabled": true,
@@ -49,9 +49,9 @@ function cleanMatchTitle(rawTitle) {
         .trim();
 }
 
-// Chuyển chuỗi thời gian sang timestamp ms chính xác
+// Chuyển chuỗi "HH:mm DD/MM" thành timestamp ms chính xác
 function parseDateTimeToTimestamp(dateStr) {
-    if (!dateStr) return 0;
+    if (!dateStr || dateStr.indexOf("Đang cập nhật") !== -1) return 0;
     try {
         var parts = dateStr.trim().split(/\s+/);
         var timeParts = parts[0].split(':');
@@ -79,7 +79,7 @@ function parseDateTimeToTimestamp(dateStr) {
 function getHomeSections() {
     return JSON.stringify([
         { slug: 'live_group', title: '🔥 Tâm Điểm Live Đang Diễn Ra', type: 'List' },
-        { slug: 'upcoming_group', title: '⏳ Trận Đấu Sắp Diễn Ra (Trong 6H)', type: 'List' }
+        { slug: 'upcoming_group', title: '⏳ Trận Đấu Sắp Diễn Ra', type: 'List' }
     ]);
 }
 
@@ -99,7 +99,7 @@ function getUrlCountries() { return ""; }
 function getUrlYears() { return ""; }
 
 // =============================================================================
-// PARSE DANH SÁCH & SẮP XẾP ƯU TIÊN GẦN THỜI GIAN THỰC NHẤT
+// PARSE DANH SÁCH & SẮP XẾP SÁT THỜI GIAN THỰC NHẤT
 // =============================================================================
 
 function parseListResponse(html, url) {
@@ -112,31 +112,16 @@ function parseListResponse(html, url) {
         var liveItems = [];
         var upcomingItems = [];
         
-        var itemRegex = /<(button|div)[^>]*class="[^"]*(js-match-btn|match-item|card)[^"]*"([\s\S]*?)>([\s\S]*?)<\/\1>/gi;
+        // Quét các nút trận đấu từ HTML cấu trúc mới (match-btn)
+        var itemRegex = /<button[^>]*class="[^"]*match-btn[^"]*"([\s\S]*?)>([\s\S]*?)<\/button>/gi;
         var match;
 
         var nowMs = new Date().getTime();
         var SIX_HOURS_MS = 6 * 60 * 60 * 1000;
-        var tamDiemPos = html.search(/tâm\s*điểm\s*đang\s*live/i);
 
         while ((match = itemRegex.exec(html)) !== null) {
-            var matchIndex = match.index;
-            var attrBlock = match[3];
-            var innerContent = match[4];
-
-            var isFinished = innerContent.indexOf('Đã xong') !== -1 || 
-                             innerContent.indexOf('status-ended') !== -1 || 
-                             innerContent.indexOf('Kết thúc') !== -1 || 
-                             innerContent.indexOf('FT') !== -1 ||
-                             innerContent.indexOf('Đã kết thúc') !== -1;
-
-            var isLive = innerContent.indexOf('status-live') !== -1 || 
-                         innerContent.indexOf('🟢 Live') !== -1 || 
-                         innerContent.indexOf('ON') !== -1;
-
-            var isUpcoming = innerContent.indexOf('Sắp Live') !== -1 || 
-                             innerContent.indexOf('status-upcoming') !== -1 || 
-                             innerContent.indexOf('⏳') !== -1;
+            var attrBlock = match[1];
+            var innerContent = match[2];
 
             var titleMatch = attrBlock.match(/data-title="([^"]*)"/i);
             var urlMatch = attrBlock.match(/data-url="([^"]*)"/i);
@@ -148,76 +133,85 @@ function parseListResponse(html, url) {
 
             var rawTitle = titleMatch ? decodeEntities(titleMatch[1]).trim() : "";
             var cleanTitle = cleanMatchTitle(rawTitle);
-            var league = leagueMatch ? decodeEntities(leagueMatch[1]).trim() : "GIẢI ĐẤU KHÁC";
+            var league = leagueMatch ? decodeEntities(leagueMatch[1]).trim() : "Giải đấu khác";
             var streamUrl = urlMatch ? decodeEntities(urlMatch[1]).trim() : BASEURL;
             var score = scoreMatch ? decodeEntities(scoreMatch[1]).trim() : "";
             var minute = minuteMatch ? decodeEntities(minuteMatch[1]).trim() : "";
             var time = timeMatch ? decodeEntities(timeMatch[1]).trim() : "";
 
-            var posterUrl = "";
-            var imgMatch = innerContent.match(/<img[^>]+src="([^">]+)"/i);
-            if (imgMatch && imgMatch[1]) {
-                posterUrl = decodeEntities(imgMatch[1]);
-            }
-
             var parsedSources = [];
             if (sourcesMatch) {
-                try { parsedSources = JSON.parse(decodeEntities(sourcesMatch[1])); } catch (e) {}
+                try { 
+                    parsedSources = JSON.parse(decodeEntities(sourcesMatch[1])); 
+                } catch (e) {}
             }
 
-            var episodeParts = [];
-            if (time) episodeParts.push("🕒 " + time);
+            // Lấy ảnh logo chuẩn từ cấu trúc data-sources nếu có
+            var posterUrl = "";
+            if (parsedSources.length > 0 && parsedSources[0].logo) {
+                posterUrl = parsedSources[0].logo;
+            } else {
+                var imgMatch = innerContent.match(/<img[^>]+src="([^">]+)"/i);
+                if (imgMatch && imgMatch[1]) {
+                    posterUrl = decodeEntities(imgMatch[1]);
+                }
+            }
+
+            var isLive = innerContent.indexOf('status-live') !== -1 || 
+                         innerContent.indexOf('🟢 Live') !== -1;
 
             var matchTimeMs = parseDateTimeToTimestamp(time);
             
-            // Tính khoảng cách tuyệt đối đến thời gian hiện tại (tính bằng ms)
-            // Trận nào có khoảng cách thời gian nhỏ nhất (gần giờ hiện tại nhất) sẽ nhận giá trị trọng số ưu tiên lớn nhất
+            // Tính khoảng cách thời gian so với hiện tại để ưu tiên đưa trận sát giờ thực lên đầu
             var timeDiffFromNow = matchTimeMs > 0 ? Math.abs(matchTimeMs - nowMs) : 999999999;
+
+            var episodeParts = [];
+            if (time) episodeParts.push("🕒 " + time);
 
             var itemObj = { weight: 0, item: {} };
             var payload = { title: cleanTitle, league: league, mainUrl: streamUrl, sources: parsedSources, isLive: isLive };
             var itemUrl = BASEURL + "#data=" + encodeURIComponent(JSON.stringify(payload));
 
-            if (isLive || (!isUpcoming && !isFinished && timeDiffFromNow < 2 * 60 * 60 * 1000)) {
+            if (isLive || timeDiffFromNow < 2 * 60 * 60 * 1000) {
                 var liveStatus = isLive ? "🟢 LIVE" : "⚽ ĐANG DIỄN RA";
                 if (minute) liveStatus += " " + minute + "'";
                 episodeParts.push(liveStatus);
                 if (score) episodeParts.push("⚽ " + score);
 
-                // Trọng số ưu tiên cho nhóm Live, đồng thời đưa trận có thời gian gần hiện tại lên trên cùng
-                itemObj.weight = 3000000000000 - timeDiffFromNow + (isHot ? 500000000 : 0);
+                // Trọng số ưu tiên nhóm Live: thời gian càng gần hiện tại càng lớn
+                itemObj.weight = 3000000000000 - timeDiffFromNow;
                 itemObj.item = {
                     "id": itemUrl,
                     "title": cleanTitle,
                     "posterUrl": posterUrl,
                     "backdropUrl": posterUrl,
-                    "quality": isHot ? "🔥 TÂM ĐIỂM" : "LIVE",
+                    "quality": "LIVE",
                     "episode_current": episodeParts.join(" • ")
                 };
                 liveItems.push(itemObj);
             } else {
                 var diffMs = matchTimeMs - nowMs;
-                if (diffMs > SIX_HOURS_MS && !isHot) {
-                    continue; // Bỏ qua các trận quá xa (trừ trận hot)
+                if (diffMs > SIX_HOURS_MS && diffMs < 0) {
+                    continue; 
                 }
 
-                episodeParts.push(isFinished ? "⚠️ Đã xong" : "⏳ Sắp Live");
+                episodeParts.push("⏳ Sắp Live");
                 
-                // Trọng số ưu tiên nhóm Sắp diễn ra: trận nào đến giờ nhanh hơn sẽ được đẩy lên trên
-                itemObj.weight = 1000000000000 - timeDiffFromNow + (isHot ? 500000000 : 0);
+                // Trọng số nhóm Sắp diễn ra: trận nào diễn ra sớm hơn (gần tới giờ hơn) được đẩy lên trên
+                itemObj.weight = 1000000000000 - timeDiffFromNow;
                 itemObj.item = {
                     "id": itemUrl,
                     "title": cleanTitle,
                     "posterUrl": posterUrl,
                     "backdropUrl": posterUrl,
-                    "quality": isFinished ? "ĐÃ XONG" : "SẮP LIVE",
+                    "quality": "SẮP LIVE",
                     "episode_current": episodeParts.join(" • ")
                 };
                 upcomingItems.push(itemObj);
             }
         }
 
-        // Sắp xếp giảm dần theo trọng số (trận nào gần thời gian thực nhất sẽ đứng đầu)
+        // Sắp xếp giảm dần theo trọng số (trận gần thời gian thực nhất lên đầu)
         liveItems.sort(function(a, b) { return b.weight - a.weight; });
         upcomingItems.sort(function(a, b) { return b.weight - a.weight; });
 
