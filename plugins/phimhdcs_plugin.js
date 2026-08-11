@@ -1,5 +1,5 @@
 // =============================================================================
-// PLUGIN VAX PLAYER: PHIMHDCSS.NET (V3 - CHIẾN THUẬT HOOK BLOB + EMBEDTOEXOPLAY)
+// PLUGIN VAX PLAYER: PHIMHDCSS.NET (V4 - HOOK BÁT CỰC NHẸ BÉN)
 // =============================================================================
 var DOMAIN = "phimhdcss.net";
 var BASEURL = "https://" + DOMAIN;
@@ -8,14 +8,14 @@ function getManifest() {
     return JSON.stringify({
         "id": "phimhdcss",
         "name": "PhimHDC",
-        "description": "Phiên bản chiến thuật HOOK: Bắt Blob M3U8 và Video tag siêu tốc.",
-        "version": "1.0.3",
+        "description": "Chiến thuật Hook Blob/Video tag cực nhanh, bỏ JS rườm rà. Chặn hoàn toàn Ads.",
+        "version": "1.0.6",
         "baseUrl": BASEURL,
         "iconUrl": BASEURL + "/storage/images/logos-xemphimhdc.png",
         "isEnabled": true,
         "type": "MOVIE",
         "layoutType": "VERTICAL",
-        "playerType": "embedtoexoplay" // Ép sử dụng Webview ngầm để chạy Sniffer
+        "playerType": "embedtoexoplay" // Ép Webview ngầm chạy Sniffer JS
     });
 }
 
@@ -186,7 +186,7 @@ function parseMovieDetail(html, url) {
         var duration = getMeta("Thời lượng:");
         var casts = getMeta("Diễn viên:");
 
-        // BÓC TÁCH MÁY CHỦ & TẬP PHIM (Chuỗi liên kết .find)
+        // BÓC TÁCH MÁY CHỦ & TẬP PHIM CHUẨN XÁC
         var servers = [];
         
         doc.find(".control-box").each(function() {
@@ -194,11 +194,13 @@ function parseMovieDetail(html, url) {
             var serverName = rawServerBlock.replace(/Danh sách Server|Danh sách|:/gi, "").trim() || "Vietsub";
             var eps = [];
             
-            this.find(".list-episode").find("a").each(function() {
+            // Tìm tất cả thẻ A trực tiếp bên trong block này
+            this.find("a").each(function() {
                 var epHref = this.attr("href");
                 var epName = this.text().trim();
                 
                 if (epHref && epHref.indexOf('javascript') === -1 && epHref !== '#') {
+                    // Chuẩn hóa tên miền để App gọi đúng url (Xóa đuôi .com thành .net)
                     if (epHref.indexOf("http") === 0) {
                         epHref = epHref.replace(/https?:\/\/[^\/]+/i, BASEURL);
                     } else if (epHref.indexOf("/") === 0) {
@@ -214,7 +216,7 @@ function parseMovieDetail(html, url) {
             });
 
             if (eps.length > 0) {
-                eps.reverse();
+                eps.reverse(); // Đảo ngược tập từ 1 -> mới nhất
                 servers.push({
                     name: serverName,
                     episodes: eps
@@ -230,7 +232,7 @@ function parseMovieDetail(html, url) {
                 else if (watchLink.indexOf("/") === 0) watchLink = BASEURL + watchLink;
                 servers.push({
                     name: "Nguồn Phát",
-                    episodes: [{ id: watchLink, name: "Tập Cập Nhật", slug: "full" }]
+                    episodes: [{ id: watchLink, name: "Xem Ngay", slug: "full" }]
                 });
             }
         }
@@ -259,23 +261,25 @@ function parseMovieDetail(html, url) {
 }
 
 // =============================================================================
-// [CHIẾN THUẬT HOOK] TÓM GỌN BLOB M3U8 VÀ VIDEO TAG
+// [CHIẾN THUẬT HOOK] TÓM GỌN BLOB M3U8 HOẶC VIDEO THẺ
 // =============================================================================
 function parseDetailResponse(html, apiUrl) {
     try {
         var url = apiUrl.split("|")[0];
 
-        // MÃ JS HOOK - KHÔNG ĐỂ DẤU CHÚ THÍCH // ĐỂ TRÁNH LỖI KHI APP MINIFY GỘP DÒNG
+        // MÃ JS HOOK - KIỂM TRA TOÀN BỘ CÁC ĐIỂM GIẤU LINK CỦA TRANG
+        // Lưu ý: Không dùng dấu chú thích "//" ở đầu dòng để tránh lỗi minify.
         var customJsCode = `
         (function() {
-            if (window._vaapp_hooked) return;
-            window._vaapp_hooked = true;
+            if (window._vaxapp_hooked) return;
+            window._vaxapp_hooked = true;
 
             var playerHeaders = JSON.stringify({
                 "Referer": window.location.href,
                 "User-Agent": navigator.userAgent
             });
 
+            /* 1. Màng Lọc Blob M3U8 (Chặn ở hàm createObjectURL) */
             if (typeof URL !== 'undefined' && URL.createObjectURL) {
                 var originalCreateObjectURL = URL.createObjectURL;
                 URL.createObjectURL = function(blob) {
@@ -284,7 +288,6 @@ function parseDetailResponse(html, apiUrl) {
                         var processContent = function(content) {
                             if (content && content.trim().indexOf('#EXTM3U') === 0) {
                                 if (window.SnifferBridge && typeof window.SnifferBridge.playM3u8Content === 'function') {
-                                    window.SnifferBridge.log("Da bat Blob M3U8 thanh cong!");
                                     window.SnifferBridge.playM3u8Content(content, window.location.href, playerHeaders);
                                 }
                             }
@@ -301,35 +304,40 @@ function parseDetailResponse(html, apiUrl) {
                 };
             }
 
+            /* 2. Webview Loop Check (Tóm cổ thẻ video .src thật) */
             var checkCount = 0;
             var checkInterval = setInterval(function() {
                 try {
-                    var skipBtn = document.getElementById("resumeBtn") || document.querySelector(".resume-btn");
-                    if (skipBtn) {
-                        var style = window.getComputedStyle(skipBtn);
-                        if (style.display !== 'none' && style.visibility !== 'hidden') {
-                            skipBtn.click();
+                    /* Tự động click play nếu JWPlayer hay VideoJS yêu cầu */
+                    var playBtn = document.querySelector('.jw-icon-display, .vjs-big-play-button, .plyr__control--overlaid, .play-btn, #resumeBtn');
+                    if (playBtn) playBtn.click();
+                    
+                    /* Bắt link trực tiếp qua dataset (Cửa hậu của phimhdc) */
+                    var activeServer = document.querySelector('.streaming-server.active') || document.querySelector('.streaming-server');
+                    if (activeServer && activeServer.dataset && activeServer.dataset.link) {
+                        var link = activeServer.dataset.link;
+                        if (link.indexOf('http') === 0) {
+                            if (window.SnifferBridge) {
+                                window.SnifferBridge.play(link, playerHeaders);
+                            }
+                            clearInterval(checkInterval);
+                            return;
                         }
                     }
 
-                    var playBtn = document.querySelector('.jw-icon-display, .vjs-big-play-button, .plyr__control--overlaid, .play-btn');
-                    if (playBtn) playBtn.click();
-
+                    /* Quét trực tiếp thẻ video nếu JWPlayer render xong */
                     var video = document.querySelector('video');
-                    if (video && video.src && video.src.indexOf('http') === 0) {
+                    if (video && video.src && video.src.indexOf('http') === 0 && video.src.indexOf('blob:') === -1) {
                         if (window.SnifferBridge) {
-                            window.SnifferBridge.log("Da bat duoc link video: " + video.src);
                             window.SnifferBridge.play(video.src, playerHeaders);
                         }
                         clearInterval(checkInterval);
-                    } else {
-                        if (window.SnifferBridge) window.SnifferBridge.log("Dang cho the video xuat hien... (" + checkCount + ")");
+                        return;
                     }
 
                     checkCount++;
-                    if (checkCount > 30) {
-                        clearInterval(checkInterval);
-                    }
+                    if (checkCount > 30) clearInterval(checkInterval);
+
                 } catch (err) {
                     if (window.SnifferBridge) window.SnifferBridge.log("Loi CustomJS: " + err.message);
                 }
@@ -343,8 +351,8 @@ function parseDetailResponse(html, apiUrl) {
             "headers": {
                 "Referer": BASEURL + "/",
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                "Block-Ads": "true",
-                "Block-Redirects": "true",
+                "Block-Ads": "true", // Chặn quảng cáo tích hợp siêu nhẹ của App
+                "Block-Redirects": "true", // Ngăn mọi Popup/Redirect độc hại
                 "Custom-Js": customJsCode.replace(/\n/g, " ").replace(/\r/g, "").trim()
             },
             "subtitles": []
