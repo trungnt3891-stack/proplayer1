@@ -13,7 +13,7 @@ function getManifest() {
         "id": "ThethaoTV",
         "name": "TV - Thể Thao Pro",
         "description": "Trực tiếp bóng đá (Tự động phát link No Signal nếu lỗi hoặc kết thúc).",
-        "version": "1.9.1",
+        "version": "1.9.2", // Nâng version
         "baseUrl": BASEURL,
         "isEnabled": true,
         "layoutType": "LIST",
@@ -89,7 +89,12 @@ function getPrimaryCategories() {
 
 function getFilterConfig() { return JSON.stringify({}); }
 function getUrlList(slug, filtersJson) { return BASEURL + "/?section=" + slug; }
-function getUrlSearch(keyword, filtersJson) { return BASEURL + "/"; }
+
+// TẮT TÍNH NĂNG TÌM KIẾM
+function getUrlSearch(keyword, filtersJson) { 
+    return ""; 
+}
+
 function getUrlDetail(slug) { return slug; }
 function getUrlCategories() { return BASEURL + "/"; }
 function getUrlCountries() { return ""; }
@@ -215,7 +220,13 @@ function parseListResponse(html, url) {
     }
 }
 
-function parseSearchResponse(html) { return parseListResponse(html, ""); }
+// TẮT TÍNH NĂNG TÌM KIẾM BẰNG MẢNG RỖNG
+function parseSearchResponse(html) { 
+    return JSON.stringify({
+        "items": [],
+        "pagination": { "currentPage": 1, "totalPages": 1 }
+    }); 
+}
 
 // =============================================================================
 // CHI TIẾT & BẮT FALLBACK NO SIGNAL (TỰ CHUYỂN LINK)
