@@ -9,6 +9,13 @@
       "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/nguonC.png"
     },
     {
+      "id": "NguonC1",
+      "name": "NguonC1",
+      "version": "1.5.4",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/NguoncHT_plugin.js",
+      "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/nguonC.png"
+    },
+    {
       "id": "Vsmov",
       "name": "PhimVsmov",
       "version": "1.1.0",
