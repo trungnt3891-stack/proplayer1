@@ -31,6 +31,13 @@
             "iconUrl": "https://vicdn.cc/vicdn.png",
     },
     {
+            "id": "Onflix",
+            "name": "Onfix",
+            "version": "1.0.1",
+            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/OnflixHT_plugin.js?token=GHSAT0AAAAAAD4ZCL2ZKXW2SNM5JN4FJT5S2T5RDQQ",
+            "iconUrl": "https://vicdn.cc/vicdn.png",
+    },
+    {
             "id": "shortflix",
             "name": "PhimNgắnHay",
             "version": "1.2.2",
