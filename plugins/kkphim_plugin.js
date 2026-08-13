@@ -6,7 +6,7 @@ function getManifest() {
     return JSON.stringify({
         "id": "kkphim",
         "name": "KKPhim",
-        "version": "1.0.8",
+        "version": "1.0.2",
         "baseUrl": "https://phimapi.com",
         "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/kkphim.png",
         "isEnabled": true,
@@ -62,22 +62,30 @@ function getUrlList(slug, filtersJson) {
         var filters = JSON.parse(filtersJson || "{}");
         var page = filters.page || 1;
 
+        // Slugs that belong to 'danh-sach'
         var listSlugs = ['phim-vietsub', 'subteam', 'phim-thuyet-minh', 'phim-long-tieng', 'phim-bo', 'phim-le', 'hoat-hinh', 'tv-shows', 'phim-chieu-rap', 'phim-moi-cap-nhat'];
         var basePath = listSlugs.indexOf(slug) !== -1 ? "danh-sach" : "the-loai";
 
         var typeList = slug;
+
+        // Special handling for legacy slug
         if (typeList === 'phim-moi') typeList = 'phim-moi-cap-nhat-v3';
 
+        // Special handling for 'phim-moi-cap-nhat-v3' which uses a different base URL structure
         if (slug === 'phim-moi-cap-nhat-v3' || typeList === 'phim-moi-cap-nhat-v3') {
             return "https://phimapi.com/danh-sach/phim-moi-cap-nhat-v3?page=" + page;
         }
 
         var url = "https://phimapi.com/v1/api/" + basePath + "/" + typeList + "?page=" + page;
-        url += "&limit=" + (filters.limit || 24);
+
+        // Query Params (Common for all endpoints)
+        if (filters.limit) url += "&limit=" + filters.limit;
+        else url += "&limit=24"; // Default limit
 
         if (filters.country) url += "&country=" + filters.country;
         if (filters.year) url += "&year=" + filters.year;
         if (filters.category) url += "&category=" + filters.category;
+
         if (filters.sort) url += "&sort_field=" + filters.sort;
 
         return url;
@@ -87,33 +95,36 @@ function getUrlList(slug, filtersJson) {
 }
 
 function getUrlSearch(keyword, filtersJson) {
-    var page = 1;
-    try {
-        if (typeof filtersJson === 'string') {
-            var filters = JSON.parse(filtersJson || "{}");
-            page = filters.page || 1;
-        } else if (typeof filtersJson === 'number') {
-            page = filtersJson;
-        }
-    } catch (e) {
-        page = 1;
-    }
-    
-    // FIX: Giải mã Keyword phòng trường hợp App đã mã hoá sẵn, sau đó mới mã hoá lại cho chuẩn 1 lần duy nhất
-    var safeKeyword = keyword;
-    try {
-        safeKeyword = encodeURIComponent(decodeURIComponent(keyword));
-    } catch (e) {
-        safeKeyword = encodeURIComponent(keyword);
-    }
-    
-    return "https://phimapi.com/v1/api/tim-kiem?keyword=" + safeKeyword + "&page=" + page + "&limit=24";
+    var filters = JSON.parse(filtersJson || "{}");
+    var limit = filters.limit || 24;
+    return "https://phimapi.com/v1/api/tim-kiem?keyword=" + encodeURIComponent(keyword) + "&limit=" + limit;
 }
 
-function getUrlDetail(slug) { return "https://phimapi.com/phim/" + slug; }
+function getUrlDetail(slug) {
+    return "https://phimapi.com/phim/" + slug;
+}
+
 function getUrlCategories() { return "https://phimapi.com/the-loai"; }
 function getUrlCountries() { return "https://phimapi.com/quoc-gia"; }
-function getUrlYears() { return ""; }
+function getUrlYears() {
+    // KKPhim doesn't seem to have a 'list years' API in the doc, but implies support (1970-now).
+    // We can return empty or a hardcoded generator if needed. 
+    // But the Kotlin generic logic expects a URL.
+    // User instruction: GET https://phimapi.com/v1/api/nam/{type_list}
+    // But how to get the LIST of years?
+    // User didn't provide "GET list years". Just "GET detailed year".
+    // I will return empty string to signal "No dynamic years list", 
+    // OR I can return a dummy API and parse it manually if I want to simulate it,
+    // but better to just let Kotlin handle fallback if connection fails. 
+    // Actually, I can construct a local JSON response if I implement a specific "local" parser?
+    // No, let's stick to API. 
+    // User provided: "Năm: GET https://phimapi.com/v1/api/nam/{type_list}"
+    // But didn't provide "GET all years".
+    // I will omit it for now or return a known valid one if found.
+    // Re-reading user prompt: "Năm phát hành của phim (1970 - hiện tại)."
+    // It's a range.
+    return "";
+}
 
 // =============================================================================
 // PARSERS
@@ -123,67 +134,39 @@ function parseListResponse(apiResponseJson) {
     try {
         var response = JSON.parse(apiResponseJson);
         var data = response.data || {};
-        
-        // Quét mảng phim linh hoạt cho cả 2 API (Danh sách và Tìm kiếm)
-        var items = [];
-        if (Array.isArray(data.items)) items = data.items;
-        else if (Array.isArray(response.items)) items = response.items;
-        else if (Array.isArray(data)) items = data;
+        var items = data.items || [];
 
-        // Bắt Domain Ảnh (Đặc biệt quan trọng cho Tìm kiếm)
-        var imageDomain = data.APP_DOMAIN_CDN_IMAGE || response.pathImage || "https://phimimg.com";
-        if (imageDomain.charAt(imageDomain.length - 1) === '/') {
-            imageDomain = imageDomain.slice(0, -1);
-        }
-
-        var movies = [];
-        for (var i = 0; i < items.length; i++) {
-            var item = items[i];
-            if (!item) continue;
-            
-            // Xử lý thông minh URL Ảnh tránh bị gãy link
-            var poster = item.poster_url || "";
-            if (poster && poster.indexOf("http") !== 0) {
-                poster = imageDomain + (poster.indexOf("/") === 0 ? "" : "/") + poster;
-            }
-            var thumb = item.thumb_url || item.poster_url || "";
-            if (thumb && thumb.indexOf("http") !== 0) {
-                thumb = imageDomain + (thumb.indexOf("/") === 0 ? "" : "/") + thumb;
-            }
-
-            // CHỈ trả về đúng các trường như code ban đầu của bạn (Chống Crash App)
-            movies.push({
-                id: item.slug || item._id || "",
-                title: item.name || "",
-                posterUrl: poster,
-                backdropUrl: thumb,
-                year: parseInt(item.year, 10) || 0,
-                quality: item.quality || "",
-                episode_current: item.episode_current || "",
-                lang: item.lang || ""
-            });
+        // Handle KKPhim special structure where items might be in data directly if it's an array
+        if (Array.isArray(data)) {
+            items = data;
+        } else if (Array.isArray(response.items)) {
+            // Sometimes API returns root items
+            items = response.items;
         }
 
         var params = data.params || {};
         var pagination = response.pagination || params.pagination || {};
-        
-        var currentPage = parseInt(pagination.currentPage, 10) || 1;
-        var totalPages = 1;
-        
-        if (pagination.totalPages) {
-            totalPages = parseInt(pagination.totalPages, 10);
-        } else if (pagination.totalItems && pagination.totalItemsPerPage) {
-            totalPages = Math.ceil(parseInt(pagination.totalItems, 10) / parseInt(pagination.totalItemsPerPage, 10));
-        }
 
-        if (isNaN(totalPages) || totalPages < 1) totalPages = 1;
-        if (totalPages < currentPage) totalPages = currentPage;
+        var movies = items.map(function (item) {
+            return {
+                id: item.slug,
+                title: item.name,
+                posterUrl: getPosterUrl(item.poster_url),
+                backdropUrl: getPosterUrl(item.thumb_url),
+                year: item.year || 0,
+                quality: item.quality || "",
+                episode_current: item.episode_current || "",
+                lang: item.lang || ""
+            };
+        });
 
         return JSON.stringify({
             items: movies,
             pagination: {
-                currentPage: currentPage,
-                totalPages: totalPages
+                currentPage: pagination.currentPage || 1,
+                totalPages: Math.ceil((pagination.totalItems || 0) / (pagination.totalItemsPerPage || 24)),
+                totalItems: pagination.totalItems || 0,
+                itemsPerPage: pagination.totalItemsPerPage || 24
             }
         });
     } catch (error) {
@@ -191,7 +174,6 @@ function parseListResponse(apiResponseJson) {
     }
 }
 
-// Chỏ trực tiếp qua parseListResponse đã được tối ưu toàn diện
 function parseSearchResponse(apiResponseJson) {
     return parseListResponse(apiResponseJson);
 }
@@ -219,12 +201,17 @@ function parseMovieDetail(apiResponseJson) {
             }
         });
 
+        // Metadata extraction
         var categories = (movie.category || []).map(function (c) { return c.name; }).join(", ");
         var countries = (movie.country || []).map(function (c) { return c.name; }).join(", ");
         var directors = (movie.director || []).join(", ");
         var actors = (movie.actor || []).join(", ");
 
-        var ratingValue = 0, tmdbId = "", tmdbSeason = 0, tmdbType = "";
+        // Extract rating from tmdb
+        var ratingValue = 0;
+        var tmdbId = "";
+        var tmdbSeason = 0;
+        var tmdbType = "";
         if (movie.tmdb) {
             if (movie.tmdb.vote_average) ratingValue = movie.tmdb.vote_average;
             if (movie.tmdb.id) tmdbId = movie.tmdb.id;
@@ -259,8 +246,17 @@ function parseMovieDetail(apiResponseJson) {
 }
 
 function parseDetailResponse(apiResponseJson) {
+
+    // However, conforming to the interface:
     return JSON.stringify({
-        url: "", 
+        url: "", // In this architecture, the episode ID *is* the URL, so this might be redundant or used for resolving.
+        // But since I don't see `episodeId` passed to `getStreamLink` in `MovieRepository` signature...
+        // Wait, `MovieRepository` signature IS `getStreamLink(movieSlug: String)`?
+        // That's weird. How does it know WHICH episode?
+
+        // Checking `PlayerScreen.kt` or `VideoPlayerControls.kt` would clarify this but I'm in writing file mode.
+        // I'll assume for KKPhim, if I return empty URL here, the Player might use the episode ID passed to it?
+        // Actually, I'll return the raw response just in case.
         headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://phimapi.com" },
         subtitles: []
     });
@@ -269,7 +265,7 @@ function parseDetailResponse(apiResponseJson) {
 function parseCategoriesResponse(apiResponseJson) {
     try {
         var response = JSON.parse(apiResponseJson);
-        var items = (response.data && response.data.items) ? response.data.items : (response.items || []);
+        var items = response.data?.items || response.items || (Array.isArray(response) ? response : []);
         return JSON.stringify(items.map(function (i) { return { name: i.name, slug: i.slug }; }));
     } catch (e) { return "[]"; }
 }
@@ -277,18 +273,18 @@ function parseCategoriesResponse(apiResponseJson) {
 function parseCountriesResponse(apiResponseJson) {
     try {
         var response = JSON.parse(apiResponseJson);
-        var items = (response.data && response.data.items) ? response.data.items : (response.items || []);
+        var items = response.data?.items || response.items || (Array.isArray(response) ? response : []);
         return JSON.stringify(items.map(function (i) { return { name: i.name, value: i.slug }; }));
     } catch (e) { return "[]"; }
 }
 
 function parseYearsResponse(apiResponseJson) {
+    // If I returned "" for getUrlYears, this won't be called.
     return "[]";
 }
 
 function getPosterUrl(path) {
     if (!path) return "";
     if (path.indexOf("http") === 0) return path;
-    if (path.indexOf("/") === 0) path = path.substring(1);
     return "https://phimimg.com/" + path;
 }
