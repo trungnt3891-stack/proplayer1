@@ -102,6 +102,13 @@
       "iconUrl": "https://r2.gamomephim.com/site/logo-1784305321242.png"
     },
     {
+      "id": "Goated",
+      "name": "Nguồn Goated",
+      "version": "1.0.6",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/Goatednew_plugin.js?token=GHSAT0AAAAAAD4ZCL2Z5TX4LBVZPSJMSSQG2T5RXPA",
+      "iconUrl": "https://vaxplugin.alokillgtv.workers.dev/img/goated.png"
+    },
+    {
       "id": "bilutv",
       "name": "Nguồn Bilutv",
       "version": "1.4",
