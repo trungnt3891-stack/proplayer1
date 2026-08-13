@@ -52,6 +52,27 @@
             "iconUrl": "https://phimhdcss.com/favicon.ico",
     },
     {
+            "id": "hh3d",
+            "name": "HH3D - Hoạt Hình 3D",
+            "version": "1.0.5",
+            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/hh3d_plugin.js",
+            "iconUrl": "https://hoathinh3d.co/wp-content/uploads/2023/09/favicon.png"
+    },
+    {
+      "id": "Anime09",
+      "name": "Anime09",
+      "version": "1.0.3",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/Anime09_plugin.js",
+      "iconUrl": "https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/i/c72e2f68-1a1c-48a2-aa5f-edf7eaaf3548/d77q5ev-af22ff5c-be81-4e24-bf0e-13836c6c939e.png"
+    },
+    {
+      "id": "Anime47",
+      "name": "Anime47",
+      "version": "1.3.2",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/Animie47_plugin.js?token=GHSAT0AAAAAAD4ZCL2ZQ2FLIZGXTS4GKZTU2T5MYNA",
+      "https://raw.githubusercontent.com/alokillgtv03/vaxplugins/main/img/anime47.png"
+    },
+    {
             "id": "shortflix",
             "name": "PhimNgắnHay",
             "version": "1.2.2",
@@ -73,27 +94,7 @@
       "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/phimngannet_plugin.js",
       "iconUrl": "https://downloadr2.apkmirror.com/wp-content/uploads/2024/02/58/65c425da5bb6e_live.shorttv.apps.png"
     },
-    {
-            "id": "hh3d",
-            "name": "HH3D - Hoạt Hình 3D",
-            "version": "1.0.5",
-            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/hh3d_plugin.js",
-            "iconUrl": "https://hoathinh3d.co/wp-content/uploads/2023/09/favicon.png"
-    },
-    {
-      "id": "Anime09",
-      "name": "Anime09",
-      "version": "1.0.3",
-      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/Anime09_plugin.js",
-      "iconUrl": "https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/i/c72e2f68-1a1c-48a2-aa5f-edf7eaaf3548/d77q5ev-af22ff5c-be81-4e24-bf0e-13836c6c939e.png"
-    },
-    {
-      "id": "Anime47",
-      "name": "Anime47",
-      "version": "1.3.2",
-      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/Animie47_plugin.js?token=GHSAT0AAAAAAD4ZCL2ZQ2FLIZGXTS4GKZTU2T5MYNA",
-      "https://raw.githubusercontent.com/alokillgtv03/vaxplugins/main/img/anime47.png"
-    },
+    
     {
       "id": "bilutv",
       "name": "Nguồn Bilutv",
