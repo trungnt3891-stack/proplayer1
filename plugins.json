@@ -109,6 +109,13 @@
       "iconUrl": "https://vaxplugin.alokillgtv.workers.dev/img/goated.png"
     },
     {
+      "id": "Vidgod",
+      "name": "Nguồn Vidgod",
+      "version": "1.0.1",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/Vidgodnew_plugin.js?token=GHSAT0AAAAAAD4ZCL2ZSI4EXNKXEGSIRT462T5R2WA",
+      "iconUrl": "https://vaxplugin.alokillgtv.workers.dev/img/vidgod.png"
+    },
+    {
       "id": "bilutv",
       "name": "Nguồn Bilutv",
       "version": "1.4",
