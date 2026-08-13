@@ -2,18 +2,18 @@
   "version": 1,
   "plugins": [
     {
-            "id": "NguonC",
-            "name": "NguonCnoAds",
-            "version": "1.5.4",
-            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/NguoncHT_plugin.js?token=GHSAT0AAAAAAD4ZCL2ZSEWEOMEHB2DIKQZY2T5PPTQ",
-            "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/nguonC.png",
+      "id": "NguonC",
+      "name": "NguonCnoAds",
+      "version": "1.5.4",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/NguoncHT_plugin.js?token=GHSAT0AAAAAAD4ZCL2ZSEWEOMEHB2DIKQZY2T5PPTQ",
+      "iconUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/nguonC.png"
     },
     {
-            "id": "Vsmov",
-            "name": "PhimVsmov",
-            "version": "1.1.0",
-            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/VsmovHT_plugin.js?token=GHSAT0AAAAAAD4ZCL2ZUB6R5XFTMY7BPLKK2T5PQRA",
-            "iconUrl": "https://vsmov.com/VSmov.png",
+      "id": "Vsmov",
+      "name": "PhimVsmov",
+      "version": "1.1.0",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/VsmovHT_plugin.js?token=GHSAT0AAAAAAD4ZCL2ZUB6R5XFTMY7BPLKK2T5PQRA",
+      "iconUrl": "https://vsmov.com/VSmov.png"
     },
     {
       "id": "kkphim",
@@ -22,41 +22,40 @@
       "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/kkphim_plugin.js?token=GHSAT0AAAAAAD4ZCL2ZKCQKQFYMAS7F46WK2T5Q3UQ",
       "iconUrl": "https://github.com/trungnt3891-stack/proplayer1/blob/main/plugins/kkphim.png"
     },
- 
     {
-            "id": "VicDn",
-            "name": "PhimVicDn",
-            "version": "1.5.0",
-            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/PhimVicdnHT_plugin.js?token=GHSAT0AAAAAAD4ZCL2ZY2RQJL2K6T2R6BKC2T5Q54A",
-            "iconUrl": "https://vicdn.cc/vicdn.png",
+      "id": "VicDn",
+      "name": "PhimVicDn",
+      "version": "1.5.0",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/PhimVicdnHT_plugin.js?token=GHSAT0AAAAAAD4ZCL2ZY2RQJL2K6T2R6BKC2T5Q54A",
+      "iconUrl": "https://vicdn.cc/vicdn.png"
     },
     {
-            "id": "Onflix",
-            "name": "Onfix",
-            "version": "1.9.0",
-            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/OnflixHT_plugin.js?token=GHSAT0AAAAAAD4ZCL2ZKXW2SNM5JN4FJT5S2T5RDQQ",
-            "iconUrl": "https://vicdn.cc/vicdn.png",
+      "id": "Onflix",
+      "name": "Onfix",
+      "version": "1.9.0",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/OnflixHT_plugin.js?token=GHSAT0AAAAAAD4ZCL2ZKXW2SNM5JN4FJT5S2T5RDQQ",
+      "iconUrl": "https://vicdn.cc/vicdn.png"
     },
     {
-            "id": "PhimHayOK",
-            "name": "PhimHayOK",
-            "version": "1.1.3",
-            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/PhimhayOKHT_plugin.js?token=GHSAT0AAAAAAD4ZCL2ZJRQQL4FCLJLG3RDI2T5RFIA",
-            "iconUrl": "https://vaxplugin.alokillgtv.workers.dev/img/phimhayok.png",
+      "id": "PhimHayOK",
+      "name": "PhimHayOK",
+      "version": "1.1.3",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/PhimhayOKHT_plugin.js?token=GHSAT0AAAAAAD4ZCL2ZJRQQL4FCLJLG3RDI2T5RFIA",
+      "iconUrl": "https://vaxplugin.alokillgtv.workers.dev/img/phimhayok.png"
     },
     {
-            "id": "PhimHDCSS",
-            "name": "PhimHDCSS",
-            "version": "1.1.4",
-            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/PhimhayOKHT_plugin.js?token=GHSAT0AAAAAAD4ZCL2ZJRQQL4FCLJLG3RDI2T5RFIA",
-            "iconUrl": "https://phimhdcss.com/favicon.ico",
+      "id": "PhimHDCSS",
+      "name": "PhimHDCSS",
+      "version": "1.1.4",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/PhimHDCS_plugin.js", 
+      "iconUrl": "https://phimhdcss.com/favicon.ico"
     },
     {
-            "id": "hh3d",
-            "name": "HH3D - Hoạt Hình 3D",
-            "version": "1.3.5",
-            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/HH3DNew_plugin.js?token=GHSAT0AAAAAAD4ZCL2ZO5S6LCEL2LQTIDXE2T5RKWA",
-            "iconUrl": "https://hoathinh3d.co/wp-content/uploads/2023/09/favicon.png"
+      "id": "hh3d",
+      "name": "HH3D - Hoạt Hình 3D",
+      "version": "1.3.5",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/HH3DNew_plugin.js?token=GHSAT0AAAAAAD4ZCL2ZO5S6LCEL2LQTIDXE2T5RKWA",
+      "iconUrl": "https://hoathinh3d.co/wp-content/uploads/2023/09/favicon.png"
     },
     {
       "id": "AnimeHay09",
@@ -65,27 +64,27 @@
       "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/Animehay09New_plugin.js?token=GHSAT0AAAAAAD4ZCL2ZRXSDU5BS5U5JLWLC2T5RQKQ",
       "iconUrl": "https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/i/c72e2f68-1a1c-48a2-aa5f-edf7eaaf3548/d77q5ev-af22ff5c-be81-4e24-bf0e-13836c6c939e.png"
     },
-     {
-            "id": "Animevv",
-            "name": "Animevv",
-            "version": "1.2.3",
-            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/AnimevvNew_plugin.js?token=GHSAT0AAAAAAD4ZCL2YPERKVMQDDOZSY7YE2T5ROWA",
-            "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/animevv.png"
+    {
+      "id": "Animevv",
+      "name": "Animevv",
+      "version": "1.2.3",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/AnimevvNew_plugin.js?token=GHSAT0AAAAAAD4ZCL2YPERKVMQDDOZSY7YE2T5ROWA",
+      "iconUrl": "https://raw.githubusercontent.com/alokillgtv-gif/VAXAPPSCRIPT/main/img/animevv.png"
     },
     {
       "id": "Anime47",
       "name": "Anime47",
       "version": "1.3.2",
       "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/Animie47New_plugin.js?token=GHSAT0AAAAAAD4ZCL2YULYK22WX2NJSRY2A2T5RRYA",
-      "https://raw.githubusercontent.com/alokillgtv03/vaxplugins/main/img/anime47.png"
+      "iconUrl": "https://raw.githubusercontent.com/alokillgtv03/vaxplugins/main/img/anime47.png"
     },
     {
-            "id": "shortflix",
-            "name": "PhimNgắnHay",
-            "version": "1.2.2",
-            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/shortflix_plugin.js",
-            "iconUrl": "https://m.media-amazon.com/images/I/61fJ78I23IL.png",
-            "info": "Phim ngắn hay, đăng nhập ggacount phụ để xem."
+      "id": "shortflix",
+      "name": "PhimNgắnHay",
+      "version": "1.2.2",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/shortflix_plugin.js",
+      "iconUrl": "https://m.media-amazon.com/images/I/61fJ78I23IL.png",
+      "info": "Phim ngắn hay, đăng nhập ggacount phụ để xem."
     },
     {
       "id": "Phimngan.net",
@@ -123,11 +122,11 @@
       "iconUrl": "https://bilutv.asia/img/bilutvlogo-ngang.jpg"
     },
     {
-            "id": "phimfun",
-            "name": "Nguồn Phim Fun",
-            "version": "1.0.4",
-            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/phimfun_plugin.js",
-            "iconUrl": "https://phimfun.net/Content/PhimFun/Imgs/phimFun.png",
+      "id": "phimfun",
+      "name": "Nguồn Phim Fun",
+      "version": "1.0.4",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/phimfun_plugin.js",
+      "iconUrl": "https://phimfun.net/Content/PhimFun/Imgs/phimFun.png"
     },
     {
       "id": "ThethaoTV",
@@ -143,5 +142,5 @@
       "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/VTV_plugin.js",
       "iconUrl": "https://bcp.cdnchinhphu.vn/Uploaded/tranthithom/2021_07_26/logo-vtv.png"
     }
-    ]
+  ]
 }
