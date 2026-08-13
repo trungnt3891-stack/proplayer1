@@ -88,20 +88,19 @@
             "info": "Phim ngắn hay, đăng nhập ggacount phụ để xem."
     },
     {
-      "id": "Mê Phim Ngắn",
-      "name": "Mê Phim Ngắn",
-      "version": "1.1.0",
-      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/mephimngan_plugin.js",
-      "iconUrl": "https://r2.gamomephim.com/site/logo-1784305321242.png"
-    },
-     {
       "id": "Phimngan.net",
       "name": "Phimngan.net",
       "version": "1.1.0",
       "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/phimngannet_plugin.js",
       "iconUrl": "https://downloadr2.apkmirror.com/wp-content/uploads/2024/02/58/65c425da5bb6e_live.shorttv.apps.png"
     },
-    
+    {
+      "id": "Mê Phim Ngắn",
+      "name": "Mê Phim Ngắn",
+      "version": "1.1.0",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/mephimngan_plugin.js",
+      "iconUrl": "https://r2.gamomephim.com/site/logo-1784305321242.png"
+    },
     {
       "id": "bilutv",
       "name": "Nguồn Bilutv",
@@ -115,13 +114,6 @@
             "version": "1.0.4",
             "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/repo-update/refs/heads/main/plugins/phimfun_plugin.js",
             "iconUrl": "https://phimfun.net/Content/PhimFun/Imgs/phimFun.png",
-    },
-    {
-      "id": "otruyen",
-      "name": "OTruyen",
-      "version": "1.0.2",
-      "scriptUrl": "https://raw.githubusercontent.com/youngbi/repo/main/plugins/otruyen_plugin.js",
-      "iconUrl": "https://docs.otruyenapi.com/favicon-32x32.png"
     },
     {
       "id": "ThethaoTV",
