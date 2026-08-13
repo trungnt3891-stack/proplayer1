@@ -45,6 +45,13 @@
             "iconUrl": "https://vaxplugin.alokillgtv.workers.dev/img/phimhayok.png",
     },
     {
+            "id": "PhimHDCSS",
+            "name": "PhimHDCSS",
+            "version": "1.0.1",
+            "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/plugins/PhimhayOKHT_plugin.js?token=GHSAT0AAAAAAD4ZCL2ZJRQQL4FCLJLG3RDI2T5RFIA",
+            "iconUrl": "https://phimhdcss.com/favicon.ico",
+    },
+    {
             "id": "shortflix",
             "name": "PhimNgắnHay",
             "version": "1.2.2",
