@@ -1,5 +1,5 @@
 // https://bilutv.asia
-BASEURL = "http://vkey.vn/yanhh3d";
+BASEURL = "https://yanhh3d.ee";
 
 function getManifest() {
     return JSON.stringify({
@@ -8,7 +8,7 @@ function getManifest() {
         "description": "Trang xem phim Hoạt Hình siêu hay.",
         "info": "Trang này bị nhà mạng chặn nên cần dns để xem. Bạn tải app 1.1.1.1 về dùng hoặc thử bật DNS và DPI trong app này.",
         "version": "1.3.5",
-        "baseUrl": "http://vkey.vn/yanhh3d",
+        "baseUrl": "https://yanhh3d.ee",
         "iconUrl": "https://vaxplugin.alokillgtv.workers.dev/img/yanhh3d.png",
         "isEnabled": true,
         "layoutType": "HORIZONTAL",
