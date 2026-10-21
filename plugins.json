@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "plugins": [
+    {
+      "id": "vsmov",
+      "name": "Nguồn Vsmov",
+      "version": "2.1.0",
+      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/VsmovHT_plugin.js",
+      "iconUrl": "https://vsmov.com/VSmov.png"
+    },
+    {
+      "id": "nguoncnew",
+      "name": "Phim NguonC VIP",
+      "version": "2.2.0",
+      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/NguoncApknew_plugin.js",
+      "iconUrl": "https://vaxplugin.alokillgtv.workers.dev/img/nguoncnew.png"
+    },
+    {
+      "id": "rophim",
+      "name": "Rổ Phim-No Zoom",
+      "version": "1.2.7",
+      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/Rophim_plugin.js",
+      "iconUrl": "https://vaxplugin.alokillgtv.workers.dev/img/rophim.png"
+    },
+    {
+      "id": "kkphim",
+      "name": "KKPhim",
+      "version": "1.0.9",
+      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/kkphim_plugin.js",
+      "iconUrl": "https://vaxplugin.alokillgtv.workers.dev/img/kkphim.png"
+    },
+    {
+      "id": "bilutv",
+      "name": "[MOVIE] Bilutv",
+      "version": "1.5.6",
+      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/Bilutv_plugin.js",
+      "iconUrl": "https://vaxplugin.alokillgtv.workers.dev/img/bilutv.png"
+    },
+    {
+      "id": "phimfun",
+      "name": "Nguồn Phim Fun",
+      "version": "1.1.8",
+      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/PhimfunHT_plugin.js",
+      "iconUrl": "https://phimfun.net/Content/PhimFun/Imgs/phimfun.png"
+    },
+    {
+      "id": "novahd",
+      "name": "[MOVIE] Nova HD",
+      "version": "2.3.0",
+      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/Super4K_plugin.js",
+      "iconUrl": "https://vaxplugin.alokillgtv.workers.dev/img/supermv.png"
+    },
+    {
+      "id": "onflix",
+      "name": "Onflix",
+      "version": "1.2.3",
+      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/7f551d9d1c99f77e1f12ee8d72daf4cd3079aa55/OnflixHT_plugin.js",
+      "iconUrl": "https://vaxplugin.alokillgtv.workers.dev/img/onflix.png"
+    },
+    {
+      "id": "phimngan_net",
+      "name": "Phim Ngắn Net",
+      "version": "2.0.0",
+      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/phimngannet_plugin.js",
+      "iconUrl": "https://phimngan.net/_next/image?url=%2Fimages%2Fbrand%2Flogo-primary-horizontal.png&w=256&q=75"
+    },
+    {
+      "id": "shortflix",
+      "name": "shortflix",
+      "version": "1.4.2",
+      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/Shortflixupda_plugin.js",
+      "iconUrl": "https://m.media-amazon.com/images/I/61fJ78I23IL.png",
+      "info": "Phim ngắn hay, đăng nhập ggacount phụ để xem."
+    },
+    {
+      "id": "Mê Phim Ngắn",
+      "name": "Mê Phim Ngắn",
+      "version": "1.1.0",
+      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/mephimngan_plugin.js",
+      "iconUrl": "https://r2.gamomephim.com/site/logo-1784305321242.png"
+    },
+    {
+      "id": "yanhh3d",
+      "name": "Yanhh3d [ANIME]",
+      "version": "2.3.0",
+      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/HH3DNew_plugin.js",
+      "iconUrl": "https://hoathinh3d.co/wp-content/uploads/2023/09/favicon.png"
+    },
+    {
+      "id": "cartoon",
+      "name": "Cartoon [ANIME]",
+      "version": "1.2.0",
+      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/Cartoon_plugins.js",
+      "iconUrl": "https://vaxplugin.alokillgtv.workers.dev/img/icon/cartoon.png"
+    },
+    {
+      "id": "Anime47",
+      "name": "Anime47",
+      "version": "1.3.2",
+      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/Animie47New_plugin.js",
+      "iconUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBfZXavFvLlt56VptIFEx-RSQI-oSTGEEjJT7D9hNKJA&s"
+    },
+    {
+      "id": "animet",
+      "name": "Animet [ANIME]",
+      "version": "1.0.1",
+      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/animet_plugin.js",
+      "iconUrl": "https://vaxplugin.alokillgtv.workers.dev/img/animet.png"
+    },
+    {
+      "id": "animevv",
+      "name": "animevv",
+      "version": "1.3.0",
+      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/AnimeVVHT_plugin.js",
+      "iconUrl": "https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/i/c72e2f68-1a1c-48a2-aa5f-edf7eaaf3548/d77q5ev-af22ff5c-be81-4e24-bf0e-13836c6c939e.png"
+    },
+    {
+      "id": "ThethaoTV",
+      "name": "[Sport] ThethaoTV",
+      "version": "1.0.3",
+      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/Thethao_plugin.js",
+      "iconUrl": "https://cdn.xoilacxba.tv/2025/05/xoilac365-tv.png"
+  }
+  ]
+}
