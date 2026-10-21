@@ -43,14 +43,7 @@
       "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/PhimfunHT_plugin.js",
       "iconUrl": "https://phimfun.net/Content/PhimFun/Imgs/phimfun.png"
     },
-    {
-      "id": "novahd",
-      "name": "[MOVIE] Nova HD",
-      "version": "2.3.0",
-      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/Super4K_plugin.js",
-      "iconUrl": "https://vaxplugin.alokillgtv.workers.dev/img/supermv.png"
-    },
-    {
+   {
       "id": "onflix",
       "name": "Onflix",
       "version": "1.2.3",
@@ -99,13 +92,6 @@
       "version": "1.3.2",
       "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/Animie47New_plugin.js",
       "iconUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBfZXavFvLlt56VptIFEx-RSQI-oSTGEEjJT7D9hNKJA&s"
-    },
-    {
-      "id": "animet",
-      "name": "Animet [ANIME]",
-      "version": "1.0.1",
-      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/animet_plugin.js",
-      "iconUrl": "https://vaxplugin.alokillgtv.workers.dev/img/animet.png"
     },
     {
       "id": "animevv",
