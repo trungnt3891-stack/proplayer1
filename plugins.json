@@ -29,20 +29,7 @@
       "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/kkphim_plugin.js",
       "iconUrl": "https://vaxplugin.alokillgtv.workers.dev/img/kkphim.png"
     },
-    {
-      "id": "bilutv",
-      "name": "[MOVIE] Bilutv",
-      "version": "1.5.6",
-      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/Bilutv_plugin.js",
-      "iconUrl": "https://vaxplugin.alokillgtv.workers.dev/img/bilutv.png"
-    },
-    {
-      "id": "phimfun",
-      "name": "Nguồn Phim Fun",
-      "version": "1.1.8",
-      "scriptUrl": "https://raw.githubusercontent.com/changcanno1/proplayer/refs/heads/main/PhimfunHT_plugin.js",
-      "iconUrl": "https://phimfun.net/Content/PhimFun/Imgs/phimfun.png"
-    },
+   
    {
       "id": "onflix",
       "name": "Onflix",
