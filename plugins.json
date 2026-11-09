@@ -1,6 +1,13 @@
 {
   "version": 1,
   "plugins": [
+      {
+      "id": "one_video",
+      "name": "ONE 一个",
+      "version": "2.2.0",
+      "scriptUrl": "https://raw.githubusercontent.com/trungnt3891-stack/proplayer1/refs/heads/main/onevideo_plugin.js",
+      "iconUrl": "https://wsrv.nl/?url=https://img807.hkq57tt.com/favicon.ico"
+    },
     {
       "id": "vsmov",
       "name": "Nguồn Vsmov",
